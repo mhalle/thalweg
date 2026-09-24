@@ -1,0 +1,26 @@
+__pycache__/
+*.pyc
+.venv/
+.venvs/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+uv.lock
+
+# Data lives OUTSIDE the repo and Dropbox (research/vessels/_data.py: ~/tmp/data/vessels for
+# caches, ~/tmp/data/idc_vessels for DICOM). A safety net against anything written here by hand;
+# small test fixtures, when they exist, go under tests/fixtures/ and are allowed explicitly.
+*.npz
+*.npy
+*.parquet
+*.csv
+*.dcm
+*.nii
+*.nii.gz
+*.nrrd
+*.zarr
+*.zip
+*.duckn
+!tests/fixtures/**
