@@ -286,10 +286,17 @@ def pi10(stations: list[dict]) -> dict:
 
 
 def write_table(rows: list[dict], path) -> None:
-    """Rows -> Parquet (needs pyarrow: the ``tables`` extra)."""
+    """Rows -> Parquet (needs pyarrow: the ``tables`` extra).
+
+    The table's columns are the union of every row's keys, in first-seen order, with None where a
+    row lacks one: rows of different structures carry different columns (only airways have wall
+    and pairing columns), and pyarrow would otherwise take the schema from the first row alone."""
     try:
         import pyarrow as pa
         import pyarrow.parquet as pq
     except ImportError as e:                     # pragma: no cover
         raise ImportError("writing Parquet needs pyarrow: pip install 'thalweg[tables]'") from e
-    pq.write_table(pa.Table.from_pylist(rows), path)
+    keys: dict[str, None] = {}
+    for r in rows:
+        keys.update(dict.fromkeys(r))
+    pq.write_table(pa.Table.from_pylist([{k: r.get(k) for k in keys} for r in rows]), path)

@@ -207,3 +207,14 @@ def test_wall_measures_on_a_lumen_in_its_wall():
     from thalweg.measure import pi10
     p = pi10(stations)
     assert p["stations"] > 10                                          # one caliber: the fit is flat
+
+
+def test_table_keeps_columns_only_later_rows_have(tmp_path):
+    """Airway rows come after artery rows and carry extra columns: none may be dropped."""
+    pq = pytest.importorskip("pyarrow.parquet")
+    rows = [dict(structure="lung_arteries", edge=0, length_mm=1.0),
+            dict(structure="lung_airways", edge=1, length_mm=2.0, wall_area_mm2=3.0, paired_artery_edge=0)]
+    write_table(rows, tmp_path / "t.parquet")
+    back = pq.read_table(tmp_path / "t.parquet").to_pylist()
+    assert back[1]["wall_area_mm2"] == 3.0 and back[1]["paired_artery_edge"] == 0
+    assert back[0]["wall_area_mm2"] is None and set(back[0]) == set(back[1])

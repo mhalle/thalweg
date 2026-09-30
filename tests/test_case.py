@@ -48,6 +48,25 @@ def test_run_verb_writes_the_package(vessels_data, tmp_path):
     assert "lung_airways" in qc["structures"]
 
 
+@pytest.mark.data
+@pytest.mark.slow
+def test_default_order_run_writes_the_airway_columns(vessels_data, tmp_path):
+    """Arteries first, airways second (the default order): the airway-only wall and pairing columns
+    must still be in branches.parquet and the wall columns in stations.parquet."""
+    pq = pytest.importorskip("pyarrow.parquet")
+    args = ["run", str(vessels_data / STORE), "-o", str(tmp_path), "-s", "lung_arteries", "-s", "lung_airways",
+            "--step", "2", "--ridge-passes", "1", "-q"]
+    r = CliRunner().invoke(main, args)
+    assert r.exit_code == 0, r.output
+    rows = pq.read_table(tmp_path / "branches.parquet").to_pylist()
+    air = [x for x in rows if x["structure"] == "lung_airways"]
+    assert any(x["wall_area_percent"] is not None for x in air)
+    assert any(x["bronchus_to_artery_ratio"] is not None for x in air)
+    assert all(x["wall_area_percent"] is None for x in rows if x["structure"] == "lung_arteries")
+    stations = pq.read_table(tmp_path / "stations.parquet").to_pylist()
+    assert any(x.get("wall_thickness_mm") is not None for x in stations)
+
+
 def test_missing_store_is_a_clear_error(tmp_path):
     r = CliRunner().invoke(main, ["centerlines", str(tmp_path), "-s", "x",
                                   "-o", str(tmp_path / "o.thalweg.json")])
