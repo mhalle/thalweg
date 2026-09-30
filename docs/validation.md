@@ -303,11 +303,13 @@ difference between the two cases (0.17). So a difference in Pi10 between cases r
 model's shell and the mix of stations, not the patients. It is above the ~3.6–3.8 mm usually
 reported for healthy lungs on CT for the same reason.
 
-**Under half of the stations have a wall measure, and the wide airways have the fewest.** A
+**Under half of the stations have a wall measure, and the middle orders have the fewest.** A
 station is measured only where the outer contour closes inside the section window. Where a
 neighboring airway's wall touches (at and near every bifurcation), the contour runs on into the
-neighbor and the station is dropped: 52 % of stations are measured on C3N and 39 % on MSB, falling
-from 56 % at Strahler 1 to 25 % at 3 (C3N). Dropping is the safe choice (two phantom airways with
+neighbor and the station is dropped: 52 % of stations are measured on C3N and 39 % on MSB. By
+Strahler order the measured share runs 56 / 40 / 25 / 8 / 59 / 99 % on C3N and 40 / 16 / 23 / 29 /
+72 / 90 % on MSB: the trachea and main bronchi are nearly always measured, the orders between
+them and the tips least. Dropping is the safe choice (two phantom airways with
 touching walls give no wall stations, not wrong ones), but it biases the sample toward isolated
 airways. A branch needs at least 3 wall stations to get wall measures: 132 of 265 (C3N) and 59 of
 162 (MSB) branches have any wall station, and 105 and 42 have enough. The MSB medians for orders
@@ -338,21 +340,23 @@ the round-3 review on the two cases (C3N / MSB):
 A wider parent artery 3 mm away beats the true companion 4 mm away (a phantom gives 0.33 where
 0.83 is right). Two columns say how far to trust a branch's pairing: `paired_sample_count`, and
 `paired_artery_consistent`, true when the artery edge is that of the nearest paired ancestor
-airway branch or lies downstream of it, and no sibling airway branch has the same one. 132 of 235
-paired branches pass on C3N and 54 of 118 on MSB.
+airway branch or lies downstream of it, and no airway branch outside its own line (a sibling, an
+uncle, a cousin) has the same one. 126 of 235 paired branches pass on C3N and 45 of 118 on MSB.
+The flag checks a branch against what lies above it, so a wrong pairing high in the tree passes
+and fails its correctly paired descendants instead.
 
 **The ratio is low because of the calibers the model draws, not because of mis-pairing.** The
 medians sit below the ~0.65–0.7 usually reported for healthy lungs on CT. Over the consistent
-branches alone the ratio is the same: 0.59 against 0.58 over all on C3N, 0.52 against 0.51 on MSB
+branches alone the ratio is the same: 0.59 against 0.58 over all on C3N, 0.49 against 0.51 on MSB
 (`summary.json` reports both medians). There the airway radius is about 1.1 mm against 1.9–2.0 mm
 for the artery: the airway lumen class sits at the model's floor beside a wider artery class. As
 with the walls, compare across cases on one model and grid.
 
-**Making the pairing follow the trees does not help (tried 2026-09-30, not kept).** Each airway
+**Making the pairing follow the trees makes it worse (tried 2026-09-30, not kept).** Each airway
 branch was allowed to pair only with its parent's artery edge or edges downstream of it, walking
 from the trachea. With the parent's majority edge as the anchor, the paired share of samples fell
 from 84 % to 42 % (C3N) and 66 % to 30 % (MSB); siblings sharing one artery edge went from 33 of
-114 bifurcations to 26 of 63, and from 18 of 54 to 28 of 39; the ratio stayed at 0.58 and moved
+114 bifurcations (29 %) to 26 of 63 (41 %), and from 18 of 54 (33 %) to 28 of 39 (72 %); the ratio stayed at 0.58 and moved
 0.51 → 0.55. With the looser common ancestor of the parent's partners as the anchor: 59 % and
 34 % paired, sharing 29 of 84 and 26 of 40. One early wrong partner locks a whole airway subtree
 out of its arteries. A pairing that is right at the first generations needs anatomy (lobar and
@@ -393,7 +397,7 @@ root), 0.625 mm reconstructions:
 | C3N-00704 | arteries | 536, 160, 57, 22, 8, 2, 1 | 2.88 | 1.29 | 1.46 | 3.5 % | 0.992 |
 | C3N-00704 | veins | 482, 142, 49, 16, 7, 3, 1 | 2.74 | 1.22 | 1.57 | 2.1 % | 0.993 |
 | C3N-00704 | airways | 133, 48, 17, 5, 2, 1 | 2.73 | 1.47 | 1.43 | 13.9 % | 0.984 |
-| MSB-02664 | arteries | 297, 91, 32, 10, 4, 1 | 3.05 | 1.44 | 1.59 | 1.4 % | 0.986 |
+| MSB-02664 | arteries | 297, 91, 32, 10, 4, 1 | 3.05 | 1.44 | 1.59 | 1.4 % | 0.985 |
 | MSB-02664 | veins | 236, 68, 24, 6, 2, 1 | 3.07 | 1.31 | 1.66 | 1.4 % | 0.985 |
 | MSB-02664 | airways | 81, 26, 10, 4, 2, 1 | 2.40 | 1.44 | 1.36 | 7.9 % | 0.966 |
 

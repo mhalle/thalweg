@@ -14,10 +14,11 @@ Per airway edge (:func:`airway_rows`):
   median of 2-3 artery edges (docs/validation.md §5c);
 - ``paired_artery_consistent`` (:func:`consistency`): whether that edge fits the two trees - it is
   the artery edge of the nearest paired ancestor airway branch or lies downstream of it, and no
-  sibling airway branch is paired with the same edge. None for an unpaired branch. About half of
-  the paired branches pass on the cases measured; the summary gives the ratio's median over them
-  too. (Pairing constrained to follow the trees was tried and is not used: it halves the paired
-  share and leaves the ratio and the sibling sharing where they were; docs/validation.md §5c);
+  airway branch outside its own line (a sibling, an uncle, a cousin) is paired with the same edge.
+  None for an unpaired branch. About half of the paired branches pass on the cases measured; the
+  summary gives the ratio's median over them too. (Pairing constrained to follow the trees was
+  tried and is not used: it halves the paired share, makes the sharing of artery edges worse and
+  does not move the ratio; docs/validation.md §5c);
 - ``paired_fraction``: the share of its samples that found a partner, and
   ``paired_sample_count``, how many did (a ratio resting on a handful is weak);
 - ``bronchus_to_artery_ratio``: the median over paired samples of the airway's lumen diameter over
@@ -33,6 +34,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.spatial import cKDTree
 
+from .errors import ThalwegError
 from .graph import TubeGraph
 
 REACH_MM, PARALLEL = 8.0, 0.7
@@ -92,22 +94,34 @@ def pair(graph: TubeGraph, airway: str, artery: str, reach: float = REACH_MM, pa
 
 def consistency(graph: TubeGraph, airway: str, artery: str, paired: dict[int, int | None]) -> dict:
     """Whether each airway branch's paired artery edge fits the two trees: it is the artery edge of
-    the nearest paired ancestor branch or lies downstream of it, and no sibling branch is paired
-    with the same edge. ``paired``: airway edge -> artery edge or None. Returns airway edge ->
-    True / False, or None for an unpaired branch."""
+    the nearest paired ancestor branch or lies downstream of it, and no other airway branch is
+    paired with the same edge, except the branch's own ancestors and descendants (an airway trunk
+    and its continuation can run beside one artery edge; a sibling, an uncle or a cousin cannot).
+    ``paired``: airway edge -> artery edge or None. Returns airway edge -> True / False, or None
+    for an unpaired branch.
+
+    It checks a branch against what lies above it, so a wrong pairing high in the tree passes and
+    fails its correctly paired descendants instead."""
     tree, below = graph.tree(airway), _subtrees(graph, artery)
+    kin = _subtrees(graph, airway)
+    users: dict[int, list[int]] = {}
+    for eid, a in paired.items():
+        if a is None:
+            continue
+        if a not in below:
+            raise ThalwegError(f"airway edge {eid} is paired with edge {a}, which is not in {artery!r}")
+        users.setdefault(a, []).append(eid)
     out: dict[int, bool | None] = {}
     above: dict[int, int | None] = {}                          # the nearest paired ancestor's artery edge
     for eid in tree.order:
-        start = graph.edges[eid].start_node
-        up = tree.parent.get(start)
+        up = tree.parent.get(graph.edges[eid].start_node)
         anc = None if up is None else (paired.get(up) if paired.get(up) is not None else above[up])
         above[eid] = anc
         mine = paired.get(eid)
         if mine is None:
             out[eid] = None
             continue
-        shared = any(paired.get(k) == mine for k in tree.children.get(start, []) if k != eid)
+        shared = any(k != eid and k not in kin[eid] and eid not in kin.get(k, ()) for k in users[mine])
         out[eid] = bool((anc is None or mine in below[anc]) and not shared)
     return out
 

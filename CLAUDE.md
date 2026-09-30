@@ -93,7 +93,7 @@ need the user's permission.
   script. Our field -> graph -> vmtk convention -> ported extractor reproduces vmtk's own groups
   exactly on the C3N-00704 subtree (`tests/test_branching.py`).
 - **Trees are rooted at their inlet by default (2026-09-30):** the widest end running off the
-  field, else the end of the widest terminal edge (`centerlines.inlet`, `reroot`); `--root deepest`
+  field if it is at least half as wide as the widest end, else the end of the widest terminal edge (`centerlines.inlet`, `reroot`); `--root deepest`
   keeps the tracer's deepest point (the research reference, which the vmtk-comparison tests pin).
 - **Tracer defaults (decided 2026-09-30):** `ridge_passes=4` (coarse-to-fine radius refinement:
   removes a 0.03-0.07 mm radius deficit, matches vmtk, 1.85x trace time), `prune="length"` (the

@@ -681,12 +681,12 @@ def boundaries(mesh: Mesh) -> dict:
     rows = [{"id": 0, "name": "wall", "area_mm2": round(wall_area, 6)}]
     for k, c in enumerate(mesh.caps, 1):
         area, centroid = _cap_geometry(mesh, k)
-        rows.append({"id": k, "name": c.name, "end_kind": c.kind, "node": c.node, "edge": c.edge,
+        rows.append({"id": k, "name": c.name, "cap_kind": c.kind, "node": c.node, "edge": c.edge,
                      "center": vec(c.center), "normal": vec(c.normal),
                      "inscribed_radius_mm": round(float(c.radius), 6), "area_mm2": round(area, 6),
                      "centroid": vec(centroid)})
     return {"space": "LPS", "units": "mm", "boundaries": rows,
-            "skipped": [{"name": s.name, "end_kind": s.kind, "node": s.node, "reason": s.reason}
+            "skipped": [{"name": s.name, "cap_kind": s.kind, "node": s.node, "reason": s.reason}
                         for s in mesh.skipped]}
 
 

@@ -124,3 +124,29 @@ def test_combine_renumbers():
 def test_schema_file_is_current():
     """docs/format/thalweg-0.1.schema.json is generated: `thalweg schema -o` rewrites it."""
     assert json.loads(SCHEMA.read_text()) == json_schema()
+
+
+def test_structure_helpers():
+    """structure_edges / point_rows keep to one structure; edge_segments gives each segment's
+    length, midpoint and mean end radius, with no radius where either end has none."""
+    from thalweg.graph import Edge, Node, Points, Provenance, Structure
+    pts = [(0.0, 0, 0), (0, 0, 2), (0, 0, 6), (5.0, 0, 0), (5, 0, 3)]
+    g = TubeGraph(
+        structures=[Structure(name="a", roots=[0], method="t"), Structure(name="b", roots=[2], method="t")],
+        nodes=[Node(id=0, kind="root", position=pts[0], structure="a"),
+               Node(id=1, kind="tip", position=pts[2], structure="a"),
+               Node(id=2, kind="root", position=pts[3], structure="b"),
+               Node(id=3, kind="tip", position=pts[4], structure="b")],
+        edges=[Edge(id=0, structure="a", start_node=0, end_node=1, point_range=(0, 3), length_mm=6.0,
+                    provenance=Provenance(method="field")),
+               Edge(id=1, structure="b", start_node=2, end_node=3, point_range=(3, 5), length_mm=3.0,
+                    provenance=Provenance(method="field"))],
+        points=Points(position=pts, radius=[3.0, -1.0, 1.0, 2.0, 4.0]))
+    assert [e.id for e in g.structure_edges("a")] == [0] and [e.id for e in g.structure_edges("b")] == [1]
+    assert g.point_rows("a").tolist() == [0, 1, 2] and g.point_rows("b").tolist() == [3, 4]
+    assert g.point_rows("none").tolist() == []
+    seg, mid, r = g.edge_segments(0)
+    assert seg.tolist() == [2.0, 4.0] and mid.tolist() == [[0, 0, 1], [0, 0, 4]]
+    assert r.tolist() == [-1.0, -1.0]                          # each segment has an end without a radius
+    seg, mid, r = g.edge_segments(1)
+    assert seg.tolist() == [3.0] and mid.tolist() == [[5, 0, 1.5]] and r.tolist() == [3.0]

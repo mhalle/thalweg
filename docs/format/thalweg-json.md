@@ -42,10 +42,11 @@ migration; 1.0 will be the first stable version.
   - `statistics` records counts from the tracer and the graph (below).
 - **Nodes** have one of these kinds:
   - `root`: where the tree starts. By default (`parameters.root: "inlet"`) this is the
-    structure's inlet: the widest end running off the field (a trachea, a trunk leaving the crop),
-    or failing that the end of the widest terminal edge (the pulmonary trunk; the veins' atrial
-    end). `attributes.end_kind` says what the node was (`tip` or `truncated`; a truncated one also has
-    `on_grid_boundary`). With `root: "deepest"` it is the tracer's own start, the deepest point,
+    structure's inlet: the widest end running off the field (a trachea, a trunk leaving the crop)
+    when it is at least half as wide as the widest end of all, otherwise the end of the widest
+    terminal edge (the pulmonary trunk; the veins' atrial end). `attributes.end_kind` says what
+    the node was before it was made the root (`tip` or `truncated`; a truncated one also has
+    `on_grid_boundary`); a root the tracer already started at has no `end_kind`. With `root: "deepest"` it is the tracer's own start, the deepest point,
     which need not be an end: the arteries' deepest point lies inside the pulmonary trunk (the
     research reference). `statistics.deepest_point` records the tracer's start either way, and
     `statistics.inlet_end_width_mm` beside `widest_end_width_mm` how the inlet was chosen: an end
@@ -233,12 +234,12 @@ bifurcations correspond.
   - The sidecar `M.vtp.boundaries.json` holds `space` (`"LPS"`), `units` (`"mm"`) and:
     - `boundaries`, one object per BoundaryId in order:
       - the wall: `{"id": 0, "name": "wall", "area_mm2"}`;
-      - each cap: `{"id", "name"` (e.g. `"lung_arteries tip 812"`), `"end_kind"` (tip, truncated or
+      - each cap: `{"id", "name"` (e.g. `"lung_arteries tip 812"`), `"cap_kind"` (tip, truncated or
         root), `"node"` (graph node id), `"edge"` (the graph edge cut), `"center"` (where the
         centerline crosses the cap's plane), `"normal"` (unit, pointing out of the structure),
         `"inscribed_radius_mm"` (the centerline's radius at the cut), `"area_mm2"`,
         `"centroid"` (the cap's area centroid, on the plane)`}`;
-    - `skipped`: `[{"name", "end_kind", "node", "reason"}]`, every requested end that got no cap, and
+    - `skipped`: `[{"name", "cap_kind", "node", "reason"}]`, every requested end that got no cap, and
       why. The reasons are:
       - the edge is too short to clear the junction;
       - its radius is below the minimum;

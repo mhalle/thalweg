@@ -268,3 +268,47 @@ def test_a_branch_with_too_few_wall_stations_gets_no_wall_measures():
     assert 0 < main["wall_station_count"] < MIN_WALL_STATIONS
     assert all(main[k] is None for k in WALL_KEYS) and main["area_mm2"] is not None
     assert sum(s_["wall_area_mm2"] is not None for s_ in stations) >= main["wall_station_count"]
+
+
+def test_wall_medians_start_at_the_minimum_station_count():
+    """Over several section spacings: a branch with exactly MIN_WALL_STATIONS wall stations has
+    wall medians, one with fewer has none."""
+    from thalweg.measure import MIN_WALL_STATIONS
+    m_lumen, m_wall, geo = _lumen_and_wall()
+    T = medial.trace(m_lumen, geo)
+    nodes, edges, pos, rad, s = graph_from_tree(T, "a", m_lumen, geo, Source(), {"connectivity": "field"})
+    g = TubeGraph(structures=[s], nodes=nodes, edges=edges, points=Points(position=pos, radius=rad))
+    seen = {}
+    for step in (5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 12.0):
+        rows = branch_table(g, "a", m_lumen, geo, step=step, outer=np.maximum(m_lumen, m_wall))
+        main = max(rows, key=lambda r: r["length_mm"])
+        seen[main["wall_station_count"]] = main["wall_thickness_mm"] is not None
+    assert MIN_WALL_STATIONS == 3 and seen[3] is True and seen[2] is False
+    assert all(has == (n >= 3) for n, has in seen.items())
+
+
+def test_pi10_constant_wall_uses_the_median_thickness():
+    from thalweg.measure import pi10
+    st = [dict(internal_perimeter_mm=float(x), wall_area_mm2=float((1.0 + 0.3 * x) ** 2),
+               wall_thickness_mm=1.0 if k < 30 else 9.0) for k, x in enumerate(np.linspace(5, 30, 40))]
+    assert abs(pi10(st)["constant_wall_pi10_mm"] - np.sqrt(np.pi * (10 / np.pi + 1.0))) < 1e-9
+    assert set(pi10(st[:3])) == set(pi10(st))                          # the same keys when there is no fit
+
+
+def test_summary_keys():
+    """The serialized names of one structure's summary (docs/format/thalweg-json.md)."""
+    from thalweg.case import summarize
+    from phantoms import tube_field, y_tree
+    m, geo = tube_field(*y_tree())
+    T = medial.trace(m, geo)
+    nodes, edges, pos, rad, s = graph_from_tree(T, "y", m, geo, Source(), {"connectivity": "field"})
+    g = TubeGraph(structures=[s], nodes=nodes, edges=edges, points=Points(position=pos, radius=rad))
+    sm = summarize(g, "y", [dict(area_mm2=1.0), dict(area_mm2=None)])
+    assert set(sm) == {"edge_count", "node_count_by_kind", "length_mm", "radius_percentiles_mm",
+                       "strahler_order", "unordered", "sectioned_branches"}
+    assert sm["edge_count"] == len(g.edges) and sm["sectioned_branches"] == 1
+    assert sm["node_count_by_kind"] == {"root": 1, "junction": 1, "tip": 2} or sum(
+        sm["node_count_by_kind"].values()) == len(g.nodes)
+    assert all(set(v) == {"edge_count", "length_mm"} for v in sm["strahler_order"].values())
+    assert set(sm["unordered"]) == {"edge_count", "length_mm"}
+    assert set(sm["radius_percentiles_mm"]) == {"p10", "p50", "p90"}

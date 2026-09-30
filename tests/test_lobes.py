@@ -74,37 +74,82 @@ def test_store_lobes(vessels_data, run, named_by):
 
 
 class _Store:
-    """The least of a store that lobe_fields needs: five classes named by value, each a box."""
+    """The least of a store that lobe_fields needs: lobe classes, each a slab along the first array
+    axis, on a grid whose first axis runs toward the patient's RIGHT (so index order is not world
+    order). Classes are named ``label_<value>`` unless ``names`` renames some."""
 
-    def __init__(self, x_of):
+    from thalweg.store import FieldStore
+    ref_by_name_or_value = FieldStore.ref_by_name_or_value
+
+    def __init__(self, slab_of, names=None):
         from pathlib import Path
         from types import SimpleNamespace
         self.path = Path("fake.duckn.zip")
-        self.geo = Geometry(shape=(20, 8, 8), directions=((1.0, 0, 0), (0, 1.0, 0), (0, 0, 1.0)),
-                            origin=(-10.0, 0.0, 0.0))
-        self.x_of = x_of                                          # label value -> (x index range)
-        self.structures = [SimpleNamespace(name=f"label_{v}", label_value=v, part=0) for v in x_of]
+        self.geo = Geometry(shape=(20, 8, 8), directions=((-1.0, 0, 0), (0, 1.0, 0), (0, 0, 1.0)),
+                            origin=(10.0, 0.0, 0.0))
+        self.slab_of = slab_of                                    # label value -> index range, axis 0
+        names = names or {}
+        self.structures = [SimpleNamespace(name=names.get(v, f"label_{v}"), label_value=v, part=0)
+                           for v in slab_of]
+        self.names = [s.name for s in self.structures]
 
-    def ref_by_name_or_value(self, name, value=None):
-        from thalweg.store import TOTAL_VALUES
-        return next(s for s in self.structures if s.label_value == TOTAL_VALUES[name])
+    def ref(self, name, part=None):
+        return next(s for s in self.structures if s.name == name)
 
     def margin(self, name, part):
         m = np.full(self.geo.shape, -8.0, np.float32)
-        a, b = self.x_of[int(name.split("_")[1])]
+        a, b = self.slab_of[self.ref(name).label_value]
         m[a:b] = 8.0
         return m, self.geo, None
 
 
+# world x = 10 - index: low indices are the patient's left
+GOOD = {10: (0, 4), 11: (4, 8), 12: (11, 14), 13: (14, 17), 14: (17, 20)}
+
+
 def test_lobes_found_by_value_must_lie_like_lobes():
-    """Values 10-11 (left lobes) at +x of 12-14: accepted. Mirrored: refused, the classes found by
-    value are not lung lobes (or the store's left and right are swapped)."""
+    """Values 10-11 (left lobes) at larger world x than 12-14: accepted. Mirrored: refused, the
+    classes found by value are not lung lobes (or the store's left and right are swapped)."""
     from thalweg.errors import ThalwegError
     from thalweg.lobes import lobe_fields
-    good = {10: (12, 16), 11: (16, 20), 12: (0, 3), 13: (3, 6), 14: (6, 9)}
-    F = lobe_fields(_Store(good))
+    F = lobe_fields(_Store(GOOD))
     assert F.named_by == "value (misnamed store)"
-    assert F.margins[0, 13, 0, 0] > 0 and F.margins[4, 7, 0, 0] > 0   # value 10 is lobe 1, 14 lobe 5
-    mirrored = {10: (0, 4), 11: (4, 8), 12: (10, 13), 13: (13, 16), 14: (16, 20)}
-    with pytest.raises(ThalwegError):
+    assert F.margins[0, 1, 0, 0] > 0 and F.margins[4, 18, 0, 0] > 0   # value 10 is lobe 1, 14 lobe 5
+    mirrored = {10: (12, 16), 11: (16, 20), 12: (0, 3), 13: (3, 6), 14: (6, 9)}
+    with pytest.raises(ThalwegError, match="do not lie like lung lobes"):
         lobe_fields(_Store(mirrored))
+
+
+def test_lobes_by_value_refuse_an_empty_side_and_mixed_naming():
+    from thalweg.errors import ThalwegError
+    from thalweg.lobes import lobe_fields
+    no_left = dict(GOOD) | {10: (0, 0), 11: (0, 0)}
+    with pytest.raises(ThalwegError, match="empty on one side"):
+        lobe_fields(_Store(no_left))
+    one_empty = dict(GOOD) | {13: (0, 0)}                          # a lobectomy: still lobes
+    assert lobe_fields(_Store(one_empty)).named_by == "value (misnamed store)"
+    with pytest.raises(ThalwegError, match="some lung lobes and not others"):
+        lobe_fields(_Store(GOOD, names={10: "lung_upper_lobe_left"}))
+    named = {v: n for n, v in __import__("thalweg.store").store.TOTAL_VALUES.items() if 10 <= v <= 14}
+    assert lobe_fields(_Store(GOOD, names=named)).named_by == "name"
+    four = {k: v for k, v in GOOD.items() if k != 14}
+    with pytest.raises(ThalwegError, match="names no lung lobes"):
+        lobe_fields(_Store(four))
+
+
+def test_total_values_are_totalsegmentators():
+    from thalweg.store import TOTAL_VALUES
+    assert TOTAL_VALUES == {"lung_upper_lobe_left": 10, "lung_lower_lobe_left": 11,
+                            "lung_upper_lobe_right": 12, "lung_middle_lobe_right": 13,
+                            "lung_lower_lobe_right": 14, "heart": 51, "pulmonary_vein": 53}
+
+
+def test_lobe_summary_keys():
+    g = _y()
+    F = _halves(g)
+    h, el = annotate(g, F)
+    s = lobe_summary(h, "y", el["y"], lobe_volumes(F))
+    assert set(s) == set(LOBES.values()) | {"outside_lobes"}
+    assert set(s[LOBES[1]]) == {"edge_count", "tip_count", "length_mm", "lobe_volume_ml", "length_mm_per_ml"}
+    assert set(s["outside_lobes"]) == {"edge_count", "tip_count", "length_mm"}
+    assert sum(v["tip_count"] for v in s.values()) == sum(nd.kind == "tip" for nd in h.nodes)

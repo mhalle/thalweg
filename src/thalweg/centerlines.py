@@ -173,7 +173,7 @@ def combine(graphs: list[TubeGraph]) -> TubeGraph:
             edges.append(e.model_copy(update={"id": e0 + i, "start_node": nmap[e.start_node],
                                               "end_node": nmap[e.end_node],
                                               "point_range": (e.point_range[0] + p0, e.point_range[1] + p0)}))
-        for k in set(cols) | set(g.points.columns):
+        for k in [*cols, *(k for k in g.points.columns if k not in cols)]:
             cols.setdefault(k, [None] * p0).extend(g.points.columns.get(k, [None] * len(g.points.position)))
         pos.extend(g.points.position)
         rad.extend(g.points.radius)

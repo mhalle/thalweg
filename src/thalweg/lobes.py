@@ -59,15 +59,20 @@ def lobe_fields(store) -> LobeFields:
         m, geometry, _ = store.margin(r.name, part)
         ms.append(m)
     fields = LobeFields(np.stack(ms), geometry, part, named_by)
-    if named_by != "name" and not _left_is_left(fields):
-        raise ThalwegError(f"{store.path.name}: classes label_10-14 do not lie like lung lobes "
-                           "(the left lobes are not to the patient's left of the right ones)")
+    if named_by != "name":
+        side = _left_is_left(fields)
+        if side is None:
+            raise ThalwegError(f"{store.path.name}: classes label_10-14 are empty on one side, so "
+                               "they cannot be checked to be lung lobes (found by value, not by name)")
+        if not side:
+            raise ThalwegError(f"{store.path.name}: classes label_10-14 do not lie like lung lobes "
+                               "(the left lobes are not to the patient's left of the right ones)")
     return fields
 
 
-def _left_is_left(fields: LobeFields) -> bool:
+def _left_is_left(fields: LobeFields) -> bool | None:
     """Whether lobes 1-2 (left) lie at larger LPS x than lobes 3-5 (right): the check that classes
-    found by value alone are lobes. Empty sides fail."""
+    found by value alone are lobes. None when a whole side is empty."""
     d = np.asarray(fields.geometry.directions, float)
     o = np.asarray(fields.geometry.origin, float)
 
@@ -75,7 +80,7 @@ def _left_is_left(fields: LobeFields) -> bool:
         idx = np.concatenate([np.argwhere(fields.margins[k - 1] > 0) for k in ks])
         return float((o + idx.mean(0) @ d)[0]) if len(idx) else None
     left, right = mean_x((1, 2)), mean_x((3, 4, 5))
-    return left is not None and right is not None and left > right
+    return None if left is None or right is None else left > right
 
 
 def point_lobes(graph: TubeGraph, fields: LobeFields) -> np.ndarray:

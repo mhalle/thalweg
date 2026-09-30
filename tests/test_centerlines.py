@@ -142,3 +142,47 @@ def test_artery_inlet_is_the_pulmonary_trunk(vessels_data):
     assert g.degree()[root] == 1 and g.nodes[root].attributes["end_kind"] == "tip"
     deep = centerline_graph(st, "lung_arteries", root="deepest")
     assert g.structures[0].statistics["tips"] == deep.structures[0].statistics["tips"] - 1
+
+
+def _ends(trunk, a, b):
+    """root -(trunk)- junction, with two ends that run off the field (radii a and b)."""
+    from test_statistics import _tree
+    return _tree([(0, 1, "junction", (0, 0, 20), trunk), (1, 2, "truncated", (15, 0, 20), a),
+                  (1, 3, "truncated", (-15, 0, 20), b)])
+
+
+@pytest.mark.parametrize("a,b,expected", [(1.9, 1.0, 0), (2.0, 1.0, 2), (2.1, 3.0, 3), (5.0, 1.0, 2)])
+def test_inlet_threshold(a, b, expected):
+    """A 4 mm trunk ending inside the field and two ends off it: the widest off-field end is the
+    inlet from half the widest end's width up, and the trunk's end below that."""
+    from thalweg.centerlines import inlet
+    assert inlet(_ends(4.0, a, b), "t") == expected
+
+
+def test_graph_pieces_with_offsets_record_the_deepest_point():
+    from phantoms import y_tree
+    m, geo = tube_field(*y_tree())
+    T = medial.trace(m, geo)
+    plain = graph_from_tree(T, "t", m, geo, Source(), {})
+    moved = graph_from_tree(T, "t", m, geo, Source(), {}, node_offset=7, edge_offset=3, point_offset=11)
+    root = next(nd for nd in moved[0] if nd.kind == "root")
+    assert root.id == moved[4].roots[0] == plain[4].roots[0] + 7
+    assert moved[4].statistics["deepest_point"] == list(root.position) == plain[4].statistics["deepest_point"]
+
+
+def test_combine_keeps_point_columns_in_order():
+    from thalweg.centerlines import combine
+    from phantoms import y_tree
+    m, geo = tube_field(*y_tree())
+    g = _graph(m, geo)
+    n = len(g.points.position)
+    cols = {k: [0] * n for k in ("zeta", "alpha", "mid")}
+    a = g.model_copy(update={"points": g.points.model_copy(update={"columns": cols})})
+    b = g.model_copy(update={"structures": [g.structures[0].model_copy(update={"name": "u"})],
+                             "nodes": [x.model_copy(update={"structure": "u"}) for x in g.nodes],
+                             "edges": [x.model_copy(update={"structure": "u"}) for x in g.edges],
+                             "points": g.points.model_copy(update={"columns": {"extra": [1] * n}})})
+    c = combine([a, b])
+    assert list(c.points.columns) == ["zeta", "alpha", "mid", "extra"]
+    assert c.points.columns["extra"] == [None] * n + [1] * n
+    assert c.points.columns["mid"] == [0] * n + [None] * n

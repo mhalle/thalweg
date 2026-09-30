@@ -49,14 +49,15 @@ def streams(graph: TubeGraph, structure: str) -> list[dict]:
     for h, eids in chains.items():
         if order[h] is None:
             continue
-        length = wsum = 0.0
+        length = measured = wsum = 0.0
         for eid in eids:
             seg, _, rm = graph.edge_segments(eid)
             ok = rm > 0
             length += float(seg.sum())
+            measured += float(seg[ok].sum())               # segments without a radius carry no weight
             wsum += float((seg[ok] * rm[ok]).sum())
         out.append(dict(order=order[h], edges=eids, length_mm=length,
-                        diameter_mm=2.0 * wsum / length if length > 0 else 0.0))
+                        diameter_mm=2.0 * wsum / measured if measured > 0 else 0.0))
     return out
 
 

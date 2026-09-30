@@ -45,7 +45,13 @@ def test_run_is_consistent(airways):
     assert qc["artery_vein"]["plausible"] is None and "needs both" in qc["artery_vein"]["reason"]
     assert qc["lobes"]["named_by"] is not None
     st = g.structures[0].statistics
-    assert st["inlet_end_width_mm"] >= 0.5 * st["widest_end_width_mm"] and len(st["deepest_point"]) == 3
+    from thalweg.centerlines import end_width
+    deg = g.degree()
+    widths = [end_width(g, nd.id) for nd in g.nodes if deg[nd.id] == 1]
+    assert st["inlet_end_width_mm"] == pytest.approx(end_width(g, g.structures[0].roots[0]), abs=1e-4)
+    assert st["widest_end_width_mm"] == pytest.approx(max(widths), abs=1e-4) and len(st["deepest_point"]) == 3
+    assert {"edge_count", "node_count_by_kind", "tree_statistics", "pi10", "lobes"} <= set(sm)
+    assert {"thalweg_version", "store", "acquisition", "lobes", "artery_vein", "structures"} <= set(qc)
     assert res["summary"]["lung_airways"]["coarse_slices"] is False
 
 

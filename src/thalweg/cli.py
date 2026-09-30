@@ -38,8 +38,8 @@ def _method_options(f):
                           "refinement's radius deficit (0.03-0.07 mm) and matches vmtk; 1 is the research "
                           "reference, ~1.9x faster to trace. docs/validation.md.")(f)
     f = click.option("--root", type=click.Choice(["inlet", "deepest"]), default="inlet", show_default=True,
-                     help="Root each tree at its inlet (the widest end that runs off the field; if none "
-                          "does, the widest end) or at the tracer's deepest point (research reference).")(f)
+                     help="Root each tree at its inlet (the widest end, or an end running off the field "
+                          "if at least half as wide) or at the tracer's deepest point (the reference).")(f)
     f = click.option("--prune", type=click.Choice(["length", "wall"]), default="length", show_default=True,
                      help="Spur rule: 'length' (the reference) or 'wall' (also drops terminal branches that "
                           "do not protrude beyond the parent's wall: flat-lumen lobes, and 9-26 % of vessel "

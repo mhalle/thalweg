@@ -209,3 +209,23 @@ def test_radius_interval_clamps_and_zeroes_the_lower_bound_on_a_thin_tube():
     assert (here <= 2.0).all() and (lo == 0.0).all()
     r = h.radii()
     assert (hi[r > 0] >= r[r > 0]).all() and (lo <= np.maximum(r, 0)).all()
+
+
+def test_a_sample_without_a_radius_does_not_lower_a_stream_diameter():
+    g = _tree([(0, 1, "tip", (0, 0, 20), 3.0)])
+    rad = list(g.points.radius)
+    rad[2] = -1.0
+    g = g.model_copy(update={"points": g.points.model_copy(update={"radius": rad})})
+    st = streams(g, "t")
+    assert abs(st[0]["diameter_mm"] - 6.0) < 1e-9 and abs(st[0]["length_mm"] - 20.0) < 1e-9
+
+
+def test_horton_fits_the_unrounded_means():
+    """Stream lengths that differ below the table's three decimals still give their exact ratio."""
+    g = _tree([(0, 1, "junction", (0, 0, 1e-3), 1.0), (1, 2, "junction", (1e-4 * 4, 0, 1e-3), 1.0),
+               (1, 3, "junction", (-1e-4 * 4, 0, 1e-3), 1.0), (2, 4, "tip", (4e-4, 1e-4, 1e-3), 1.0),
+               (2, 5, "tip", (4e-4, -1e-4, 1e-3), 1.0), (3, 6, "tip", (-4e-4, 1e-4, 1e-3), 1.0),
+               (3, 7, "tip", (-4e-4, -1e-4, 1e-3), 1.0)])
+    h = horton(g, "t")
+    assert h["orders"]["1"]["mean_length_mm"] == 0.0            # rounds away in the table
+    assert abs(h["length_ratio"] - (10.0 ** 0.5)) < 1e-6        # 1e-4, 4e-4, 1e-3: slope of the logs

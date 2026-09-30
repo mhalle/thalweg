@@ -274,11 +274,11 @@ def test_boundaries_sidecar_names_only_existing_caps(tree2, tmp_path):
     assert [r["id"] for r in rows] == list(range(len(mesh.caps) + 1)) and rows[0]["name"] == "wall"
     assert sorted(np.unique(mesh.boundary).tolist()) == [r["id"] for r in rows]
     for r, c in zip(rows[1:], mesh.caps):
-        assert r["name"] == c.name and r["node"] == c.node and r["end_kind"] == c.kind
+        assert r["name"] == c.name and r["node"] == c.node and r["cap_kind"] == c.kind
         n = np.asarray(r["normal"])
         assert abs(np.linalg.norm(n) - 1) < 1e-5 and r["area_mm2"] > 0 and r["inscribed_radius_mm"] > 0
         assert abs((np.asarray(r["centroid"]) - r["center"]) @ n) < 1e-4       # on the plane
-    assert doc["skipped"][-1] == {"name": "t tip 99", "end_kind": "tip", "node": 99, "reason": "a test skip"}
+    assert doc["skipped"][-1] == {"name": "t tip 99", "cap_kind": "tip", "node": 99, "reason": "a test skip"}
     assert not {s["name"] for s in doc["skipped"]} & {r["name"] for r in rows}
 
 

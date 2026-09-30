@@ -135,3 +135,58 @@ def test_siblings_on_one_artery_edge_and_a_partner_upstream_are_not_consistent()
     assert consistency(g, "air", "art", {0: None, 1: 4, 2: 5}) == {0: None, 1: True, 2: True}
     # a daughter still beside the parent's artery edge (the artery forks later) is consistent
     assert consistency(g, "air", "art", {0: 3, 1: 3, 2: 5}) == {0: True, 1: True, 2: True}
+
+
+def test_consistency_looks_past_unpaired_parents_and_beyond_siblings():
+    """Two airway Ys in a row (a trunk, a twig, a stem that forks): an unpaired stem does not hide
+    its parent's partner from its daughters; an uncle and a nephew on one artery edge both fail;
+    a partner outside the artery structure is an error."""
+    import pytest
+    from thalweg.errors import ThalwegError
+    from thalweg.pairing import consistency
+    g = _y_doc({"air": ([0, 0, 0], [0, 0, 20], [-10, 0, 35], [10, 0, 35], 1.0),
+                "art": ([0, 3, 0], [0, 3, 20], [-10, 3, 35], [10, 3, 35], 2.0),
+                "up": ([50, 0, 0], [50, 0, 20], [40, 0, 35], [60, 0, 35], 1.0)})
+    # airway edges 0 (stem), 1, 2; artery edges 3 (stem), 4, 5; "up" edges 6, 7, 8 (another structure)
+    # stem on the artery's left daughter, its own daughter on the artery stem: upstream of the stem's
+    assert consistency(g, "air", "art", {0: 4, 1: 3})[1] is False
+    # the same with the stem unpaired: nothing above to contradict
+    assert consistency(g, "air", "art", {0: None, 1: 3})[1] is True
+    with pytest.raises(ThalwegError):
+        consistency(g, "air", "art", {0: 6})
+
+
+def test_an_uncle_and_a_nephew_on_one_artery_edge_are_not_consistent():
+    from thalweg.pairing import consistency
+    from test_statistics import _tree
+    air = _tree([(0, 1, "junction", (0, 0, 10), 1.0), (1, 2, "tip", (8, 0, 10), 1.0),
+                 (1, 3, "junction", (0, 0, 20), 1.0), (3, 4, "tip", (6, 0, 26), 1.0),
+                 (3, 5, "tip", (-6, 0, 26), 1.0)])
+    # reuse the same tree as the artery structure: a second copy under another name
+    from thalweg.centerlines import combine
+    art = air.model_copy(update={
+        "structures": [air.structures[0].model_copy(update={"name": "v"})],
+        "nodes": [n.model_copy(update={"structure": "v"}) for n in air.nodes],
+        "edges": [e.model_copy(update={"structure": "v"}) for e in air.edges]})
+    g = combine([air, art])                                  # airway edges 0-4, artery edges 5-9
+    # airway: 0 trunk, 1 twig (the uncle), 2 stem, 3 and 4 its daughters (nephews)
+    c = consistency(g, "t", "v", {0: 5, 1: 8, 2: 7, 3: 8, 4: 9})
+    assert c == {0: True, 1: False, 2: True, 3: False, 4: True}
+    # a trunk and its continuation on one artery edge are one line: consistent
+    assert consistency(g, "t", "v", {0: 5, 2: 5, 3: 8, 4: 9}) == {0: True, 1: None, 2: True, 3: True, 4: True}
+
+
+def test_the_consistent_median_is_over_the_consistent_branches_only():
+    air = ([0, 0, 0], [0, 0, 20], [-10, 0, 35], [10, 0, 35], 1.0)
+    # the artery's right daughter is missing (its third edge runs far away), so both airway
+    # daughters pair with the left one or nothing; give the stem and daughters different radii
+    g = _y_doc({"air": air, "art": ([0, 3, 0], [0, 3, 20], [-10, 3, 35], [-9, 3, 36], 2.0)})
+    rad = list(g.points.radius)
+    a, b = g.edges[1].point_range
+    rad[a + 1:b] = [1.5] * (b - a - 1)                       # the left airway daughter is wider
+    g = g.model_copy(update={"points": g.points.model_copy(update={"radius": rad})})
+    rows = [dict(edge=k) for k in (0, 1, 2)]
+    s = airway_rows(g, "air", "art", rows)
+    good = [r["bronchus_to_artery_ratio"] for r in rows if r["paired_artery_consistent"]]
+    assert 0 < len(good) and s["consistent_paired_branches"] == len(good)
+    assert s["consistent_bronchus_to_artery_ratio_median"] == float(np.median(good))

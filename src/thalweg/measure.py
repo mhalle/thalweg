@@ -288,7 +288,8 @@ def pi10(stations: list[dict]) -> dict:
     Pi10 here restates that thickness and is not a measure of the airways (docs/validation.md §5b).
     None when fewer than 10 stations have a wall, or all have one perimeter."""
     ok = [s_ for s_ in stations if s_.get("wall_area_mm2") is not None and s_.get("internal_perimeter_mm")]
-    none = dict(pi10_mm=None, slope=None, stations=len(ok), constant_wall_pi10_mm=None)
+    none = dict(pi10_mm=None, slope=None, stations=len(ok), internal_perimeter_range_mm=None,
+                constant_wall_pi10_mm=None)
     if len(ok) < 10:
         return none
     x = np.array([s_["internal_perimeter_mm"] for s_ in ok], float)
