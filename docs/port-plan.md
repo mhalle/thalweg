@@ -100,7 +100,7 @@ tiers, ported after phase 5.
 |---|---|---|---|
 | `vmtkimageviewer`, `vmtksurfaceviewer` | sdfview renders the field | out | — |
 | `vmtkimagecurvedmpr` | Straightened view of any volume along any path, parallel-transport frames (`straighten.straighten`, `straighten.path_to`) | done | T3 |
-| `vmtk*reader`, `vmtk*writer` | In: a ranked store via rankfield (`store`), or a labelmap or signed distance image (NIfTI, NRRD, MetaImage, Slicer `.seg.nrrd` names) in degraded mode (`volume`, the `volumes` extra: SimpleITK). Out: `.thalweg.json`, Parquet tables, VTP mesh and centerlines, SWC, Slicer markups (`graph`, `measure`, `export`); a 0-D/1-D solver input is todo | done (in part) | 1 in, 4 out |
+| `vmtk*reader`, `vmtk*writer` | In: a ranked store via rankfield (`store`), or a labelmap or signed distance image (NIfTI, NRRD, MetaImage, Slicer `.seg.nrrd` names) in degraded mode (`volume`, the `volumes` extra: SimpleITK). Out: `.thalweg.json`, Parquet tables, VTP mesh and centerlines, SWC, Slicer markups (`graph`, `measure`, `export`), and an svZeroDSolver input (`solver`, `thalweg export --zero-d`: Poiseuille vessels, junctions, placeholder boundary conditions; a 1-D solver format is not written) | done | 1 in, 4 out |
 
 ## What thalweg adds that vmtk lacks
 
@@ -297,7 +297,7 @@ the graph yet.
    - VTP in vmtk's convention (vmtk, Slicer, ParaView, and the oracle tests);
    - Slicer markups;
    - SWC (trees only);
-   - svZeroDSolver / 1-D solver input.
+   - svZeroDSolver input (`thalweg export --zero-d`); a 1-D solver's format is not written.
 
    The per-branch table stays Parquet, derived from the graph.
 4. **Defaults of the tracer's `ridge_passes` and `prune`.** DECIDED 2026-09-30: four ridge passes

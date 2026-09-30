@@ -238,6 +238,12 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
   the source-to-tip paths after vmtk's centerline attributes and branch extractor (not the later
   bifurcation stages). The integer arrays (`GroupIds`, `Blanking`, `CenterlineIds`, `TractIds`)
   are Int32, as vmtk's filters require.
+- **0-D flow model** (`thalweg export … --zero-d M.json [--inflow Q] [--outlet-resistance R]`):
+  svZeroDSolver's input (`thalweg.solver`), CGS units: a `BloodVessel` per edge (`vessel_name`
+  `edge_<id>`; `R_poiseuille`, `L`, `C` 0 for a rigid wall, `stenosis_coefficient` 0), a
+  `NORMAL_JUNCTION` per branching node (`J<node>`), `INFLOW` (a steady flow, mL/s) at the root's
+  edge and a `RESISTANCE` boundary `OUT<k>` at every other end. The boundary conditions are
+  placeholders. A `thalweg` block records the structure, units and blood properties.
 - **Bifurcation sections** (`thalweg export … --bifurcation-sections S.parquet
   [--distance-spheres N]`): vmtk's sections N touching spheres (default 1) from each of its
   bifurcations, one row per adjacent branch group, cut from the field (`thalweg.branching`):

@@ -589,6 +589,23 @@ mm (the wall half a voxel out), times 10 logits/mm, clipped at ±8. Every verb r
   offsets of the wall - a convention, not an uncertainty. The graph's
   `source.labeling_scheme` says `degraded:labelmap` or `degraded:sdf`.
 
+## 5l. A 0-D flow model (svZeroDSolver input)
+
+`thalweg export --zero-d M.json` writes the structure as an svZeroDSolver network (`thalweg.solver`):
+one `BloodVessel` per edge with R = 8μ/π ∫ds/r⁴ and L = ρ/π ∫ds/r² along its traced radii (CGS;
+blood μ 0.04 P, ρ 1.06 g/cm³; a rigid wall unless E·h is given), a junction per branching node,
+a steady inflow at the root and one resistance per outlet as placeholders.
+
+- A straight tube gives exactly the Poiseuille resistance and inductance; a tapering one (1 to 3
+  mm) the integral, within 3 % of the closed form.
+- Solving the network for steady flow (`solver.steady_pressures`, resistances only): flows add up
+  at every junction and at the outlets (50 mL/s in, 50.000 out on the C3N-00704 arteries: 1,064
+  vessels, 528 junctions, 536 outlets), and every vessel's pressure drop is its flow times its
+  resistance.
+- **Not run through svZeroDSolver itself**: it is not installed here. The file follows its
+  documented schema (`simulation_parameters`, `boundary_conditions`, `junctions`, `vessels`) and
+  carries a `thalweg` block the solver ignores.
+
 ## 6. Not yet validated
 
 - **Thin-caliber ground truth.** The ~1 mm radius floor belongs to the model; checking the

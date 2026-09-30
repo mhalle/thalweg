@@ -21,7 +21,7 @@ KERNEL_OK = {"numpy", "scipy", "skimage.measure", "torch", "rankfield.geometry"}
 VMTK_OK = {"numpy"} | STDLIB
 PIPELINE = {"store", "graph", "centerlines", "cli", "errors", "adapters", "branching", "measure", "case",
             "lobes", "pairing", "plausibility", "statistics", "export", "partition", "wallmap",
-            "straighten", "volume"}
+            "straighten", "volume", "solver"}
 
 
 def imports(path: Path):

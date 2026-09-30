@@ -7,7 +7,7 @@
     thalweg run STORE -o DIR [-s NAME ...]                the batch product: graph, tables, summary, QC
     thalweg export GRAPH STORE -s NAME [--mesh M.vtp] [--vmtk-centerlines C.vtp] [--swc T.swc]
                    [--markups M.mrk.json] [--wall-maps W.npz]
-                   [--bifurcation-sections S.parquet]   at least one output
+                   [--bifurcation-sections S.parquet] [--zero-d M.json]   at least one output
     thalweg summary GRAPH                                 structures, counts, lengths
     thalweg schema [-o FILE]                              the .thalweg.json JSON Schema
 """
@@ -262,6 +262,13 @@ def _cap_kinds(ctx, param, value):
                    "(vmtk's adaptive length; vmtk's own default is 10).")
 @click.option("--extension-transition", type=click.FloatRange(0, 1), default=0.25, show_default=True,
               help="The share of an extension's length over which the ring becomes a circle.")
+@click.option("--zero-d", "zero_d_out", type=click.Path(dir_okay=False), default=None,
+              help="An svZeroDSolver input (.json): Poiseuille vessels, junctions, placeholder boundary "
+                   "conditions (CGS units).")
+@click.option("--inflow", type=click.FloatRange(min=0, min_open=True), default=1.0, show_default=True,
+              help="With --zero-d: the steady inflow at the root, mL/s.")
+@click.option("--outlet-resistance", type=click.FloatRange(min=0), default=1000.0, show_default=True,
+              help="With --zero-d: every outlet's resistance, dyn s / cm^5.")
 @click.option("--bifurcation-sections", "sections_out", type=click.Path(dir_okay=False), default=None,
               help="vmtk's bifurcation sections, cut from the field (.parquet; needs pyarrow).")
 @click.option("--distance-spheres", type=click.IntRange(min=1), default=1, show_default=True,
@@ -272,7 +279,8 @@ def _cap_kinds(ctx, param, value):
               help="Station spacing of the wall maps, mm.")
 def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, swc, markups, curvature,
            with_distance, extension_ratio,
-           extension_transition, sections_out, distance_spheres, wall_maps_out, wall_map_step):
+           extension_transition, zero_d_out, inflow, outlet_resistance, sections_out, distance_spheres,
+           wall_maps_out, wall_map_step):
     """Export one structure: a capped surface for CFD, vmtk-compatible centerlines, SWC, Slicer
     markups and/or wall maps (give at least one output)."""
     from .graph import TubeGraph
@@ -280,11 +288,18 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
         raise click.UsageError("--flow-extensions, --curvature and --distance-to-centerlines need --mesh")
     if extension_ratio is None and extension_transition != 0.25:
         raise click.UsageError("--extension-transition needs --flow-extensions")
-    if not (mesh or vmtk_out or swc or markups or wall_maps_out or sections_out):
+    if not (mesh or vmtk_out or swc or markups or wall_maps_out or sections_out or zero_d_out):
         raise click.UsageError("nothing to export: give --mesh, --vmtk-centerlines, --swc, --markups, "
-                               "--bifurcation-sections and/or --wall-maps")
+                               "--bifurcation-sections, --wall-maps and/or --zero-d")
     g = TubeGraph.read(graph)
     s = g.structure(name)
+    if zero_d_out:
+        from .solver import write_zero_d_model, zero_d_model
+        model = zero_d_model(g, name, inflow=inflow, outlet_resistance=outlet_resistance)
+        write_zero_d_model(model, zero_d_out)
+        click.echo(f"{zero_d_out}: svZeroDSolver input, {len(model['vessels'])} vessels, "
+                   f"{len(model['junctions'])} junctions, {len(model['boundary_conditions']) - 1} outlets "
+                   "(placeholder boundary conditions)", err=True)
     if sections_out:
         from .branching import bifurcation_sections, vmtk_branching
         from .centerlines import check_source

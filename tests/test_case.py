@@ -152,6 +152,14 @@ def test_the_other_verbs_run_end_to_end(vessels_data, tmp_path):
                           "--mesh", str(mesh), "--extension-transition", "0.5"])
     assert r.exit_code != 0 and "needs --flow-extensions" in r.output
     r = run.invoke(main, ["export", str(graph), str(vessels_data / STORE), "-s", "lung_airways",
+                          "--zero-d", str(tmp_path / "m.json"), "--inflow", "3"])
+    assert r.exit_code == 0, r.output + str(r.exception)
+    from thalweg.solver import steady_pressures
+    model = json.loads((tmp_path / "m.json").read_text())
+    flow, _ = steady_pressures(model)
+    outs = [v["vessel_id"] for v in model["vessels"] if "outlet" in v.get("boundary_conditions", {})]
+    assert len(model["vessels"]) > 100 and sum(flow[v] for v in outs) == pytest.approx(3.0)
+    r = run.invoke(main, ["export", str(graph), str(vessels_data / STORE), "-s", "lung_airways",
                           "--bifurcation-sections", str(tmp_path / "s.parquet"), "--distance-spheres", "2"])
     assert r.exit_code == 0, r.output + str(r.exception)
     pq = pytest.importorskip("pyarrow.parquet")
