@@ -251,15 +251,23 @@ def _cap_kinds(ctx, param, value):
 @click.option("--swc", type=click.Path(dir_okay=False), default=None, help="The tree as SWC.")
 @click.option("--markups", type=click.Path(dir_okay=False), default=None,
               help="One 3D Slicer curve per branch (.mrk.json).")
+@click.option("--flow-extensions", "extension_ratio", type=click.FloatRange(min=0, min_open=True),
+              default=None,
+              help="With --mesh: replace each cap by a flow extension this many ring radii long "
+                   "(vmtk's adaptive length; vmtk's own default is 10).")
+@click.option("--extension-transition", type=click.FloatRange(0, 1), default=0.25, show_default=True,
+              help="The share of an extension's length over which the ring becomes a circle.")
 @click.option("--wall-maps", "wall_maps_out", type=click.Path(dir_okay=False), default=None,
               help="Wall maps r(arc length, angle) of every edge, ray-cast from the field (.npz).")
 @click.option("--wall-map-step", type=click.FloatRange(min=0, min_open=True), default=0.5, show_default=True,
               help="Station spacing of the wall maps, mm.")
-def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, swc, markups, wall_maps_out,
-           wall_map_step):
+def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, swc, markups, extension_ratio,
+           extension_transition, wall_maps_out, wall_map_step):
     """Export one structure: a capped surface for CFD, vmtk-compatible centerlines, SWC, Slicer
     markups and/or wall maps (give at least one output)."""
     from .graph import TubeGraph
+    if extension_ratio is not None and not mesh:
+        raise click.UsageError("--flow-extensions needs --mesh")
     if not (mesh or vmtk_out or swc or markups or wall_maps_out):
         raise click.UsageError("nothing to export: give --mesh, --vmtk-centerlines, --swc, --markups "
                                "and/or --wall-maps")
@@ -285,6 +293,9 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
         m, geo, ref = open_store(store).margin(name, s.source.part)
         check_source(s, geo, ref)
         msh = capped_surface(g, name, m, geo, kinds=cap_kinds, refine=refine)
+        if extension_ratio is not None:
+            from .export import flow_extensions
+            msh = flow_extensions(msh, ratio=extension_ratio, transition=extension_transition)
         write_vtp_mesh(msh, mesh)
         n_ends = len(msh.caps) + len(msh.skipped)
         more = f", {len(msh.skipped)} not (see below)" if msh.skipped else ""

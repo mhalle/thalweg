@@ -473,6 +473,28 @@ branch-clipper rule without the surface (`thalweg.vmtk.partition`).
   1.8 × the station's median radius). 10 of the 20,291 stations lie outside the structure (the
   smoothed path cuts a corner): all their rays are empty, and they are counted apart.
 
+## 5h. Boundary reference systems and flow extensions
+
+The C3N-00704 subtree, opened at the nine cuts vmtk was given (an inlet and eight outlets,
+`research/vessels/flow_ext.py`), with `export.surface` doing the cutting.
+
+- **Rings.** vmtk's boundary barycenter and radius are averages over the ring's vertices. Computed
+  that way (`vmtk_vertex_mean=True`) ours equal vmtk's on eight of the nine rings (to 1e-4 mm) and
+  differ by 0.016 mm and 0.012 mm on the ninth: the exact plane clip makes the same ring as VTK's
+  clipper. The default averages along the ring's length instead, which does not depend on where
+  the mesh happens to put vertices: it moves the barycenter by 0.05–0.26 mm and the radius by
+  0.01–0.05 mm on these rings.
+- **Extensions** (ratio 5, transition 0.25, as vmtk was run): 13,517 of vmtk's extension vertices
+  lie in the straight part; their distance from our cylinder's axis differs from our radius by a
+  median 0.03 mm (90th percentile 0.09 mm), which is the ring difference above. The transition is
+  a smoothstep blend here and a thin-plate spline in vmtk; they are not compared point by point.
+- **The mesh stays closed and manifold**, and its volume grows by the tubes' (π R² L per cap,
+  within 3 % on the Y phantom). An extension is straight and knows nothing of its surroundings:
+  one from a small branch can run into a neighbor, which the manifold check does not see.
+- **Whole trees** (`thalweg export --mesh --flow-extensions 5`, all end kinds): C3N-00704 airways,
+  109 caps, extensions a median 3.8 mm long, 2.8 s; arteries, 436 caps, a median 6.2 mm, 9.9 s and
+  1.04 million faces.
+
 ## 6. Not yet validated
 
 - **Thin-caliber ground truth.** The ~1 mm radius floor belongs to the model; checking the

@@ -31,10 +31,16 @@ one-cell chamfer: on a 0.7 mm grid about half a small cap's area is not on the p
 faces, no directed edge twice, one fan per vertex) with a positive volume; :func:`surface` raises
 ThalwegError rather than return anything else (:func:`mesh_defects` says what is wrong).
 
+**Flow extensions.** :func:`flow_extensions` replaces caps by straight tubes that morph each
+cap's ring into a circle and end in a flat cap (vmtk's ``vmtkflowextensions``), and
+:func:`boundary_reference_system` gives a cap's ring barycenter, mean radius and normal (vmtk's
+``vmtkboundaryreferencesystems``); both work on the capped mesh, so the domain stays closed.
+
 **Names.** Every face gets a ``BoundaryId``: 0 the wall, k >= 1 the k-th cap (``Mesh.caps[k -
 1]``, contiguous: a skipped end has no id). :func:`write_vtp_mesh` writes the .vtp and a JSON
 sidecar ``<mesh>.boundaries.json``: each boundary's id, name, end kind, node, plane center,
-outward normal, inscribed radius, area and area centroid, and the skipped ends with their reasons.
+outward normal, inscribed radius, area, area centroid, ring barycenter and ring mean radius (and
+its flow extension's length and start, if it has one), and the skipped ends with their reasons.
 
 The VTP writers produce VTK XML PolyData (ASCII) with no VTK dependency. Integer arrays are
 written as Int32 (vtkIntArray): vmtk's filters read GroupIds, Blanking, CenterlineIds and TractIds
@@ -152,6 +158,7 @@ class Mesh:
     names: list[str] = field(default_factory=list)       # names[k]; names[0] = "wall"
     skipped: list[Skipped] = field(default_factory=list)  # ends with no cap, and why
     caps: list[Cut] = field(default_factory=list)         # caps[k - 1]: the cut behind BoundaryId k
+    extensions: dict[int, dict] = field(default_factory=dict)  # BoundaryId -> its flow extension
 
 
 def wall_slope(margin: np.ndarray, geometry) -> float:
@@ -661,6 +668,112 @@ def capped_surface(graph: TubeGraph, structure: str, margin: np.ndarray, geometr
     return mesh
 
 
+def cap_ring(mesh: Mesh, k: int) -> np.ndarray:
+    """The vertex ids around cap ``k``, in order, counterclockwise seen from outside the structure
+    (along the cap's normal). ThalwegError if the cap is not a disk (no loop, or several)."""
+    f = mesh.faces[mesh.boundary == k]
+    e = np.concatenate([f[:, [0, 1]], f[:, [1, 2]], f[:, [2, 0]]])
+    have = set(map(tuple, e.tolist()))
+    rim = [(a, b) for a, b in have if (b, a) not in have]
+    loops = _loops(rim)
+    if len(loops) != 1 or len(loops[0]) != len(rim):
+        raise ThalwegError(f"cap {k} ({mesh.names[k]}) is not a disk: {len(loops)} boundary loops")
+    return np.asarray(loops[0], np.int64)
+
+
+def boundary_reference_system(mesh: Mesh, k: int, vmtk_vertex_mean: bool = False) -> dict:
+    """vmtk's boundary reference system of cap ``k`` (``vmtkboundaryreferencesystems``): the
+    ring's barycenter, its mean distance from the barycenter (vmtk's boundary radius) and the
+    outward normal.
+
+    The barycenter and the radius are averages along the ring's length (each vertex weighted by
+    half the length of its two edges), so they do not depend on how the ring's vertices are spaced.
+    vmtk averages the vertices, which pulls both toward
+    wherever the mesh happens to be dense; ``vmtk_vertex_mean=True`` reproduces that (on the
+    C3N-00704 subtree's nine rings it moves the barycenter by 0.05-0.26 mm)."""
+    P = mesh.vertices[cap_ring(mesh, k)]
+    Q = np.roll(P, -1, axis=0)
+    w = np.linalg.norm(Q - P, axis=1)
+    if vmtk_vertex_mean:
+        b = P.mean(0)
+        radius = float(np.linalg.norm(P - b, axis=1).mean())
+    else:
+        wv = 0.5 * (w + np.roll(w, 1))                         # each vertex: half of its two edges
+        b = (P * wv[:, None]).sum(0) / wv.sum()
+        radius = float((np.linalg.norm(P - b, axis=1) * wv).sum() / wv.sum())
+    return dict(barycenter=b, mean_radius_mm=radius, normal=np.asarray(mesh.caps[k - 1].normal, float),
+                perimeter_mm=float(w.sum()))
+
+
+def flow_extensions(mesh: Mesh, ratio: float = 5.0, transition: float = 0.25, caps=None,
+                    check: bool = True) -> Mesh:
+    """The mesh with a flow extension at its caps (vmtk's ``vmtkflowextensions``, boundary-normal
+    mode with adaptive length): each cap is replaced by a tube along its normal, ``ratio`` x the
+    ring's mean radius long, that morphs the cap's ring into a circle of that radius about the
+    ring's barycenter over the first ``transition`` of its length (a smoothstep blend, so the wall
+    has no kink where it starts or ends), then runs straight, and ends in a flat cap.
+
+    The tube's faces are wall (``BoundaryId`` 0); the new end cap keeps the cap's id and name.
+    ``caps``: the BoundaryIds to extend (default: all). ``Mesh.extensions[k]`` records each one:
+    ``length_mm``, ``radius_mm``, and the ``ring_barycenter`` it grew from; the cap's ``center``
+    moves to the extension's end. An extension is straight and knows nothing of what is around
+    it: a long one from a small branch can run into a neighbor, which :func:`mesh_defects` does
+    not see (the surface stays closed and manifold; it may self-intersect)."""
+    from dataclasses import replace
+    if not ratio > 0 or not 0 <= transition <= 1:
+        raise ThalwegError(f"ratio must be positive and transition in [0, 1]; got {ratio}, {transition}")
+    ids = list(range(1, len(mesh.caps) + 1)) if caps is None else [int(k) for k in caps]
+    V = [mesh.vertices]
+    nv = len(mesh.vertices)
+    keep = ~np.isin(mesh.boundary, ids)
+    F, B = [mesh.faces[keep]], [mesh.boundary[keep]]
+    new_caps = list(mesh.caps)
+    ext = dict(mesh.extensions)
+    for k in ids:
+        if not 1 <= k <= len(mesh.caps):
+            raise ThalwegError(f"there is no cap {k}; the mesh has {len(mesh.caps)}")
+        ring = cap_ring(mesh, k)
+        ref = boundary_reference_system(mesh, k)
+        n, b, R = ref["normal"], ref["barycenter"], ref["mean_radius_mm"]
+        P = mesh.vertices[ring]
+        P = P - ((P - b) @ n)[:, None] * n                      # in the cap's plane (they already are)
+        u = P - b
+        u /= np.linalg.norm(u, axis=1, keepdims=True)
+        circle = b + R * u
+        L = ratio * R
+        h = ref["perimeter_mm"] / len(ring)                     # layers about as far apart as ring vertices
+        n_layers = max(2, int(np.ceil(L / h)))
+        s = L * np.arange(1, n_layers + 1) / n_layers
+        t = np.clip(s / (transition * L), 0.0, 1.0) if transition > 0 else np.ones(n_layers)
+        w = t * t * (3.0 - 2.0 * t)                             # smoothstep
+        layers = (1.0 - w)[:, None, None] * P[None] + w[:, None, None] * circle[None] + s[:, None, None] * n
+        m = len(ring)
+        ids_layer = [ring] + [nv + j * m + np.arange(m) for j in range(n_layers)]
+        V.append(layers.reshape(-1, 3))
+        nv += n_layers * m
+        for lo, hi in zip(ids_layer[:-1], ids_layer[1:]):
+            a, a2 = lo, np.roll(lo, -1)
+            c, c2 = hi, np.roll(hi, -1)
+            F.append(np.concatenate([np.stack([a, a2, c2], 1), np.stack([a, c2, c], 1)]))
+            B.append(np.zeros(2 * m, mesh.boundary.dtype))
+        end = b + L * n
+        V.append(end[None])
+        last = ids_layer[-1]
+        F.append(np.stack([np.full(m, nv), last, np.roll(last, -1)], 1))
+        B.append(np.full(m, k, mesh.boundary.dtype))
+        nv += 1
+        new_caps[k - 1] = replace(mesh.caps[k - 1], center=end)
+        ext[k] = dict(length_mm=float(L), radius_mm=float(R), ring_barycenter=b)
+    out = Mesh(np.concatenate(V), np.concatenate(F), np.concatenate(B), list(mesh.names), list(mesh.skipped),
+               new_caps, ext)
+    if check:
+        d = mesh_defects(out.vertices, out.faces)
+        if not _is_good(d):
+            raise ThalwegError("the extended surface is not closed and manifold ("
+                               + ", ".join(f"{a} {v}" for a, v in d.items()) + ")")
+    return out
+
+
 def _cap_geometry(mesh: Mesh, k: int):
     f = mesh.faces[mesh.boundary == k]
     V = mesh.vertices
@@ -681,10 +794,18 @@ def boundaries(mesh: Mesh) -> dict:
     rows = [{"id": 0, "name": "wall", "area_mm2": round(wall_area, 6)}]
     for k, c in enumerate(mesh.caps, 1):
         area, centroid = _cap_geometry(mesh, k)
-        rows.append({"id": k, "name": c.name, "cap_kind": c.kind, "node": c.node, "edge": c.edge,
-                     "center": vec(c.center), "normal": vec(c.normal),
-                     "inscribed_radius_mm": round(float(c.radius), 6), "area_mm2": round(area, 6),
-                     "centroid": vec(centroid)})
+        ref = boundary_reference_system(mesh, k)
+        row = {"id": k, "name": c.name, "cap_kind": c.kind, "node": c.node, "edge": c.edge,
+               "center": vec(c.center), "normal": vec(c.normal),
+               "inscribed_radius_mm": round(float(c.radius), 6), "area_mm2": round(area, 6),
+               "centroid": vec(centroid), "ring_barycenter": vec(ref["barycenter"]),
+               "ring_mean_radius_mm": round(ref["mean_radius_mm"], 6)}
+        if k in mesh.extensions:
+            e = mesh.extensions[k]
+            row.update(extension_length_mm=round(e["length_mm"], 6),
+                       extension_radius_mm=round(e["radius_mm"], 6),
+                       extension_start_barycenter=vec(e["ring_barycenter"]))
+        rows.append(row)
     return {"space": "LPS", "units": "mm", "boundaries": rows,
             "skipped": [{"name": s.name, "cap_kind": s.kind, "node": s.node, "reason": s.reason}
                         for s in mesh.skipped]}

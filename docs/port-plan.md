@@ -89,8 +89,8 @@ tiers, ported after phase 5.
 
 | vmtk | thalweg | Status | Phase |
 |---|---|---|---|
-| `vmtkflowextensions` | Implicit extensions (`flow_ext.py`): one watertight domain, 0.022 mm from vmtk's surface | native | T3 |
-| `vmtkboundaryreferencesystems`, `vmtkboundarylabeler` | Named caps with ring barycenter, normal and mean radius (the ring code is in `flow_ext.py`) | prototype | 4 |
+| `vmtkflowextensions` | On the capped mesh: each cap becomes a tube along its normal, ratio × the ring's mean radius long, morphing the ring into a circle over the transition and ending in a flat named cap (`export.flow_extensions`, `thalweg export --mesh M.vtp --flow-extensions RATIO`); closed and manifold by construction. vmtk's extension vertices lie on our cylinders to a median 0.03 mm. The implicit version (one signed field, `flow_ext.py`) stays in research | done | T3 |
+| `vmtkboundaryreferencesystems`, `vmtkboundarylabeler` | Named caps with ring barycenter, mean radius and normal (`export.boundary_reference_system`, in the `.boundaries.json` sidecar). With vmtk's vertex average the barycenter and radius are vmtk's on 8 of 9 rings exactly; the default averages along the ring's length | done | 4 |
 | `vmtkmeshgenerator`, `vmtktetgen`, `vmtkboundarylayer` | vmtk, TetGen or gmsh, fed the zero set, the radius sizing and the named boundaries | out | — |
 | `vmtkmeshwallshearrate`, `vmtkmeshvorticityhelicity`, `vmtkmeshlambda2`, `vmtkparticletracer`, `vmtkpathlineanimator` | Solver post-processing; results can be mapped onto the (s, θ) chart | out | — |
 
@@ -264,7 +264,7 @@ thalweg table arteries.thalweg.json.gz STORE -o branches.parquet [--stations sta
 thalweg run STORE -o OUT/ [-s NAME ...] [--step MM] [--no-stations] [--branch-volumes]
             [--ridge-passes N] [--prune ...] [--root ...]
                                                # graph, branches, stations, summary.json, qc.json
-thalweg export arteries.thalweg.json.gz STORE -s lung_arteries [--mesh M.vtp [--cap-kinds ...] [--refine N]] [--vmtk-centerlines C.vtp [--vmtk-exact]] [--swc T.swc] [--markups M.mrk.json] [--wall-maps W.npz [--wall-map-step MM]]
+thalweg export arteries.thalweg.json.gz STORE -s lung_arteries [--mesh M.vtp [--cap-kinds ...] [--refine N] [--flow-extensions RATIO [--extension-transition T]]] [--vmtk-centerlines C.vtp [--vmtk-exact]] [--swc T.swc] [--markups M.mrk.json] [--wall-maps W.npz [--wall-map-step MM]]
 thalweg summary arteries.thalweg.json.gz
 thalweg schema [-o FILE]
 ```

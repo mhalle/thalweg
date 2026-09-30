@@ -250,6 +250,10 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
 - **Surface:** `thalweg export … --mesh M.vtp [--cap-kinds tip,truncated,root] [--refine N]`
   writes the structure's zero set: marching cubes at level 1e-5 on the margin's trilinear
   interpolant, N times finer.
+  - `--flow-extensions RATIO [--extension-transition T]` replaces every cap by a straight tube
+    RATIO × the ring's mean radius long that morphs the ring into a circle over the first T
+    (default 0.25) of its length and ends in a flat cap with the cap's id and name. The tube's
+    faces are wall (`BoundaryId` 0).
   - The surface is closed, consistently wound with normals pointing out of the structure, and
     manifold, or it is not written.
   - A flat cap is cut at every end of the requested kinds (default `tip` and `truncated`). A
@@ -261,9 +265,14 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
       - the wall: `{"id": 0, "name": "wall", "area_mm2"}`;
       - each cap: `{"id", "name"` (e.g. `"lung_arteries tip 812"`), `"cap_kind"` (tip, truncated or
         root), `"node"` (graph node id), `"edge"` (the graph edge cut), `"center"` (where the
-        centerline crosses the cap's plane), `"normal"` (unit, pointing out of the structure),
+        centerline crosses the cap's plane; with a flow extension, the extension's end),
+        `"normal"` (unit, pointing out of the structure),
         `"inscribed_radius_mm"` (the centerline's radius at the cut), `"area_mm2"`,
-        `"centroid"` (the cap's area centroid, on the plane)`}`;
+        `"centroid"` (the cap's area centroid, on the plane), `"ring_barycenter"` and
+        `"ring_mean_radius_mm"` (vmtk's boundary reference system: the cap's rim averaged along
+        its length, and its mean distance from that point), and with a flow extension
+        `"extension_length_mm"`, `"extension_radius_mm"` (the circle it ends in) and
+        `"extension_start_barycenter"` (the ring it grew from)`}`;
     - `skipped`: `[{"name", "cap_kind", "node", "reason"}]`, every requested end that got no cap, and
       why. The reasons are:
       - the edge is too short to clear the junction;

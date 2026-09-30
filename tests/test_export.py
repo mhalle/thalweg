@@ -349,3 +349,134 @@ def test_markups_follow_the_slicer_schema(y, tmp_path):
         assert P.shape[1] == 3 and np.isfinite(P).all()
         ep = g.edge_points(e)
         assert np.allclose(P[0], ep[0]) and np.allclose(P[-1], ep[-1])        # both ends kept
+
+
+def test_boundary_reference_systems_of_the_y(y):
+    """Each cap's ring: barycenter on the tube's axis, mean radius the tube's, normal the cut's; the
+    ring runs counterclockwise about that normal; vmtk's vertex average is the other definition."""
+    from thalweg.export import boundary_reference_system, cap_ring
+    m, geo, g = y
+    mesh = capped_surface(g, "y", m, geo, kinds=("tip", "root"))
+    true_radius = {"root": 3.0}
+    for k, c in enumerate(mesh.caps, 1):
+        ref = boundary_reference_system(mesh, k)
+        assert np.linalg.norm(ref["barycenter"] - c.center) < 0.1 and np.allclose(ref["normal"], c.normal)
+        assert abs((ref["barycenter"] - c.center) @ c.normal) < 1e-6           # in the cap's plane
+        assert abs(ref["mean_radius_mm"] - true_radius.get(c.kind, c.radius)) < 0.08
+        assert abs(ref["perimeter_mm"] - 2 * np.pi * ref["mean_radius_mm"]) < 0.15
+        P = mesh.vertices[cap_ring(mesh, k)] - ref["barycenter"]
+        turn = np.cross(P, np.roll(P, -1, axis=0)) @ c.normal
+        assert (turn > 0).all()                                                  # counterclockwise
+        v = boundary_reference_system(mesh, k, vmtk_vertex_mean=True)
+        ring = mesh.vertices[cap_ring(mesh, k)]
+        assert np.allclose(v["barycenter"], ring.mean(0))
+        assert v["mean_radius_mm"] == pytest.approx(np.linalg.norm(ring - ring.mean(0), axis=1).mean())
+    with pytest.raises(ThalwegError):
+        cap_ring(mesh, 0)                                                        # the wall is no disk
+
+
+def test_flow_extensions_are_tubes_that_end_in_a_named_flat_circle(y, tmp_path):
+    from thalweg.export import boundary_reference_system, flow_extensions
+    m, geo, g = y
+    mesh = capped_surface(g, "y", m, geo, kinds=("tip", "root"))
+    refs = {k: boundary_reference_system(mesh, k) for k in range(1, len(mesh.caps) + 1)}
+    ext = flow_extensions(mesh, ratio=4.0, transition=0.25)
+    _good(ext)
+    assert ext.names == mesh.names and len(ext.caps) == len(mesh.caps)
+    vol = lambda msh: mesh_defects(msh.vertices, msh.faces)["signed_volume_mm3"]   # noqa: E731
+    added = sum(np.pi * r["mean_radius_mm"] ** 2 * 4.0 * r["mean_radius_mm"] for r in refs.values())
+    assert abs((vol(ext) - vol(mesh)) / added - 1.0) < 0.03                 # the tubes' volume
+    for k, c in enumerate(ext.caps, 1):
+        r, e = refs[k], ext.extensions[k]
+        L, R = e["length_mm"], e["radius_mm"]
+        assert L == pytest.approx(4.0 * r["mean_radius_mm"]) and R == pytest.approx(r["mean_radius_mm"])
+        assert np.allclose(c.center, r["barycenter"] + L * r["normal"]) and np.allclose(c.normal, r["normal"])
+        v = ext.vertices[np.unique(ext.faces[ext.boundary == k])]
+        assert np.abs((v - c.center) @ c.normal).max() < 1e-9 and (_normals(ext, k) @ c.normal > 0).all()
+        end = boundary_reference_system(ext, k)
+        assert np.allclose(end["barycenter"], c.center, atol=1e-2) and abs(end["mean_radius_mm"] - R) < 2e-3
+        # every new wall vertex past the transition lies on the cylinder; none lies beyond the end
+        new = ext.vertices[len(mesh.vertices):]
+        s = (new - r["barycenter"]) @ r["normal"]
+        rad = np.linalg.norm((new - r["barycenter"]) - s[:, None] * r["normal"], axis=1)
+        mine = (s > -1e-9) & (s <= L + 1e-9) & (rad < R + 1.0)
+        straight = mine & (s >= 0.25 * L) & (rad > 0.5 * R)
+        assert straight.sum() > 50 and np.abs(rad[straight] - R).max() < 1e-9
+        blend = mine & (s > 0) & (s < 0.25 * L)
+        assert np.abs(rad[blend] - R).max() < 0.2                           # a nearly round ring, morphing
+    assert (ext.boundary[len(mesh.faces) - (mesh.boundary > 0).sum():] >= 0).all()
+    write_vtp_mesh(ext, tmp_path / "e.vtp")
+    rows = json.loads((tmp_path / "e.vtp.boundaries.json").read_text())["boundaries"]
+    for row, c in zip(rows[1:], ext.caps):
+        k = row["id"]
+        assert row["extension_length_mm"] == pytest.approx(ext.extensions[k]["length_mm"], abs=1e-5)
+        assert row["extension_radius_mm"] == pytest.approx(ext.extensions[k]["radius_mm"], abs=1e-5)
+        assert np.allclose(row["extension_start_barycenter"], refs[k]["barycenter"], atol=1e-5)
+        assert np.allclose(row["ring_barycenter"], c.center, atol=1e-2)
+        assert row["ring_mean_radius_mm"] == pytest.approx(ext.extensions[k]["radius_mm"], abs=2e-3)
+    plain = json.loads(json.dumps(boundaries(mesh)))["boundaries"][1]
+    assert "extension_length_mm" not in plain and "ring_mean_radius_mm" in plain
+
+
+def test_flow_extensions_of_some_caps_and_bad_arguments(y):
+    from thalweg.export import flow_extensions
+    m, geo, g = y
+    mesh = capped_surface(g, "y", m, geo, kinds=("tip", "root"))
+    one = flow_extensions(mesh, caps=[2])
+    _good(one)
+    assert set(one.extensions) == {2} and np.allclose(one.caps[0].center, mesh.caps[0].center)
+    assert (one.boundary == 1).sum() == (mesh.boundary == 1).sum()
+    sharp = flow_extensions(mesh, transition=0.0)                             # a circle from the first layer
+    _good(sharp)
+    for bad in (dict(ratio=0.0), dict(transition=1.5), dict(caps=[9])):
+        with pytest.raises(ThalwegError):
+            flow_extensions(mesh, **bad)
+
+
+@pytest.mark.data
+def test_rings_and_extensions_against_vmtk(vessels_data):
+    """The C3N-00704 subtree opened at the nine cuts vmtk was given (research/vessels/flow_ext.py).
+    With vmtk's vertex average the ring barycenters and mean radii are vmtk's; the default,
+    length-weighted, is within 0.3 mm and 0.05 mm. vmtk's extension vertices in the straight part
+    lie on our cylinders to a median 0.03 mm."""
+    from scipy.spatial import cKDTree
+    from thalweg.export import Cut, boundary_reference_system, flow_extensions
+    from thalweg.store import open_store
+    names = ("vmtk_input", "flowext_outlets", "vmtk_flowext")
+    files = [vessels_data / f"C3N-00704_ctpa0625_{n}.npz" for n in names]
+    if not all(f.exists() for f in files):
+        pytest.skip("the flow extension reference is not there (research/vessels/vmtk_flowext.py)")
+    Z, outlets, V = (np.load(f) for f in files)
+    _, geo, _ = open_store(vessels_data / "runs" / "C3N-00704_ctpa0625.lung_vessels.duckn.zip").margin(
+        "lung_arteries")
+    F = Z["region_field"].astype(np.float32)
+    origin = np.asarray(geo.origin, float) + Z["region_lo"] @ np.asarray(geo.directions, float)
+    region = Geometry(shape=F.shape, directions=geo.directions, origin=tuple(origin))
+    cuts = [Cut(np.asarray(c, float), np.asarray(n, float) / np.linalg.norm(n), float(r), f"cut {i}")
+            for i, (c, n, r) in enumerate(zip(outlets["center"], outlets["normal"], outlets["radius"]))]
+    mesh = surface(F, region, cuts)
+    assert len(mesh.caps) == 9 and not mesh.skipped
+    tree = cKDTree(V["ring_barycenter"])
+    exact = 0
+    for k in range(1, 10):
+        v = boundary_reference_system(mesh, k, vmtk_vertex_mean=True)
+        d, j = tree.query(v["barycenter"])
+        assert d < 0.03 and abs(V["ring_mean_radius"][j] - v["mean_radius_mm"]) < 0.03
+        exact += d < 1e-4 and abs(V["ring_mean_radius"][j] - v["mean_radius_mm"]) < 1e-4
+        ref = boundary_reference_system(mesh, k)
+        assert tree.query(ref["barycenter"])[0] < 0.3
+        assert abs(V["ring_mean_radius"][j] - ref["mean_radius_mm"]) < 0.05
+    assert exact >= 8
+    ext = flow_extensions(mesh, ratio=float(outlets["ratio"]), transition=float(outlets["transition"]))
+    _good(ext)
+    X = V["verts"].astype(float)
+    own = np.argmin(np.stack([np.linalg.norm(X - c.center, axis=1) for c in mesh.caps], 1), 1)
+    diffs = []
+    for k, c in enumerate(mesh.caps):
+        e = ext.extensions[k + 1]
+        x = X[own == k] - e["ring_barycenter"]
+        s = x @ c.normal
+        sel = (s >= 0.25 * e["length_mm"]) & (s < e["length_mm"] - 0.3)
+        diffs.append(np.linalg.norm(x[sel] - s[sel, None] * c.normal, axis=1) - e["radius_mm"])
+    d = np.concatenate(diffs)
+    assert len(d) > 10000 and np.median(np.abs(d)) < 0.05 and np.percentile(np.abs(d), 90) < 0.12
