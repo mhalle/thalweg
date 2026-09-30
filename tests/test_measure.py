@@ -251,3 +251,20 @@ def test_table_keeps_columns_only_later_rows_have(tmp_path):
     back = pq.read_table(tmp_path / "t.parquet").to_pylist()
     assert back[1]["wall_area_mm2"] == 3.0 and back[1]["paired_artery_edge"] == 0
     assert back[0]["wall_area_mm2"] is None and set(back[0]) == set(back[1])
+
+
+def test_a_branch_with_too_few_wall_stations_gets_no_wall_measures():
+    """The same phantom sectioned every 12 mm: one or two wall stations on the branch, so its wall
+    medians are withheld, though the count and the stations themselves are reported."""
+    from thalweg.measure import MIN_WALL_STATIONS, WALL_KEYS
+    m_lumen, m_wall, geo = _lumen_and_wall()
+    T = medial.trace(m_lumen, geo)
+    nodes, edges, pos, rad, s = graph_from_tree(T, "a", m_lumen, geo, Source(), {"connectivity": "field"})
+    g = TubeGraph(structures=[s], nodes=nodes, edges=edges, points=Points(position=pos, radius=rad))
+    stations = []
+    rows = branch_table(g, "a", m_lumen, geo, step=12.0, outer=np.maximum(m_lumen, m_wall),
+                        stations_out=stations)
+    main = max(rows, key=lambda r: r["length_mm"])
+    assert 0 < main["wall_station_count"] < MIN_WALL_STATIONS
+    assert all(main[k] is None for k in WALL_KEYS) and main["area_mm2"] is not None
+    assert sum(s_["wall_area_mm2"] is not None for s_ in stations) >= main["wall_station_count"]

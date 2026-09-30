@@ -235,6 +235,22 @@ class TubeGraph(_Model):
         a, b = e.point_range
         return np.asarray(self.points.radius[a:b], dtype=np.float64)
 
+    def structure_edges(self, name: str) -> list[Edge]:
+        """The edges of one structure, in id order."""
+        return [e for e in self.edges if e.structure == name]
+
+    def point_rows(self, name: str) -> np.ndarray:
+        """Row indices into the point table of one structure's samples (its edges' ranges)."""
+        ranges = [np.arange(*e.point_range) for e in self.structure_edges(name)]
+        return np.concatenate(ranges) if ranges else np.zeros(0, int)
+
+    def edge_segments(self, edge: Edge | int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """An edge's polyline segments: ``(length, midpoint, radius)`` per segment, the radius the
+        mean of the traced radii at its two ends (<= 0 where either end has none)."""
+        p, r = self.edge_points(edge), self.edge_radius(edge)
+        rm = np.where((r[1:] > 0) & (r[:-1] > 0), 0.5 * (r[1:] + r[:-1]), -1.0)
+        return np.linalg.norm(np.diff(p, axis=0), axis=1), 0.5 * (p[1:] + p[:-1]), rm
+
     def structure(self, name: str) -> Structure:
         for s in self.structures:
             if s.name == name:

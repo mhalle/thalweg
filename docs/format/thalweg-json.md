@@ -163,9 +163,11 @@ bifurcations correspond.
   - `lobe`, `lobe_length_fraction` (a lung store; above);
   - for an airway whose wall the model labels: `wall_area_mm2`, `wall_area_percent`,
     `wall_thickness_mm`, `internal_perimeter_mm` (medians over the edge's stations) and
-    `wall_station_count`. `thalweg table` writes these too;
+    `wall_station_count`; the medians are null when fewer than 3 stations have a wall.
+    `thalweg table` writes these too;
   - for an airway traced with the arteries: `paired_artery_edge` (the nearest parallel artery
-    edge, not a verified companion), `paired_fraction`, `paired_sample_count`,
+    edge, not a verified companion), `paired_artery_consistent` (whether that edge fits the two
+    trees), `paired_fraction`, `paired_sample_count`,
     `bronchus_to_artery_ratio` (`thalweg.pairing`). `thalweg run` only.
 
   Columns a structure does not have are null in its rows.
@@ -196,7 +198,8 @@ bifurcations correspond.
     `constant_wall_pi10_mm` (what a wall of the median thickness at every caliber would give: on
     TotalSegmentator's wall class Pi10 restates it, docs/validation.md §5b);
   - `bronchoarterial` (airways traced with the arteries): `paired_sample_share`,
-    `paired_branches`, `bronchus_to_artery_ratio_median`, `share_of_paired_branches_above_1`,
+    `paired_branches`, `consistent_paired_branches`, `bronchus_to_artery_ratio_median`,
+    `consistent_bronchus_to_artery_ratio_median`, `share_of_paired_branches_above_1`,
     `reach_mm`, `parallel_cosine`;
   - `lobes` (a lung store): per lobe name, and `outside_lobes`: `edge_count`, `tip_count`, `length_mm`,
     and for a lobe `lobe_volume_ml`, `length_mm_per_ml`.

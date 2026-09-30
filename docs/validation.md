@@ -284,10 +284,10 @@ wall at every airway section station (branch table: `wall_area_mm2`, `wall_area_
 `wall_thickness_mm`; `summary.json`: Pi10). A phantom lumen of 2 mm in a 1 mm wall reads a wall
 area within 5 %, WA% within 2 points and thickness within 0.05 mm (`tests/test_measure.py`).
 
-| Case | Pi10 (mm) | Pi10 of a constant wall of the median thickness | WA%, Strahler 1 / 2 / 3 | Thickness (mm), Strahler 1 / 2 / 3 | Stations with a wall, Strahler 1 / 2 / 3 |
+| Case | Pi10 (mm) | Pi10 of a constant wall of the median thickness | WA%, Strahler 1 / 2 / 3 | Thickness (mm), Strahler 1 / 2 / 3 | Branches behind those medians, Strahler 1 / 2 / 3 |
 |---|---|---|---|---|---|
-| C3N-00704 0.625 | 4.17 (1151 of 2205 stations) | 4.40 | 85.6 / 73.7 / 61.1 | 1.37 / 1.30 / 1.12 | 809 of 1443 / 186 of 460 / 35 of 140 |
-| MSB-02664 0.625 | 4.34 (431 of 1103 stations) | 4.46 | 85.4 / 69.8 / 67.8 | 1.45 / 1.36 / 1.30 | 307 of 774 / 28 of 174 / 8 of 35 |
+| C3N-00704 0.625 | 4.17 (1151 of 2205 stations) | 4.40 | 84.7 / 72.8 / 60.6 | 1.41 / 1.25 / 1.12 | 75 / 19 / 7 |
+| MSB-02664 0.625 | 4.34 (431 of 1103 stations) | 4.46 | 81.7 / 65.9 / 68.9 | 1.37 / 1.11 / 1.25 | 32 / 5 / 1 |
 
 **The wall is at the model's resolution.** The measured thickness is nearly constant, 1.1–1.45 mm
 at every order: about two voxels of the 0.7 mm grid, the thinnest shell the model draws. Its
@@ -307,11 +307,12 @@ reported for healthy lungs on CT for the same reason.
 station is measured only where the outer contour closes inside the section window. Where a
 neighboring airway's wall touches (at and near every bifurcation), the contour runs on into the
 neighbor and the station is dropped: 52 % of stations are measured on C3N and 39 % on MSB, falling
-from 56 % at Strahler 1 to 25 % at 3 (C3N), and 132 of 265 and 59 of 162 branches have any. The
-order 2 and 3 medians for MSB rest on 28 and 8 stations. Dropping is the safe choice (two phantom
-airways with touching walls give no wall stations, not wrong ones), but it biases the sample
-toward isolated airways. The branch table's `wall_station_count` beside `station_count` says how
-much each branch's medians rest on.
+from 56 % at Strahler 1 to 25 % at 3 (C3N). Dropping is the safe choice (two phantom airways with
+touching walls give no wall stations, not wrong ones), but it biases the sample toward isolated
+airways. A branch needs at least 3 wall stations to get wall measures: 132 of 265 (C3N) and 59 of
+162 (MSB) branches have any wall station, and 105 and 42 have enough. The MSB medians for orders
+2 and 3 rest on 5 branches and 1. `wall_station_count` beside `station_count` says how much each
+branch's medians rest on.
 
 ## 5c. Bronchoarterial pairing
 
@@ -335,15 +336,27 @@ the round-3 review on the two cases (C3N / MSB):
   on the one reported.
 
 A wider parent artery 3 mm away beats the true companion 4 mm away (a phantom gives 0.33 where
-0.83 is right). `paired_sample_count` says how many samples a branch's ratio rests on.
+0.83 is right). Two columns say how far to trust a branch's pairing: `paired_sample_count`, and
+`paired_artery_consistent`, true when the artery edge is that of the nearest paired ancestor
+airway branch or lies downstream of it, and no sibling airway branch has the same one. 132 of 235
+paired branches pass on C3N and 54 of 118 on MSB.
 
 **The ratio is low because of the calibers the model draws, not because of mis-pairing.** The
-medians sit below the ~0.65–0.7 usually reported for healthy lungs on CT. Restricted to branches
-whose pairing is consistent with the trees (the artery is a proper descendant of the parent
-airway's artery and is not shared with a sibling), the ratio is unchanged: 0.58 against 0.57 on
-C3N, 0.49 against 0.50 on MSB. In that set the airway radius is 1.08 mm against 1.9–2.0 mm for
-the artery: the airway lumen class sits at the model's floor beside a wider artery class. As with
-the walls, compare across cases on one model and grid.
+medians sit below the ~0.65–0.7 usually reported for healthy lungs on CT. Over the consistent
+branches alone the ratio is the same: 0.59 against 0.58 over all on C3N, 0.52 against 0.51 on MSB
+(`summary.json` reports both medians). There the airway radius is about 1.1 mm against 1.9–2.0 mm
+for the artery: the airway lumen class sits at the model's floor beside a wider artery class. As
+with the walls, compare across cases on one model and grid.
+
+**Making the pairing follow the trees does not help (tried 2026-09-30, not kept).** Each airway
+branch was allowed to pair only with its parent's artery edge or edges downstream of it, walking
+from the trachea. With the parent's majority edge as the anchor, the paired share of samples fell
+from 84 % to 42 % (C3N) and 66 % to 30 % (MSB); siblings sharing one artery edge went from 33 of
+114 bifurcations to 26 of 63, and from 18 of 54 to 28 of 39; the ratio stayed at 0.58 and moved
+0.51 → 0.55. With the looser common ancestor of the parent's partners as the anchor: 59 % and
+34 % paired, sharing 29 of 84 and 26 of 40. One early wrong partner locks a whole airway subtree
+out of its arteries. A pairing that is right at the first generations needs anatomy (lobar and
+segmental names), not nearest-parallel geometry.
 
 ## 5d. Artery/vein plausibility
 

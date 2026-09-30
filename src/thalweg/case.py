@@ -56,11 +56,9 @@ def outside_length(graph: TubeGraph, structure: str, margin: np.ndarray, geometr
                    step: float = 0.05) -> float:
     """Length (mm) of the structure's centerlines lying where the margin is <= 0."""
     total = 0.0
-    for e in graph.edges:
-        if e.structure != structure:
-            continue
+    for e in graph.structure_edges(structure):
         p = graph.edge_points(e)
-        seg = np.linalg.norm(np.diff(p, axis=0), axis=1)
+        seg = graph.edge_segments(e)[0]
         n = np.maximum(np.ceil(seg / step).astype(int), 1)
         t = np.concatenate([np.arange(k) / k for k in n])
         a = np.repeat(p[:-1], n, axis=0)
@@ -76,7 +74,7 @@ def summarize(graph: TubeGraph, structure: str, rows: list[dict] | None = None) 
     to its ``edge_count`` and length; ``unordered`` holds the edges that have none (they lead only to
     truncated ends). Order-based statistics are fragile across reconstructions of one scan (one
     lost thin tip can demote a subtree; docs/validation.md §2)."""
-    edges = [e for e in graph.edges if e.structure == structure]
+    edges = graph.structure_edges(structure)
     kinds = {}
     for nd in graph.nodes:
         if nd.structure == structure:
@@ -88,8 +86,7 @@ def summarize(graph: TubeGraph, structure: str, rows: list[dict] | None = None) 
         n, L = by_order.get(o, (0, 0.0))
         by_order[o] = (n + 1, L + e.length_mm)
     r = graph.radii()
-    pts = np.concatenate([np.arange(*e.point_range) for e in edges]) if edges else np.zeros(0, int)
-    rr = r[pts]
+    rr = r[graph.point_rows(structure)]
     rr = rr[rr > 0]
     unordered = by_order.pop(None, (0, 0.0))
     out = dict(edge_count=len(edges), node_count_by_kind=kinds,
@@ -175,8 +172,8 @@ class Case:
             sizes = st.get("component_sizes", [])
             dropped = sizes[1:]
             total = max(sum(sizes), 1)
-            edges = [e for e in graph.edges if e.structure == s.name]
-            pts = np.concatenate([np.arange(*e.point_range) for e in edges]) if edges else np.zeros(0, int)
+            edges = graph.structure_edges(s.name)
+            pts = graph.point_rows(s.name)
             out[s.name] = dict(
                 dropped_components=dict(count=len(dropped), lattice_share=round(sum(dropped) / total, 5),
                                         largest=dropped[0] if dropped else 0),

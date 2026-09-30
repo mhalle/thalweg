@@ -92,12 +92,9 @@ def edge_lobes(graph: TubeGraph, structure: str, lobe_of_point: np.ndarray) -> d
     """Per edge: (the lobe holding most of its length, that share of its length); (0, share) when
     most of it lies outside every lobe."""
     out = {}
-    for e in graph.edges:
-        if e.structure != structure:
-            continue
+    for e in graph.structure_edges(structure):
         a, b = e.point_range
-        p = graph.positions()[a:b]
-        seg = np.linalg.norm(np.diff(p, axis=0), axis=1)
+        seg = graph.edge_segments(e)[0]
         lab = lobe_of_point[a:b]
         # a segment belongs half to each end sample's lobe
         w = np.zeros(6)
@@ -140,7 +137,7 @@ def lobe_summary(graph: TubeGraph, structure: str, edge_lobe: dict[int, tuple[in
     kind = {nd.id: nd.kind for nd in graph.nodes}
     out = {}
     for k in [*LOBES, 0]:
-        es = [e for e in graph.edges if e.structure == structure and edge_lobe.get(e.id, (0, 0))[0] == k]
+        es = [e for e in graph.structure_edges(structure) if edge_lobe.get(e.id, (0, 0))[0] == k]
         length = sum(e.length_mm for e in es)
         row = dict(edge_count=len(es), tip_count=sum(kind[e.end_node] == "tip" for e in es),
                    length_mm=round(length, 3))

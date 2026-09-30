@@ -51,9 +51,7 @@ def streams(graph: TubeGraph, structure: str) -> list[dict]:
             continue
         length = wsum = 0.0
         for eid in eids:
-            p, r = graph.edge_points(eid), graph.edge_radius(eid)
-            seg = np.linalg.norm(np.diff(p, axis=0), axis=1)
-            rm = 0.5 * (r[1:] + r[:-1])
+            seg, _, rm = graph.edge_segments(eid)
             ok = rm > 0
             length += float(seg.sum())
             wsum += float((seg[ok] * rm[ok]).sum())
@@ -91,12 +89,8 @@ def horton(graph: TubeGraph, structure: str) -> dict:
 
 def small_vessel_volume_fraction(graph: TubeGraph, structure: str, small_area_mm2: float = 5.0) -> dict:
     total = small = 0.0
-    for e in graph.edges:
-        if e.structure != structure:
-            continue
-        p, r = graph.edge_points(e), graph.edge_radius(e)
-        seg = np.linalg.norm(np.diff(p, axis=0), axis=1)
-        rm = 0.5 * (r[1:] + r[:-1])
+    for e in graph.structure_edges(structure):
+        seg, _, rm = graph.edge_segments(e)
         ok = rm > 0
         area = np.pi * rm[ok] ** 2
         vol = area * seg[ok]
@@ -110,9 +104,7 @@ def small_vessel_volume_fraction(graph: TubeGraph, structure: str, small_area_mm
 def orientation_entropy(graph: TubeGraph, structure: str) -> float | None:
     """Normalized entropy of the centerline's undirected, length-weighted directions."""
     w = np.zeros(ORIENTATION_BINS)
-    for e in graph.edges:
-        if e.structure != structure:
-            continue
+    for e in graph.structure_edges(structure):
         d = np.diff(graph.edge_points(e), axis=0)
         seg = np.linalg.norm(d, axis=1)
         ok = seg > 0

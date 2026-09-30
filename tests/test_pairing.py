@@ -87,3 +87,51 @@ def test_a_missing_structure_is_an_error():
 def test_run_pairs_airways_with_arteries_not_veins():
     from thalweg.case import PAIRS
     assert PAIRS == {"lung_airways": "lung_arteries"}
+
+
+def _y_doc(trees):
+    """trees: {name: (root, fork, left tip, right tip, radius)}. Edge ids per tree, in order:
+    stem, left, right."""
+    nodes, edges, pos, rad, structures = [], [], [], [], []
+    for name, (root, fork, left, right, r) in trees.items():
+        n0 = len(nodes)
+        for k, (kind, q) in enumerate([("root", root), ("junction", fork), ("tip", left), ("tip", right)]):
+            nodes.append(Node(id=n0 + k, kind=kind, position=tuple(map(float, q)), structure=name))
+        for a, b in ((0, 1), (1, 2), (1, 3)):
+            p = _line(nodes[n0 + a].position, nodes[n0 + b].position, 21)
+            at = len(pos)
+            pos.extend(map(tuple, p))
+            rad.extend([r] * len(p))
+            edges.append(Edge(id=len(edges), structure=name, start_node=n0 + a, end_node=n0 + b,
+                              point_range=(at, at + len(p)),
+                              length_mm=float(np.linalg.norm(np.diff(p, axis=0), axis=1).sum()),
+                              provenance=Provenance(method="field")))
+        structures.append(Structure(name=name, roots=[n0], method="test"))
+    return TubeGraph(structures=structures, nodes=nodes, edges=edges, points=Points(position=pos, radius=rad))
+
+
+def test_a_pairing_that_follows_both_trees_is_consistent():
+    """An airway Y beside an artery Y, 3 mm apart: stem with stem, each daughter with its own."""
+    air = ([0, 0, 0], [0, 0, 20], [-10, 0, 35], [10, 0, 35], 1.0)
+    art = ([0, 3, 0], [0, 3, 20], [-10, 3, 35], [10, 3, 35], 2.0)
+    g = _y_doc({"air": air, "art": art})
+    rows = [dict(edge=k) for k in (0, 1, 2)]
+    s = airway_rows(g, "air", "art", rows)
+    assert [r["paired_artery_edge"] for r in rows] == [3, 4, 5]
+    assert [r["paired_artery_consistent"] for r in rows] == [True, True, True]
+    assert s["consistent_paired_branches"] == 3 and s["consistent_bronchus_to_artery_ratio_median"] == 0.5
+
+
+def test_siblings_on_one_artery_edge_and_a_partner_upstream_are_not_consistent():
+    from thalweg.pairing import consistency
+    air = ([0, 0, 0], [0, 0, 20], [-10, 0, 35], [10, 0, 35], 1.0)
+    art = ([0, 3, 0], [0, 3, 20], [-10, 3, 35], [10, 3, 35], 2.0)
+    g = _y_doc({"air": air, "art": art})
+    # both daughters on the artery's left daughter: shared
+    assert consistency(g, "air", "art", {0: 3, 1: 4, 2: 4}) == {0: True, 1: False, 2: False}
+    # the stem paired with a daughter, a daughter with the stem: upstream of its parent's partner
+    assert consistency(g, "air", "art", {0: 4, 1: 3, 2: None}) == {0: True, 1: False, 2: None}
+    # an unpaired stem: the daughters are checked against each other only
+    assert consistency(g, "air", "art", {0: None, 1: 4, 2: 5}) == {0: None, 1: True, 2: True}
+    # a daughter still beside the parent's artery edge (the artery forks later) is consistent
+    assert consistency(g, "air", "art", {0: 3, 1: 3, 2: 5}) == {0: True, 1: True, 2: True}

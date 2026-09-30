@@ -46,12 +46,8 @@ def _distance(store, name: str):
 
 def _inside_share(graph: TubeGraph, structure: str, dist) -> float:
     total = inside = 0.0
-    for e in graph.edges:
-        if e.structure != structure:
-            continue
-        p = graph.edge_points(e)
-        seg = np.linalg.norm(np.diff(p, axis=0), axis=1)
-        mid = 0.5 * (p[1:] + p[:-1])
+    for e in graph.structure_edges(structure):
+        seg, mid, _ = graph.edge_segments(e)
         inside += float(seg[dist(mid) == 0.0].sum())
         total += float(seg.sum())
     return inside / total if total else 0.0

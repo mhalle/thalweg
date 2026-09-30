@@ -331,9 +331,7 @@ def radius_interval(graph: TubeGraph, structure: str, m: np.ndarray, geometry,
     P = graph.positions()
     n = len(P)
     rows = np.zeros(n, bool)
-    for e in graph.edges:
-        if e.structure == structure:
-            rows[e.point_range[0]:e.point_range[1]] = True
+    rows[graph.point_rows(structure)] = True
     cols = dict(graph.points.columns)
     lower = list(cols.get("radius_lower_mm", [None] * n))
     upper = list(cols.get("radius_upper_mm", [None] * n))

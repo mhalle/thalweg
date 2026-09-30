@@ -43,7 +43,9 @@ without a junction node (no angles there).
   lumen's is the wall area; ``wall_area_percent`` = 100 x wall / outer area (the clinical WA%);
   ``wall_thickness_mm`` = wall area / the mean of the two perimeters; ``internal_perimeter_mm`` is
   the lumen's perimeter (for :func:`pi10`). Medians over the stations where the outer contour
-  closes; ``wall_station_count`` counts them. The model's wall is a shell about two voxels thick
+  closes; ``wall_station_count`` counts them, and a branch with fewer than ``MIN_WALL_STATIONS``
+  (3) of them gets no wall measures (its stations are still in the station table and in Pi10).
+  The model's wall is a shell about two voxels thick
   (1.1-1.45 mm on a 0.7 mm grid, at every airway order), so thin walls are at its resolution.
 
 Sections near a junction cut through the neighboring branches too, so stations within the
@@ -211,6 +213,7 @@ SECTION_KEYS = ("area_mm2", "area_low_mm2", "area_high_mm2", "equivalent_diamete
 
 
 WALL_KEYS = ("wall_area_mm2", "wall_area_percent", "wall_thickness_mm", "internal_perimeter_mm")
+MIN_WALL_STATIONS = 3
 
 
 def _wall(img_outer, g, lumen: dict) -> dict:
@@ -267,6 +270,8 @@ def _sections(path, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels,
     out["station_count"] = len(vals["area_mm2"])
     if outer is not None:
         out["wall_station_count"] = len(vals["wall_area_mm2"])
+        if out["wall_station_count"] < MIN_WALL_STATIONS:
+            out.update({k: None for k in WALL_KEYS})
     out["stations_center_outside"] = outside
     return out
 
