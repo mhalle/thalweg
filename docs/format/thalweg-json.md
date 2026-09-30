@@ -236,6 +236,17 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
   the source-to-tip paths after vmtk's centerline attributes and branch extractor (not the later
   bifurcation stages). The integer arrays (`GroupIds`, `Blanking`, `CenterlineIds`, `TractIds`)
   are Int32, as vmtk's filters require.
+- **Wall maps** (`thalweg export … --wall-maps W.npz [--wall-map-step MM]`): per edge at least
+  3 mm long, the wall's distance from the centerline at every station and angle, ray-cast from
+  the field (`thalweg.wallmap`). One `.npz`:
+  - `structure`, `edges` (the edge ids), `angle_rad` (72 angles in [-π, π), shared);
+  - per edge `edge_<id>_arc_length_mm` (S,), from the edge's start along its smoothed path;
+    `edge_<id>_radius_mm` (S, 72), NaN where a ray found no wall; `edge_<id>_center_mm` (S, 3),
+    the stations, LPS.
+
+  The angle is measured from a normal carried along the edge without twist; its zero is
+  arbitrary per edge. A ray that finds no wall, or one beyond 1.8 × its station's median radius,
+  has left through a side branch's opening (`thalweg.wallmap.ostium`).
 - **Surface:** `thalweg export … --mesh M.vtp [--cap-kinds tip,truncated,root] [--refine N]`
   writes the structure's zero set: marching cubes at level 1e-5 on the margin's trilinear
   interpolant, N times finer.

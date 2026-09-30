@@ -6,7 +6,7 @@
     thalweg table GRAPH STORE -o BRANCHES.parquet [--stations STATIONS.parquet] [-s NAME] [--step MM]
     thalweg run STORE -o DIR [-s NAME ...]                the batch product: graph, tables, summary, QC
     thalweg export GRAPH STORE -s NAME [--mesh M.vtp] [--vmtk-centerlines C.vtp] [--swc T.swc]
-                   [--markups M.mrk.json]              at least one output
+                   [--markups M.mrk.json] [--wall-maps W.npz]   at least one output
     thalweg summary GRAPH                                 structures, counts, lengths
     thalweg schema [-o FILE]                              the .thalweg.json JSON Schema
 """
@@ -106,7 +106,7 @@ def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, r
         st_ = s.statistics
         log(f"{s.name}: {st_['edge_count']} edges, {st_['tip_count']} tips, "
             f"{st_['truncated_end_count']} truncated ends, "
-            f"{st_['junctions']} junctions, {st_['length_mm'] / 10:.1f} cm")
+            f"{st_['junction_count']} junctions, {st_['length_mm'] / 10:.1f} cm")
     log(f"wrote {output}")
 
 
@@ -251,14 +251,32 @@ def _cap_kinds(ctx, param, value):
 @click.option("--swc", type=click.Path(dir_okay=False), default=None, help="The tree as SWC.")
 @click.option("--markups", type=click.Path(dir_okay=False), default=None,
               help="One 3D Slicer curve per branch (.mrk.json).")
-def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, swc, markups):
-    """Export one structure: a capped surface for CFD, vmtk-compatible centerlines, SWC and/or
-    Slicer markups (give at least one output)."""
+@click.option("--wall-maps", "wall_maps_out", type=click.Path(dir_okay=False), default=None,
+              help="Wall maps r(arc length, angle) of every edge, ray-cast from the field (.npz).")
+@click.option("--wall-map-step", type=click.FloatRange(min=0, min_open=True), default=0.5, show_default=True,
+              help="Station spacing of the wall maps, mm.")
+def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, swc, markups, wall_maps_out,
+           wall_map_step):
+    """Export one structure: a capped surface for CFD, vmtk-compatible centerlines, SWC, Slicer
+    markups and/or wall maps (give at least one output)."""
     from .graph import TubeGraph
-    if not (mesh or vmtk_out or swc or markups):
-        raise click.UsageError("nothing to export: give --mesh, --vmtk-centerlines, --swc and/or --markups")
+    if not (mesh or vmtk_out or swc or markups or wall_maps_out):
+        raise click.UsageError("nothing to export: give --mesh, --vmtk-centerlines, --swc, --markups "
+                               "and/or --wall-maps")
     g = TubeGraph.read(graph)
     s = g.structure(name)
+    if wall_maps_out:
+        from .centerlines import check_source
+        from .store import open_store
+        from .wallmap import ostium, wall_maps, write_wall_maps
+        m, geo, ref = open_store(store).margin(name, s.source.part)
+        check_source(s, geo, ref)
+        maps = wall_maps(g, name, m, geo, step=wall_map_step)
+        write_wall_maps(maps, wall_maps_out, name)
+        rays = sum(w.radius_mm.size for w in maps.values())
+        open_ = sum(int(ostium(w).sum()) for w in maps.values())
+        click.echo(f"{wall_maps_out}: {len(maps)} edges, {rays} rays, {open_ / max(rays, 1):.1%} through "
+                   "an ostium", err=True)
     if mesh:
         from .centerlines import check_source
         from .export import capped_surface, write_vtp_mesh

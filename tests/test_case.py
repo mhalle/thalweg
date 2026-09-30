@@ -97,3 +97,27 @@ def test_missing_store_is_a_clear_error(tmp_path):
     r = CliRunner().invoke(main, ["centerlines", str(tmp_path), "-s", "x",
                                   "-o", str(tmp_path / "o.thalweg.json")])
     assert r.exit_code != 0 and "no store" in r.output.lower()
+
+
+@pytest.mark.data
+@pytest.mark.slow
+def test_the_other_verbs_run_end_to_end(vessels_data, tmp_path):
+    """centerlines (not quiet: its log reads the statistics), summary, table and export with wall
+    maps, on the airways."""
+    import numpy as np
+    graph, maps = tmp_path / "a.thalweg.json.gz", tmp_path / "w.npz"
+    run = CliRunner()
+    r = run.invoke(main, ["centerlines", str(vessels_data / STORE), "-s", "lung_airways", "-o", str(graph)])
+    assert r.exit_code == 0, r.output + str(r.exception)
+    r = run.invoke(main, ["summary", str(graph)])
+    assert r.exit_code == 0 and "lung_airways" in r.output, r.output + str(r.exception)
+    r = run.invoke(main, ["table", str(graph), str(vessels_data / STORE), "-o", str(tmp_path / "b.parquet"),
+                          "--step", "3"])
+    assert r.exit_code == 0, r.output + str(r.exception)
+    r = run.invoke(main, ["export", str(graph), str(vessels_data / STORE), "-s", "lung_airways",
+                          "--wall-maps", str(maps), "--wall-map-step", "1"])
+    assert r.exit_code == 0, r.output + str(r.exception)
+    z = np.load(maps)
+    assert len(z["edges"]) > 100 and len(z["angle_rad"]) == 72
+    k = int(z["edges"][0])
+    assert z[f"edge_{k}_radius_mm"].shape[1] == 72 and np.isfinite(z[f"edge_{k}_radius_mm"]).any()

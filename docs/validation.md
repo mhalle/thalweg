@@ -443,6 +443,25 @@ branch-clipper rule without the surface (`thalweg.vmtk.partition`).
   the voxel volume, so a branch thinner than a voxel can get none (5 short artery edges here).
   The arteries take longest because their trunk's radius (14 mm) widens the search.
 
+## 5g. Branch metrics and wall maps
+
+- **vmtk's branch metrics** (`thalweg.vmtk.metrics`), at the 21,221 vertices of the surface vmtk
+  mapped on the C3N-00704 subtree: with vmtk's end-point defect switched on, AbscissaMetric
+  agrees to 3e-14 mm and AngularMetric to 5e-13 rad. Interpolating along each segment, as vmtk
+  meant to, moves the abscissa by a median 0.11 mm and at most 0.30 mm, one centerline step.
+- **Rays** (`thalweg.kernel.rays`): in a phantom tube of radius 2 mm on a 0.7 mm grid, the wall
+  is found at 1.97–2.00 mm from the axis, and at the right distances from a point off the axis.
+- **Wall maps in vmtk's coordinates** against vmtk's DistanceToCenterlines at the same (group,
+  abscissa, angle), 13,443 surface vertices away from the groups' ends: median difference
+  −0.009 mm, median |difference| 0.025 mm, 90th percentile 0.084 mm. 92 groups, 177,336 rays,
+  2.4 s.
+- **Wall maps per graph edge** (`thalweg export --wall-maps`): the radius is measured from the
+  traced centerline, which lies within about 0.1 mm of a phantom tube's axis, so a round tube's
+  map varies by that much around the angle while its mean and the wall points themselves are the
+  cylinder's (within 0.03 and 0.05 mm). On the C3N-00704 arteries: 949 edges, 1.46 million rays
+  at 0.5 mm × 5°, 27 s, 6.2 MB; 3.8 % of the rays pass through an ostium (no wall, or one beyond
+  1.8 × the station's median radius).
+
 ## 6. Not yet validated
 
 - **Thin-caliber ground truth.** The ~1 mm radius floor belongs to the model; checking the

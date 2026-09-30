@@ -42,6 +42,7 @@ from .centerlines import (ABSCISSAS, BLANKING, CENTERLINE_IDS, GROUP_IDS, NORMAL
 from .frames import bifurcation_reference_systems
 from .geometry import centerline_geometry
 from .merge import merge_centerlines
+from .metrics import branch_metrics
 from .offset import offset_attributes
 from .resampling import resample_centerlines
 from .smoothing import smooth_centerlines
@@ -51,11 +52,11 @@ VMTK_FLAGS: dict[str, tuple[str, ...]] = {
     f.__name__: tuple(p for p in inspect.signature(f).parameters if p.startswith("vmtk_"))
     for f in (centerline_attributes, resample_centerlines, extract_branches, bifurcation_reference_systems,
               offset_attributes, merge_centerlines, smooth_centerlines, centerline_geometry, branch_geometry,
-              bifurcation_vectors)}
+              bifurcation_vectors, branch_metrics)}
 """Each public function's ``vmtk_*`` flags, read off its signature."""
 
 __all__ = ["Centerlines", "ReferenceSystems", "RADIUS", "ABSCISSAS", "NORMALS", "GROUP_IDS",
            "CENTERLINE_IDS", "TRACT_IDS", "BLANKING", "VMTK_FLAGS",
            "centerline_attributes", "resample_centerlines", "extract_branches",
            "bifurcation_reference_systems", "offset_attributes", "merge_centerlines", "smooth_centerlines",
-           "centerline_geometry", "branch_geometry", "bifurcation_vectors"]
+           "centerline_geometry", "branch_geometry", "bifurcation_vectors", "branch_metrics"]

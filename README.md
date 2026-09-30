@@ -23,7 +23,7 @@ a field. Here the field is a model's per-class margin, decoded from a
   graph), `graph` (the `.thalweg.json` format, `docs/format/thalweg-json.md`), `adapters` and
   `branching` (vmtk's grouping on the graph), `measure` (the branch table, airway walls), `lobes`
   (a lung lobe per branch), `pairing` (bronchoarterial pairing), `partition` (which branch every
-  point belongs to; branch volumes), `plausibility` (artery/vein check), `statistics` (Horton ratios and other whole-tree numbers), `case` (one case, decoded
+  point belongs to; branch volumes), `wallmap` (the wall unrolled, r(s, angle)), `plausibility` (artery/vein check), `statistics` (Horton ratios and other whole-tree numbers), `case` (one case, decoded
   once: the batch product), `export` (a capped surface, VTP, SWC, Slicer markups), `cli`.
 
 Install and test (from the repo):

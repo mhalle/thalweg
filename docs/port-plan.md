@@ -78,9 +78,9 @@ tiers, ported after phase 5.
 
 | vmtk | thalweg | Status | Phase |
 |---|---|---|---|
-| `vmtkbranchmetrics` | AbscissaMetric and AngularMetric as point-wise formulas (`wall_map.py`). Bit for bit with vmtk's end-point defect switched on; correct interpolation is the default | native | T2 |
-| `vmtkbranchmapping` | Wall maps r(s, θ) by ray casting: 1.8 s, 0.02–0.03 mm from vmtk's | native | T2 |
-| `vmtkbranchpatching` | 2-D patch images of wall data; the ray-cast map is already a raster. vmtk's own patching run saved nothing (`patch_*` arrays empty) | todo | T2 |
+| `vmtkbranchmetrics` | AbscissaMetric and AngularMetric as point-wise formulas at any labeled points (`vmtk.metrics`). vmtk's values to rounding (3e-14 mm, 5e-13 rad) at the 21,221 surface vertices with its end-point defect switched on; interpolating correctly is the default | ported | T2 |
+| `vmtkbranchmapping` | Wall maps r(s, θ) by ray casting in the field (`kernel.rays`, `wallmap`): per graph edge in thalweg's frame (`thalweg export --wall-maps`), or per vmtk group in vmtk's coordinates, a median 0.025 mm from vmtk's DistanceToCenterlines. vmtk's StretchedMapping (the longitudinal re-stretch across bifurcations) is not ported | done | T2 |
+| `vmtkbranchpatching` | The wall map is already the raster (`wallmap.WallMap`, written as `.npz`); any wall quantity maps by sampling it at `WallMap.wall_points()`. vmtk's own patching run saved nothing to compare with (`patch_*` arrays empty) | done | T2 |
 | `vmtkdistancetocenterlines` | Distance to the tube function | prototype | 2 |
 | `vmtkpolyballmodeller`, `vmtkcenterlinemodeller` | The tube function as one more signed field | native | T3 |
 | `vmtksurfacemodeller` | The field is already the signed function | replaced | — |
@@ -264,7 +264,7 @@ thalweg table arteries.thalweg.json.gz STORE -o branches.parquet [--stations sta
 thalweg run STORE -o OUT/ [-s NAME ...] [--step MM] [--no-stations] [--branch-volumes]
             [--ridge-passes N] [--prune ...] [--root ...]
                                                # graph, branches, stations, summary.json, qc.json
-thalweg export arteries.thalweg.json.gz STORE -s lung_arteries [--mesh M.vtp [--cap-kinds ...] [--refine N]] [--vmtk-centerlines C.vtp [--vmtk-exact]] [--swc T.swc] [--markups M.mrk.json]
+thalweg export arteries.thalweg.json.gz STORE -s lung_arteries [--mesh M.vtp [--cap-kinds ...] [--refine N]] [--vmtk-centerlines C.vtp [--vmtk-exact]] [--swc T.swc] [--markups M.mrk.json] [--wall-maps W.npz [--wall-map-step MM]]
 thalweg summary arteries.thalweg.json.gz
 thalweg schema [-o FILE]
 ```

@@ -25,10 +25,13 @@ EXPECTED = {
     "centerline_geometry": ("vmtk_float32",),
     "branch_geometry": ("vmtk_float32", "vmtk_steps", "vmtk_discard_smoothing"),
     "bifurcation_vectors": ("vmtk_interp", "vmtk_fallback", "vmtk_steps", "vmtk_float32"),
+    "branch_metrics": ("vmtk_interp",),
 }
 # defects that need a layout no public-level fixture here has; each is pinned by the named test
 # (vmtk_merge was, until the hairpin fixture: it bites there together with vmtk_last_tract)
-COVERED_ELSEWHERE: dict[tuple[str, str], str] = {}
+COVERED_ELSEWHERE: dict[tuple[str, str], str] = {
+    ("branch_metrics", "vmtk_interp"):
+        "test_wallmap.py::test_branch_metrics_are_position_along_and_angle_around"}
 HAIRPIN = Path(__file__).parent / "fixtures" / "vmtk_oracle" / "hairpin"
 
 ALL = [(name, flag) for name, flags in EXPECTED.items() for flag in flags]
