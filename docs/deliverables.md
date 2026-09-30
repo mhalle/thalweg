@@ -4,9 +4,9 @@
 between tiers are the user's to decide. Update 2026-09-30: tier 1 is partly built (`thalweg run`:
 graph, branch table, stations, summary, QC), with trees rooted at their inlet, lobes per
 branch, airway wall thickness (with Pi10), the bronchoarterial ratio and an artery/vein
-plausibility check. Still missing: a per-point radius interval and Strahler order in the graph,
-0.3 mm polylines, Horton ratios / BV5 / orientation entropy, contrast along branches, and the
-preview image.*
+plausibility check, the radius interval per point, and tree statistics (Horton ratios,
+small-vessel volume fraction, orientation entropy). Still missing: Strahler order stored in the
+graph, 0.3 mm polylines, contrast along branches (needs the CT), and the preview image.*
 
 ## The principle
 

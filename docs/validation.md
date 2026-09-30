@@ -321,6 +321,34 @@ the class, inside `heart`. The length share separates the trees on all four, thi
 included. Four cases from two patients is thin evidence for the thresholds (veins ≥ 1 %,
 arteries ≤ 2 %).
 
+## 5e. Tree statistics and the radius interval
+
+`summary.json` `<tree>.tree` (`thalweg.statistics`), default options, 0.625 mm reconstructions:
+
+| Case | Tree | Streams by Strahler order | Bifurcation ratio | Length ratio | Diameter ratio | Small-vessel volume fraction | Orientation entropy |
+|---|---|---|---|---|---|---|---|
+| C3N-00704 | arteries | 536, 160, 57, 22, 8, 2, 1 | 2.88 | 1.29 | 1.46 | 3.5 % | 0.992 |
+| C3N-00704 | veins | 482, 142, 49, 16, 7, 3, 1 | 2.74 | 1.22 | 1.57 | 2.1 % | 0.993 |
+| C3N-00704 | airways | 133, 48, 17, 5, 2, 1 | 2.73 | 1.47 | 1.43 | 13.9 % | 0.984 |
+| MSB-02664 | arteries | 297, 91, 32, 10, 4, 1 | 3.05 | 1.44 | 1.59 | 1.4 % | 0.986 |
+| MSB-02664 | veins | 236, 68, 24, 6, 2, 1 | 3.07 | 1.31 | 1.66 | 1.4 % | 0.985 |
+| MSB-02664 | airways | 81, 26, 10, 4, 2, 1 | 2.40 | 1.44 | 1.36 | 7.9 % | 0.966 |
+
+- **Horton's ratios are in the range reported for pulmonary trees:** bifurcation ratios near 3
+  and diameter ratios near 1.5. On a synthetic perfect binary tree the code returns exactly 2.
+- **The small-vessel fraction is tiny, and the model decides it.** A 5 mm² cross-section is a
+  1.26 mm radius, just above the model's ~1 mm floor, so almost nothing falls under it. It cannot
+  be compared with "BV5" from segmentations that reach smaller vessels.
+- **Orientation entropy is saturated** (0.97–0.99): a lung tree points everywhere, so this
+  statistic separates little here.
+- **The per-point radius interval** (`radius_lower_mm`, `radius_upper_mm`: margin +2 and −2
+  logits) has a half-width of 0.14–0.17 mm at every radius on the C3N arteries: 1.01 mm reads
+  0.80–1.13, 1.64 reads 1.47–1.74, 3.56 reads 3.30–3.76. On the Y phantom it is 2 / slope, as it
+  should be.
+
+The full tier-1 run (three trees, four ridge passes, lobes, walls, pairing, statistics, QC) takes
+about 60 s on C3N-00704 under load and writes 2.4 MB.
+
 ## 6. Not yet validated
 
 - **Thin-caliber ground truth.** The ~1 mm radius floor belongs to the model; checking the

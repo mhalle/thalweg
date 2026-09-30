@@ -126,6 +126,13 @@ bifurcations correspond.
   crop stage (`thalweg.lobes`). The branch table gets `lobe` (the lobe holding most of the edge's
   length, by name) and `lobe_length_fraction`; `summary.json` gets per-lobe counts, lengths,
   volumes and length densities.
+- `radius_lower_mm`, `radius_upper_mm` (written by `thalweg run`): the model's own interval on
+  each sample's radius, the distance to the surfaces where the margin is +2 and -2 logits (a
+  half-width of ~0.15 mm on the lung vessels). `radius_lower_mm` is 0 where the stricter surface
+  does not contain the sample.
+- Tree statistics (`summary.json` `<structure>.tree`, from `thalweg.statistics`): Horton's
+  bifurcation, length and diameter ratios with the per-order stream table, the volume and the
+  small-vessel volume fraction (cross-section under 5 mm²), and the orientation entropy.
 - Airway walls (not in the graph; `thalweg run` and `thalweg table`): branch-table columns
   `wall_area_mm2`, `wall_area_percent`, `wall_thickness_mm`, `internal_perimeter_mm`,
   `wall_station_count`, and Pi10 under `summary.json` `lung_airways.wall`.
@@ -150,7 +157,6 @@ bifurcations correspond.
   connected only where the field connects them. Where it does (walls overlapping within one
   class), the graph cannot tell that from a real junction; QC reports `field_loops`.
 - **Missing, and likely to force a change:**
-  - a radius interval per point: the model's ±2-logit interval is in the tables, not the graph;
   - vector-valued columns (frames, tangents);
   - units and descriptions per column.
 

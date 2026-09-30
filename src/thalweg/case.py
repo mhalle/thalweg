@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import __version__
-from .centerlines import centerline_graph, combine
+from .centerlines import centerline_graph, combine, radius_interval
 from . import lobes as lobes_mod
 from . import plausibility
 from .errors import ThalwegError
@@ -44,6 +44,7 @@ from .kernel.field import sample
 from .kernel.topology import surface_loops
 from .measure import branch_table, pi10, strahler
 from .pairing import airway_rows
+from .statistics import tree_statistics
 from .store import FieldStore, open_store
 
 COARSE_MM = 3.0
@@ -135,7 +136,8 @@ class Case:
         for n in names:
             m, geo, ref = self.margin(n)
             t = time.time()
-            graphs.append(centerline_graph(self.store, n, margin=(m, geo, ref), log=log, **kw))
+            g = centerline_graph(self.store, n, margin=(m, geo, ref), log=log, **kw)
+            graphs.append(radius_interval(g, n, m, geo))
             self.timings[f"trace {n}"] = round(time.time() - t, 3)
         return graphs[0] if len(graphs) == 1 else combine(graphs)
 
@@ -233,6 +235,7 @@ class Case:
             sm = summarize(g, s.name, [r for r in rows if r["structure"] == s.name])
             coarse = acquisition.get(str(s.source.part), {}).get("coarse_slices")
             sm["coarse_slices"] = coarse
+            sm["tree"] = tree_statistics(g, s.name)
             if s.name in self.pi10:
                 sm["wall"] = self.pi10[s.name]
             if s.name in pairing:

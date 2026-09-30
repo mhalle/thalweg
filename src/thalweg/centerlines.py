@@ -283,3 +283,50 @@ def reroot(graph: TubeGraph, structure: str, node: int) -> TubeGraph:
         structures.append(s)
     return graph.model_copy(update={"nodes": nodes, "edges": edges, "structures": structures,
                                     "points": Points(position=pos, radius=rad, columns=cols)})
+
+
+INTERVAL_LOGITS = 2.0
+
+
+def radius_interval(graph: TubeGraph, structure: str, m: np.ndarray, geometry,
+                    logits: float = INTERVAL_LOGITS) -> TubeGraph:
+    """The graph with the model's own interval on each sample's radius, as two point columns:
+
+    - ``radius_lower_mm``: the distance from the sample to the surface where the margin is
+      +``logits`` (the structure drawn more strictly); 0 where the sample itself is below that
+      level (a thin branch the stricter surface does not contain);
+    - ``radius_upper_mm``: the distance to the surface where the margin is -``logits``.
+
+    The traced ``radius`` is the distance to the margin's zero set from the same sample, so
+    lower <= radius <= upper wherever the refinement found an inside point (the bounds are clamped
+    to it where the surfaces' point sampling would miss by a hair). Only this structure's samples
+    are filled; others keep what they had (None if nothing)."""
+    from scipy.spatial import cKDTree
+
+    from .kernel.field import crossings, sample
+    P = graph.positions()
+    n = len(P)
+    rows = np.zeros(n, bool)
+    for e in graph.edges:
+        if e.structure == structure:
+            rows[e.point_range[0]:e.point_range[1]] = True
+    cols = dict(graph.points.columns)
+    lower = list(cols.get("radius_lower_mm", [None] * n))
+    upper = list(cols.get("radius_upper_mm", [None] * n))
+    if rows.any():
+        Q = P[rows]
+        here = sample(m, geometry, Q, cval=-8.0)
+        out = []
+        for level in (logits, -logits):
+            X = crossings(m - np.float32(level), geometry)
+            out.append(cKDTree(X).query(Q, workers=-1)[0] if len(X) else np.zeros(len(Q)))
+        lo = np.where(here > logits, out[0], 0.0)
+        hi = np.where(here > -logits, out[1], 0.0)
+        r = graph.radii()[rows]
+        found = r > 0                               # each surface is a sampled point set: in ~0.3 % of
+        lo = np.where(found, np.minimum(lo, r), lo)  # samples a bound misses the radius by a hair
+        hi = np.where(found, np.maximum(hi, r), hi)
+        for i, a, b in zip(np.nonzero(rows)[0], lo, hi):
+            lower[i], upper[i] = round(float(a), 4), round(float(b), 4)
+    cols["radius_lower_mm"], cols["radius_upper_mm"] = lower, upper
+    return graph.model_copy(update={"points": graph.points.model_copy(update={"columns": cols})})
