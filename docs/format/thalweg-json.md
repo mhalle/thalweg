@@ -118,8 +118,14 @@ bifurcations correspond.
   - `bifurcation_vector`, `{bifurcation_group, in_plane_angle_rad, out_of_plane_angle_rad}`.
     The angles are vmtk's; their definitions are in `thalweg.vmtk.vectors`.
 
-**Point columns:** `branch_group` (vmtk group id) and `bifurcation_region` (1 inside vmtk's
-bifurcation region, else 0), both from `annotate`.
+**Point columns:**
+- `branch_group` (vmtk group id) and `bifurcation_region` (1 inside vmtk's bifurcation region,
+  else 0), both from `thalweg.branching.annotate`;
+- `lobe` (written by `thalweg run` for lung stores): 1 left upper, 2 left lower, 3 right upper,
+  4 right middle, 5 right lower, 0 outside every lobe (the hilum). Lobes come from the store's own
+  crop stage (`thalweg.lobes`). The branch table gets `lobe` (the lobe holding most of the edge's
+  length, by name) and `lobe_length_fraction`; `summary.json` gets per-lobe counts, lengths,
+  volumes and length densities.
 
 ## The tube requirements (docs/port-plan.md), as of 0.1
 

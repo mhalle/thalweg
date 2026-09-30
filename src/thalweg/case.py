@@ -17,6 +17,8 @@ QC reports what a reader of the numbers must know before trusting them:
 - ``field_loops``: the loops of the structure's field (the genus of its zero surface, all pieces).
   The traced graph is a tree, so a loop in the field - an anastomosis, or two branches of one
   class in contact - is not in the graph; this says how many there are;
+- per case, ``lobes``: how the lobe classes were found (``named_by``: by name, or by value in a
+  store that predates haversack's naming fix), or why there are none;
 - per case, ``acquisition``: the source image's spacing (from the part's frame record) and
   ``coarse_slices`` when its largest spacing exceeds 3 mm - at 3.75-5 mm slices the model drops
   thin vessels rather than widening them, so thin-order statistics are invalid there
@@ -32,6 +34,7 @@ import numpy as np
 
 from . import __version__
 from .centerlines import centerline_graph, combine
+from . import lobes as lobes_mod
 from .errors import ThalwegError
 from .graph import TubeGraph
 from .kernel.field import sample
@@ -101,6 +104,7 @@ class Case:
     margins: dict = field(default_factory=dict)
     timings: dict = field(default_factory=dict)
     decodes: int = 0
+    lobe_error: str | None = None
 
     @classmethod
     def open(cls, path) -> "Case":
@@ -160,6 +164,20 @@ class Case:
             self.timings[f"qc {s.name}"] = round(time.time() - t, 3)
         return out
 
+    def lobes(self, log=None):
+        """The store's lobe fields (thalweg.lobes), or None - with ``lobe_error`` saying why - when
+        the store names no lobes (a store that is not a lung cascade)."""
+        t = time.time()
+        try:
+            f = lobes_mod.lobe_fields(self.store)
+        except ThalwegError as e:
+            self.lobe_error = str(e)
+            if log:
+                log(f"no lobes: {e}")
+            return None
+        self.timings["decode lobes"] = round(time.time() - t, 3)
+        return f
+
     def acquisition(self, part: int) -> dict:
         frame = self.store.field(part).frame or {}
         spacing = (frame.get("source") or {}).get("spacing")
@@ -172,7 +190,14 @@ class Case:
         """The batch product for ``names``: graph, rows, stations, summary and qc (see above).
         ``trace_options`` go to :func:`thalweg.centerlines.centerline_graph` (ridge_passes, prune)."""
         g = self.trace(names, log=log, **trace_options)
+        lobes = self.lobes(log=log)
+        edge_lobe = {}
+        if lobes is not None:
+            g, edge_lobe = lobes_mod.annotate(g, lobes)
         rows, prof = self.measure(g, step=step, stations=stations)
+        for s in g.structures:
+            if s.name in edge_lobe:
+                lobes_mod.lobe_rows([r for r in rows if r["structure"] == s.name], edge_lobe[s.name])
         parts = sorted({st.source.part for st in g.structures if st.source.part is not None})
         acquisition = {str(p): self.acquisition(p) for p in parts}
         summary = {}
@@ -180,6 +205,9 @@ class Case:
             sm = summarize(g, s.name, [r for r in rows if r["structure"] == s.name])
             coarse = acquisition.get(str(s.source.part), {}).get("coarse_slices")
             sm["coarse_slices"] = coarse
+            if s.name in edge_lobe:
+                sm["lobes"] = lobes_mod.lobe_summary(g, s.name, edge_lobe[s.name],
+                                                     lobes_mod.lobe_volumes(lobes))
             if coarse:
                 sm["warning"] = ("coarse slices: the model drops thin vessels here, so tip counts, lengths "
                                  "and order statistics are not comparable with thin-slice cases")
@@ -187,5 +215,8 @@ class Case:
                     log(f"WARNING {s.name}: {sm['warning']}")
             summary[s.name] = sm
         qc = dict(thalweg=__version__, store=str(self.store.path), labeling_scheme=self.store.labeling_scheme,
-                  acquisition=acquisition, structures=self.qc(g), timings_s=dict(self.timings))
+                  acquisition=acquisition,
+                  lobes=(dict(named_by=lobes.named_by, part=lobes.part) if lobes is not None
+                         else dict(named_by=None, reason=self.lobe_error)),
+                  structures=self.qc(g), timings_s=dict(self.timings))
         return dict(graph=g, rows=rows, stations=prof, summary=summary, qc=qc)

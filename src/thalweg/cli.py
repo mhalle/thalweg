@@ -124,6 +124,7 @@ def table(graph, store, output, names, stations, step):
     needs pyarrow, the `tables` extra). Column definitions: thalweg.measure."""
     from .centerlines import check_source
     from .graph import TubeGraph
+    from .lobes import annotate, lobe_fields, lobe_rows
     from .measure import branch_table, write_table
     from .store import open_store
     g = TubeGraph.read(graph)
@@ -132,6 +133,11 @@ def table(graph, store, output, names, stations, step):
         raise ThalwegError(f"{graph} has no structure {', '.join(missing)}; it has "
                            f"{', '.join(s.name for s in g.structures)}")
     st = open_store(store)
+    try:
+        lobes = lobe_fields(st)
+        g, edge_lobe = annotate(g, lobes)
+    except ThalwegError:
+        lobes, edge_lobe = None, {}
     rows, prof = [], [] if stations else None
     try:
         for s in g.structures:
@@ -139,7 +145,10 @@ def table(graph, store, output, names, stations, step):
                 continue
             m, geo, ref = st.margin(s.name, s.source.part)
             check_source(s, geo, ref)
-            rows.extend(branch_table(g, s.name, m, geo, step=step, stations_out=prof))
+            mine = branch_table(g, s.name, m, geo, step=step, stations_out=prof)
+            if lobes is not None:
+                lobe_rows(mine, edge_lobe[s.name])
+            rows.extend(mine)
     except ThalwegError as e:
         raise click.ClickException(str(e))
     write_table(rows, output)
