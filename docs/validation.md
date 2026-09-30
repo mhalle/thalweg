@@ -490,14 +490,20 @@ The C3N-00704 subtree, opened at the nine cuts vmtk was given (an inlet and eigh
   vmtk's extension vertices: their distance from our cylinder's axis differs from our radius by a
   median 0.02 mm (90th percentile 0.09 mm), which is the ring difference above. In the transition
   (a smoothstep blend here, a thin-plate spline in vmtk), vmtk's 4,053 vertices lie within a
-  median 0.03 mm of our surface (90th percentile 0.05 mm, at most 0.2 mm; the surface sampled
+  median 0.03 mm of our surface (90th percentile 0.04 mm, at most 0.2 mm; the surface sampled
   densely, so these are upper bounds).
 - **A ring of any shape.** Each ring vertex goes to the circle point at its own fraction of the
   ring's length. Sending vertices out radially from the barycenter, as the first version did,
   folded the tube on rings that are not star-shaped (an L- or C-shaped section: a third to a half
   of the tube's faces inward, and the manifold check passed it); one of the 436 artery caps was
-  such a ring. The circle's vertices are spaced as the ring's, so a ring with a very short edge
-  carries a strip of thin triangles along its tube.
+  such a ring.
+- **No thin triangles along the tubes.** Over the transition the vertices also slide round the
+  circle to even spacing (both spacings increase round the ring, so every blend does too and
+  nothing folds). Before this a ring with a very short edge carried a strip of thin triangles the
+  whole length of its tube: faces under 1e-5 mm², 43 on the C3N-00704 airways and 234 on the
+  arteries, now none. Poorly shaped faces (quality under 0.1) remain only in the first 15 % of
+  a tube, next to the ring whose own edges are that short: 73 of 90,358 new faces on the airways,
+  766 of 544,228 on the arteries; the straight parts are clean (median quality 0.87).
 - **The mesh stays closed and manifold**, and its volume grows by the tubes' (π R² L per cap,
   within 3 % on the Y phantom).
 - **Collisions.** An extension is straight and knows nothing of its surroundings.
@@ -510,7 +516,7 @@ The C3N-00704 subtree, opened at the nine cuts vmtk was given (an inlet and eigh
 
   | Tree | Caps | Median extension length | Extensions running back into the structure | Faces | Time |
   |---|---|---|---|---|---|
-  | airways | 109 | 3.8 mm | 12 | 0.24 million | 2.7 s |
+  | airways | 109 | 3.8 mm | 13 | 0.24 million | 2.7 s |
   | arteries | 436 | 6.1 mm | 7 | 1.03 million | 9.7 s |
 
 ## 6. Not yet validated

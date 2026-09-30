@@ -553,17 +553,17 @@ def test_the_morph_is_a_smoothstep_over_the_transition_and_layers_follow_the_rin
     assert np.allclose(s, L * np.arange(1, layers + 1) / layers)
     assert np.allclose(new[..., 2] - 6.0, s[:, None])
     P = mesh.vertices[cap_ring_of(mesh)]
-    circle = new[-1].copy()
-    circle[:, 2] = 6.0
-    assert np.allclose(np.linalg.norm(circle[:, :2], axis=1), R)
     t = np.clip(s / (0.5 * L), 0, 1)
     w = t * t * (3 - 2 * t)
-    want = (1 - w)[:, None, None] * P[None] + w[:, None, None] * circle[None]
-    assert np.allclose(new[..., :2], want[..., :2])
+    # every layer is (1 - w) ring + w circle point, with w the smoothstep: the circle part is at R
+    part = (new[1:, :, :2] - (1 - w[1:, None, None]) * P[None, :, :2]) / w[1:, None, None]
+    assert np.allclose(np.linalg.norm(part, axis=2), R)
     assert 0 < w[1] < t[1] < 1                                          # not a linear blend
     straight = s >= 0.5 * L - 1e-9
     assert np.allclose(np.linalg.norm(new[straight][..., :2], axis=2), R) and not np.allclose(
         np.linalg.norm(new[~straight][-1][:, :2], axis=1), R)
+    gaps = np.linalg.norm(np.diff(np.vstack([new[-1], new[-1][:1]]), axis=0), axis=1)
+    assert np.allclose(gaps, gaps.mean())                               # evenly spaced once round
     sharp = flow_extensions(mesh, ratio=8.0, transition=0.0)
     a, z = sharp.extensions[1]["vertices"]
     assert np.allclose(np.linalg.norm(sharp.vertices[a:z - 1, :2], axis=1), R)      # round at once
@@ -665,3 +665,21 @@ def test_extensions_keep_earlier_ones_and_collisions_are_counted(y):
     moved = replace(ext, vertices=inside, extensions={k: dict(e, ring_barycenter=np.array([0.0, 0, 8]))},
                     caps=[replace(c, normal=axis) if i == k - 1 else c for i, c in enumerate(ext.caps)])
     assert extension_collisions(moved, m, geo)[k] > 50
+
+
+def test_a_ring_with_crowded_vertices_does_not_drag_thin_triangles_along_the_tube():
+    """60 of a square ring's 63 vertices on one side: next to the ring the triangles are as thin as
+    the ring's own edges, but once the tube is round they are all well shaped."""
+    from thalweg.export import flow_extensions
+    crowded = np.linspace([-2.0, -2], [2.0, -2], 60, endpoint=False)
+    mesh = _prism(np.concatenate([crowded, [[2.0, -2], [2, 2], [-2, 2]]]))
+    ext = flow_extensions(mesh)
+    _good(ext)
+    e = ext.extensions[1]
+    a, _ = e["vertices"]
+    f = ext.faces[(ext.faces >= a).all(1) & (ext.boundary == 0)]
+    tri = ext.vertices[f]
+    u, v, w = tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0], tri[:, 2] - tri[:, 1]
+    quality = 2 * np.sqrt(3) * np.linalg.norm(np.cross(u, v), axis=1) / ((u * u) + (v * v) + (w * w)).sum(1)
+    round_part = tri.mean(1)[:, 2] - 6.0 > e["transition"] * e["length_mm"]
+    assert round_part.sum() > 1000 and quality[round_part].min() > 0.5

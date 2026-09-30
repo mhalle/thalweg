@@ -721,11 +721,12 @@ def flow_extensions(mesh: Mesh, ratio: float = 5.0, transition: float = 0.25, ca
     ring's barycenter over the first ``transition`` of its length (a smoothstep blend, so the wall
     has no kink where it starts or ends), then runs straight, and ends in a flat cap.
 
-    Each ring vertex goes to the circle point at its own fraction of the ring's length (the circle
-    turned to lie as close to the ring as it can), so the tube does not fold whatever the ring's
-    shape - a ring that is not star-shaped about its barycenter would fold if its vertices were
-    sent out radially. The circle's vertices are spaced as the ring's are: a ring with a very short
-    edge gives a strip of thin triangles along the whole tube.
+    Each ring vertex starts toward the circle point at its own fraction of the ring's length (the
+    circle turned to lie as close to the ring as it can), so the tube does not fold whatever the
+    ring's shape - a ring that is not star-shaped about its barycenter would fold if its vertices
+    were sent out radially. Over the transition the vertices also slide round to even spacing, so
+    by the straight part a ring with a very short edge no longer drags a strip of thin triangles
+    along the tube; they stay only where the wall's own ring has them.
 
     The tube's faces are wall (``BoundaryId`` 0); the new end cap keeps the cap's id and name.
     ``caps``: the BoundaryIds to extend (default: all). ``Mesh.extensions[k]`` records each one:
@@ -765,15 +766,20 @@ def flow_extensions(mesh: Mesh, ratio: float = 5.0, transition: float = 0.25, ca
         z = (P - b) @ e1 + 1j * ((P - b) @ e2)
         wv = 0.5 * (edge + np.roll(edge, 1))
         turn = np.angle((wv * z * np.exp(-1j * phi)).sum())     # the rotation bringing the circle nearest
-        circle = b + R * (np.cos(phi + turn)[:, None] * e1 + np.sin(phi + turn)[:, None] * e2)
+        m = len(ring)
+        even = 2.0 * np.pi * np.arange(m) / m                   # the same vertices, evenly spaced
+        shift = np.angle(np.exp(1j * (phi - even)).mean())
         L = ratio * R
-        h = ref["perimeter_mm"] / len(ring)                     # layers about as far apart as ring vertices
+        h = ref["perimeter_mm"] / m                             # layers about as far apart as ring vertices
         n_layers = max(2, int(np.ceil(L / h)))
         s = L * np.arange(1, n_layers + 1) / n_layers
         t = np.clip(s / (transition * L), 0.0, 1.0) if transition > 0 else np.ones(n_layers)
         w = t * t * (3.0 - 2.0 * t)                             # smoothstep
-        layers = (1.0 - w)[:, None, None] * P[None] + w[:, None, None] * circle[None] + s[:, None, None] * n
-        m = len(ring)
+        # each layer's circle point: the vertex's own arc-length fraction at the ring, evenly spaced by
+        # the end of the transition; both are increasing, so every blend is too (no fold)
+        angle = (1.0 - w)[:, None] * phi[None] + w[:, None] * (even + shift)[None] + turn
+        circle = b + R * (np.cos(angle)[..., None] * e1 + np.sin(angle)[..., None] * e2)
+        layers = (1.0 - w)[:, None, None] * P[None] + w[:, None, None] * circle + s[:, None, None] * n
         first = nv
         ids_layer = [ring] + [nv + j * m + np.arange(m) for j in range(n_layers)]
         V.append(layers.reshape(-1, 3))
