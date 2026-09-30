@@ -25,13 +25,12 @@ from .kernel.field import crossings, sample
 
 VEIN_INSIDE_SHARE = 0.01
 ARTERY_INSIDE_SHARE = 0.02
-TOTAL_VALUES = {"heart": 51, "pulmonary_vein": 53}          # TotalSegmentator total / total_fast
 
 
 def _distance(store, name: str):
     """A function: world points -> distance (mm) to class ``name`` (0 inside), from its margin's
     zero crossings on its own grid."""
-    ref = store.ref_by_name_or_value(name, TOTAL_VALUES[name])
+    ref = store.ref_by_name_or_value(name)
     m, geo, _ = store.margin(ref.name, ref.part)
     X = crossings(m, geo)
     if not len(X):
@@ -77,8 +76,16 @@ def check(graph: TubeGraph, store, arteries: str = "lung_arteries", veins: str =
         vein_root_to_heart_mm=round(float(to_heart(rv)[0]), 2),
         artery_length_share_inside_pulmonary_vein=round(_inside_share(graph, arteries, to_pv), 4),
         vein_length_share_inside_pulmonary_vein=round(_inside_share(graph, veins, to_pv), 4))
+    reasons = verdict(rec["artery_length_share_inside_pulmonary_vein"],
+                      rec["vein_length_share_inside_pulmonary_vein"])
+    rec.update(plausible=not reasons, reasons=reasons)
+    return rec
+
+
+def verdict(a: float, v: float) -> list[str]:
+    """Why shares ``a`` (arteries) and ``v`` (veins) of length inside the pulmonary vein class are
+    not plausible; empty when they are."""
     reasons = []
-    a, v = rec["artery_length_share_inside_pulmonary_vein"], rec["vein_length_share_inside_pulmonary_vein"]
     if v < VEIN_INSIDE_SHARE:
         reasons.append(f"only {v:.1%} of the veins' length runs through the pulmonary vein class "
                        f"(expected at least {VEIN_INSIDE_SHARE:.0%})")
@@ -86,5 +93,4 @@ def check(graph: TubeGraph, store, arteries: str = "lung_arteries", veins: str =
         reasons.append(f"{a:.1%} of the arteries' length runs inside the pulmonary vein class")
     if a >= v:
         reasons.append("the arteries run through the pulmonary vein class at least as much as the veins do")
-    rec.update(plausible=not reasons, reasons=reasons)
-    return rec
+    return reasons

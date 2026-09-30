@@ -274,15 +274,27 @@ def _sections(path, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels,
 def pi10(stations: list[dict]) -> dict:
     """Pi10: the square root of wall area (mm) predicted at an internal perimeter of 10 mm, from a
     least-squares line of sqrt(wall area) on internal perimeter over every measured station - the
-    airway-wall summary of Nakano et al. (2005). Also the fit's slope and station count."""
-    pts = [(s_["internal_perimeter_mm"], np.sqrt(s_["wall_area_mm2"])) for s_ in stations
-           if s_.get("wall_area_mm2") is not None and s_.get("internal_perimeter_mm")]
-    if len(pts) < 10:
-        return dict(pi10_mm=None, slope=None, stations=len(pts))
-    x, y = np.asarray(pts, float).T
+    airway-wall summary of Nakano et al. (2005). Also the fit's slope, its station count and
+    perimeter range, and ``constant_wall_pi10_mm``: what a wall of the stations' median thickness t
+    at every caliber would give, sqrt(pi t (10 / pi + t)).
+
+    On TotalSegmentator's airway wall class the two agree (4.17 against 4.40, 4.34 against 4.46 on
+    the cases measured): the model draws a shell of constant thickness whatever the caliber, so
+    Pi10 here restates that thickness and is not a measure of the airways (docs/validation.md §5b).
+    None when fewer than 10 stations have a wall, or all have one perimeter."""
+    ok = [s_ for s_ in stations if s_.get("wall_area_mm2") is not None and s_.get("internal_perimeter_mm")]
+    none = dict(pi10_mm=None, slope=None, stations=len(ok), constant_wall_pi10_mm=None)
+    if len(ok) < 10:
+        return none
+    x = np.array([s_["internal_perimeter_mm"] for s_ in ok], float)
+    y = np.sqrt([s_["wall_area_mm2"] for s_ in ok])
+    if np.ptp(x) < 1e-6 * max(float(x.max()), 1.0):
+        return none
     b, a = np.polyfit(x, y, 1)
-    return dict(pi10_mm=float(a + 10.0 * b), slope=float(b), stations=len(pts),
-                internal_perimeter_range_mm=[float(x.min()), float(x.max())])
+    t = float(np.median([s_["wall_thickness_mm"] for s_ in ok]))
+    return dict(pi10_mm=float(a + 10.0 * b), slope=float(b), stations=len(ok),
+                internal_perimeter_range_mm=[float(x.min()), float(x.max())],
+                constant_wall_pi10_mm=float(np.sqrt(np.pi * t * (10.0 / np.pi + t))))
 
 
 def write_table(rows: list[dict], path) -> None:

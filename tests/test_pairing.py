@@ -50,3 +50,40 @@ def test_nothing_within_reach_leaves_the_branch_unpaired():
     s = airway_rows(g, "air", "art", rows)
     assert rows[0]["bronchus_to_artery_ratio"] is None and rows[0]["paired_fraction"] == 0.0
     assert s["paired_branches"] == 0 and s["bronchus_to_artery_ratio_median"] is None
+
+
+def test_the_reported_artery_edge_holds_most_of_the_paired_samples():
+    """An airway beside one artery edge for 2/3 of its length and a wider one for the rest: the
+    branch is paired with the first, every sample counts, and the ratio is the median over them."""
+    air = [(_line([0, 0, 0], [0, 0, 40], 41), 1.0)]
+    art = [(_line([4, 0, 28], [4, 0, -1], 30), 2.0), (_line([4, 0, 28], [4, 0, 34], 7), 4.0)]
+    g = _doc({"air": air, "art": art})
+    rows = [dict(edge=0)]
+    airway_rows(g, "air", "art", rows)
+    r = rows[0]
+    assert r["paired_artery_edge"] == 1                             # not the minority edge (2)
+    assert r["paired_sample_count"] == 41 and r["paired_fraction"] == 1.0
+    assert abs(r["bronchus_to_artery_ratio"] - 0.5) < 1e-12        # the median sample sits on edge 1
+
+
+def test_part_of_a_branch_out_of_reach_lowers_the_paired_fraction():
+    g = _doc({"air": [(_line([0, 0, 0], [0, 0, 40], 41), 1.0)],
+              "art": [(_line([4, 0, 0], [4, 0, 20], 21), 2.0)]})
+    rows = [dict(edge=0)]
+    s = airway_rows(g, "air", "art", rows)
+    assert 0.5 < rows[0]["paired_fraction"] < 0.75                  # 20 mm beside it, plus the reach
+    assert rows[0]["paired_sample_count"] == round(rows[0]["paired_fraction"] * 41)
+    assert abs(s["paired_sample_share"] - rows[0]["paired_fraction"]) < 1e-12
+
+
+def test_a_missing_structure_is_an_error():
+    import pytest
+    from thalweg.errors import ThalwegError
+    g = _doc({"air": [(_line([0, 0, 0], [0, 0, 30]), 1.0)]})
+    with pytest.raises(ThalwegError):
+        pair(g, "air", "art")
+
+
+def test_run_pairs_airways_with_arteries_not_veins():
+    from thalweg.case import PAIRS
+    assert PAIRS == {"lung_airways": "lung_arteries"}

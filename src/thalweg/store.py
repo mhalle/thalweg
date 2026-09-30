@@ -35,6 +35,11 @@ class StructureRef:
     scheme: str | None = None
 
 
+# TotalSegmentator `total` / `total_fast` label values of the crop-stage classes thalweg reads
+TOTAL_VALUES = {"lung_upper_lobe_left": 10, "lung_lower_lobe_left": 11, "lung_upper_lobe_right": 12,
+                "lung_middle_lobe_right": 13, "lung_lower_lobe_right": 14, "heart": 51, "pulmonary_vein": 53}
+
+
 class FieldStore:
     """An open ranked store. ``structures`` lists every (name, part, label value) it names."""
 
@@ -122,9 +127,11 @@ class FieldStore:
         vol = [abs(np.linalg.det(np.asarray(self.geometry(s.part).directions, float))) for s in cands]
         return cands[int(np.argmin(vol))]
 
-    def ref_by_name_or_value(self, name: str, value: int) -> StructureRef:
+    def ref_by_name_or_value(self, name: str, value: int | None = None) -> StructureRef:
         """A crop-stage class by name, or - in stores emitted before haversack 0.13, whose crop stage
-        is named ``label_<value>`` - by its TotalSegmentator value. Raises ThalwegError if neither."""
+        is named ``label_<value>`` - by its TotalSegmentator value (default: :data:`TOTAL_VALUES`).
+        Raises ThalwegError if neither."""
+        value = TOTAL_VALUES[name] if value is None else value
         if any(s.name == name for s in self.structures):
             return self.ref(name)
         cand = [s for s in self.structures if s.name == f"label_{value}" and s.label_value == value]

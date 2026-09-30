@@ -160,7 +160,7 @@ class Case:
             mine = []
             rows.extend(branch_table(graph, s.name, m, geo, step=step, stations_out=mine, outer=outer))
             if outer is not None:
-                self.pi10[s.name] = pi10(mine)
+                self.pi10[s.name] = dict(pi10(mine), lumen_stations=len(mine))
             prof.extend(mine)
             self.timings[f"measure {s.name}"] = round(time.time() - t, 3)
         return rows, (prof if stations else None)

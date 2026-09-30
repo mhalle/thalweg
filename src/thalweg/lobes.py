@@ -29,7 +29,6 @@ from .kernel.field import sample
 
 LOBES = {1: "lung_upper_lobe_left", 2: "lung_lower_lobe_left", 3: "lung_upper_lobe_right",
          4: "lung_middle_lobe_right", 5: "lung_lower_lobe_right"}
-TOTAL_VALUES = {1: 10, 2: 11, 3: 12, 4: 13, 5: 14}          # TotalSegmentator total / total_fast
 
 
 @dataclass
@@ -42,19 +41,14 @@ class LobeFields:
 
 def lobe_fields(store) -> LobeFields:
     """The five lobe margins of a lung_vessels store (see the module docstring)."""
-    by_name = [s for s in store.structures if s.name in LOBES.values()]
-    if len({s.name for s in by_name}) == 5:
-        refs = [store.ref(LOBES[k]) for k in LOBES]
-        named_by = "name"
-    else:
-        refs = []
-        for k in LOBES:
-            cand = [s for s in store.structures if s.name == f"label_{TOTAL_VALUES[k]}"
-                    and s.label_value == TOTAL_VALUES[k]]
-            if not cand:
-                raise ThalwegError(f"{store.path.name} names no lung lobes (by name or as label_10-14)")
-            refs.append(cand[0])
-        named_by = "value (misnamed store)"
+    try:
+        refs = [store.ref_by_name_or_value(LOBES[k]) for k in LOBES]
+    except ThalwegError:
+        raise ThalwegError(f"{store.path.name} names no lung lobes (by name or as label_10-14)") from None
+    by_value = [r.name != LOBES[k] for k, r in zip(LOBES, refs)]
+    if any(by_value) and not all(by_value):
+        raise ThalwegError(f"{store.path.name} names some lung lobes and not others")
+    named_by = "value (misnamed store)" if all(by_value) else "name"
     parts = {r.part for r in refs}
     if len(parts) != 1:
         raise ThalwegError(f"the lobes lie in several parts: {sorted(parts)}")
@@ -64,7 +58,24 @@ def lobe_fields(store) -> LobeFields:
     for r in refs:
         m, geometry, _ = store.margin(r.name, part)
         ms.append(m)
-    return LobeFields(np.stack(ms), geometry, part, named_by)
+    fields = LobeFields(np.stack(ms), geometry, part, named_by)
+    if named_by != "name" and not _left_is_left(fields):
+        raise ThalwegError(f"{store.path.name}: classes label_10-14 do not lie like lung lobes "
+                           "(the left lobes are not to the patient's left of the right ones)")
+    return fields
+
+
+def _left_is_left(fields: LobeFields) -> bool:
+    """Whether lobes 1-2 (left) lie at larger LPS x than lobes 3-5 (right): the check that classes
+    found by value alone are lobes. Empty sides fail."""
+    d = np.asarray(fields.geometry.directions, float)
+    o = np.asarray(fields.geometry.origin, float)
+
+    def mean_x(ks):
+        idx = np.concatenate([np.argwhere(fields.margins[k - 1] > 0) for k in ks])
+        return float((o + idx.mean(0) @ d)[0]) if len(idx) else None
+    left, right = mean_x((1, 2)), mean_x((3, 4, 5))
+    return left is not None and right is not None and left > right
 
 
 def point_lobes(graph: TubeGraph, fields: LobeFields) -> np.ndarray:

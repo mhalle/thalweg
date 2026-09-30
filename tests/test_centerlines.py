@@ -15,6 +15,15 @@ def _graph(m, geo, source=None):
     return TubeGraph(structures=[s], nodes=nodes, edges=edges, points=Points(position=pos, radius=rad))
 
 
+def _cut_far_x(m, geo, x_max):
+    """The field with everything beyond world x = x_max cut off (the grid ends there)."""
+    d = np.asarray(geo.directions, float)
+    ax = int(np.argmax(np.abs(d[:, 0])))                           # the array axis that runs along x
+    x = np.asarray(geo.origin, float)[0] + np.arange(m.shape[ax]) * d[ax, 0]
+    keep = np.nonzero(x <= x_max)[0]
+    return np.take(m, keep, axis=ax).copy() if keep[0] == 0 else None
+
+
 def test_a_tube_off_the_grid_has_a_truncated_end():
     """A tube running out of the field's box: that end is truncated, the capped one a tip."""
     m, geo = tube_field([np.array([[0.0, 0, 0], [0, 0, 30]])], [np.array([2.0, 2.0])], pad=4.0)
@@ -68,7 +77,8 @@ def test_reroot_keeps_a_valid_tree():
 
 
 def test_inlet_prefers_an_end_off_the_field():
-    """A tube running out of the field: its truncated end is the inlet, whatever the widths."""
+    """A tube running out of the field: its truncated end is the inlet, though a side branch is
+    wider (r 3 against 2: the off-field end is over half as wide as the widest end)."""
     from thalweg.centerlines import inlet, reroot
     lines = [np.array([[0.0, 0, 0], [0, 0, 30]]), np.array([[0.0, 0, 15], [12.0, 0, 15]])]
     m, geo = tube_field(lines, [np.array([2.0, 2.0]), np.array([3.0, 3.0])], pad=4.0)
@@ -78,6 +88,43 @@ def test_inlet_prefers_an_end_off_the_field():
     assert g.nodes[n].kind == "truncated" or g.nodes[n].attributes.get("on_grid_boundary")
     h = reroot(g, "t", n)
     assert h.nodes[n].kind == "root" and h.nodes[n].attributes.get("on_grid_boundary")
+
+
+def test_inlet_is_not_a_thin_twig_that_runs_off_the_field():
+    """A 4 mm trunk ending inside the field with a 1 mm twig cut by the grid (a field of view that
+    clips a peripheral branch): the inlet is the trunk's end, not the twig's."""
+    from thalweg.centerlines import end_width, inlet
+    lines = [np.array([[0.0, 0, 0], [0, 0, 40]]), np.array([[0.0, 0, 20], [30.0, 0, 20]])]
+    m, geo = tube_field(lines, [np.array([4.0, 4.0]), np.array([1.0, 1.0])], pad=5.0)
+    g = _graph(_cut_far_x(m, geo, 22.0), geo)
+    off = [nd for nd in g.nodes if nd.kind == "truncated"]
+    assert off and max(end_width(g, nd.id) for nd in off) < 1.5     # the twig does run off the field
+    n = inlet(g, "t")
+    assert end_width(g, n) > 3.5 and g.nodes[n].kind != "truncated"
+
+
+def test_reroot_reverses_radii_and_columns_with_the_points():
+    """Every sample keeps its own radius and column value through a re-root, the demoted root
+    forgets what it was, and the tracer's deepest point stays on record."""
+    from thalweg.centerlines import reroot
+    from phantoms import y_tree
+    m, geo = tube_field(*y_tree())
+    g = _graph(m, geo)
+    n = len(g.points.position)
+    g = g.model_copy(update={"points": g.points.model_copy(update={"columns": {"tag": list(range(n))}})})
+    at = {}
+    for p, r, t in zip(g.points.position, g.points.radius, g.points.columns["tag"]):
+        at.setdefault(tuple(p), set()).add((r, t))
+    tips = [nd.id for nd in g.nodes if nd.kind == "tip"]
+    deepest = g.structures[0].statistics["deepest_point"]
+    h = reroot(g, "t", tips[0])
+    assert h.points.columns["tag"] != g.points.columns["tag"]       # something was reversed
+    for p, r, t in zip(h.points.position, h.points.radius, h.points.columns["tag"]):
+        assert (r, t) in at[tuple(p)]
+    k = reroot(h, "t", tips[1])                                     # the first inlet is demoted
+    assert "end" not in k.nodes[tips[0]].attributes and k.nodes[tips[0]].kind == "tip"
+    assert k.structures[0].statistics["deepest_point"] == deepest
+    TubeGraph.model_validate_json(k.dumps())
 
 
 @pytest.mark.data

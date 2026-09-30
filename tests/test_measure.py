@@ -206,7 +206,40 @@ def test_wall_measures_on_a_lumen_in_its_wall():
     assert abs(main["wall_thickness_mm"] - 1.0) < 0.05
     from thalweg.measure import pi10
     p = pi10(stations)
-    assert p["stations"] > 10                                          # one caliber: the fit is flat
+    assert p["stations"] > 10
+    # the phantom's own constant wall: sqrt(pi t (10 / pi + t)) with t = 1 mm
+    assert abs(p["constant_wall_pi10_mm"] - np.sqrt(np.pi * (10 / np.pi + 1))) < 0.1
+    inner = [s_["internal_perimeter_mm"] for s_ in stations if s_["wall_area_mm2"] is not None]
+    assert abs(np.median(inner) - 4 * np.pi) < 0.3                     # the lumen's perimeter, not the wall's
+
+
+def test_pi10_is_the_fitted_line_at_a_perimeter_of_10():
+    from thalweg.measure import pi10
+    st = [dict(internal_perimeter_mm=float(x), wall_area_mm2=float((1.0 + 0.3 * x) ** 2),
+               wall_thickness_mm=1.2) for x in np.linspace(5, 30, 40)]
+    p = pi10(st)
+    assert abs(p["pi10_mm"] - 4.0) < 1e-9 and abs(p["slope"] - 0.3) < 1e-9 and p["stations"] == 40
+    assert p["internal_perimeter_range_mm"] == [5.0, 30.0]
+    assert abs(p["constant_wall_pi10_mm"] - np.sqrt(np.pi * 1.2 * (10 / np.pi + 1.2))) < 1e-9
+    assert pi10(st[:5])["pi10_mm"] is None                             # too few stations
+    same = [dict(s_, internal_perimeter_mm=12.0) for s_ in st]
+    assert pi10(same)["pi10_mm"] is None                               # one perimeter: no line
+
+
+def test_a_wall_needs_a_closed_outer_contour_no_smaller_than_the_lumen(monkeypatch):
+    """The outer contour open (it leaves the section window: a neighbor's wall touches) or smaller
+    than the lumen: no wall measure, rather than a wrong one."""
+    from thalweg import measure
+    lumen = dict(area=10.0, perimeter=11.0)
+    for outer in (dict(area=30.0, closed=False, perimeter=20.0), dict(area=8.0, closed=True, perimeter=9.0),
+                  dict(area=0.0, closed=True, perimeter=0.0)):
+        monkeypatch.setattr(measure.S, "describe", lambda img, g, level, o=outer: o)
+        assert measure._wall(None, None, lumen) == {k: None for k in measure.WALL_KEYS}
+    closed = dict(area=30.0, closed=True, perimeter=20.0)
+    monkeypatch.setattr(measure.S, "describe", lambda img, g, level: closed)
+    w = measure._wall(None, None, lumen)
+    assert w["wall_area_mm2"] == 20.0 and w["internal_perimeter_mm"] == 11.0
+    assert abs(w["wall_thickness_mm"] - 20.0 / 15.5) < 1e-12 and abs(w["wall_area_percent"] - 200 / 3) < 1e-9
 
 
 def test_table_keeps_columns_only_later_rows_have(tmp_path):

@@ -26,3 +26,14 @@ def test_needs_both_trees(phantom_oracle):
     from thalweg.graph import TubeGraph
     c = check(TubeGraph(), None)
     assert c["plausible"] is None and "needs both" in c["reason"]
+
+
+def test_each_rule_fails_on_its_own():
+    from thalweg.plausibility import verdict
+    assert verdict(0.0, 0.05) == []
+    thin = verdict(0.0, 0.005)                        # veins barely in the class
+    assert len(thin) == 1 and "veins" in thin[0]
+    inside = verdict(0.03, 0.10)                      # arteries in it, though less than the veins
+    assert len(inside) == 1 and "arteries' length" in inside[0]
+    more = verdict(0.015, 0.012)                      # both under their limits, arteries ahead
+    assert len(more) == 1 and "at least as much" in more[0]

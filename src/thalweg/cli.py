@@ -126,9 +126,7 @@ def table(graph, store, output, names, stations, step):
     thalweg.lobes). The bronchoarterial pairing columns are written by `thalweg run` only."""
     from .centerlines import check_source
     from .graph import TubeGraph
-    import numpy as np
-
-    from .case import WALL_OF
+    from .case import Case
     from .lobes import annotate, lobe_fields, lobe_rows
     from .measure import branch_table, write_table
     from .store import open_store
@@ -138,6 +136,7 @@ def table(graph, store, output, names, stations, step):
         raise ThalwegError(f"{graph} has no structure {', '.join(missing)}; it has "
                            f"{', '.join(s.name for s in g.structures)}")
     st = open_store(store)
+    case = Case(st)
     try:
         lobes = lobe_fields(st)
         g, edge_lobe = annotate(g, lobes)
@@ -148,13 +147,9 @@ def table(graph, store, output, names, stations, step):
         for s in g.structures:
             if names and s.name not in names:
                 continue
-            m, geo, ref = st.margin(s.name, s.source.part)
+            m, geo, ref = case.margin(s.name, s.source.part)
             check_source(s, geo, ref)
-            wall = WALL_OF.get(s.name)
-            outer = None
-            if wall and any(x.name == wall for x in st.structures):
-                mw, _, _ = st.margin(wall, s.source.part)
-                outer = np.maximum(m, mw) if mw.shape == m.shape else None
+            outer = case.outer(s.name, s.source.part, m)
             mine = branch_table(g, s.name, m, geo, step=step, stations_out=prof, outer=outer)
             if lobes is not None:
                 lobe_rows(mine, edge_lobe[s.name])

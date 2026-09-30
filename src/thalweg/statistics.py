@@ -17,7 +17,9 @@ All are read from the graph alone (positions, traced radii, the tree), per struc
 - **Orientation entropy.** The entropy of the centerline's direction distribution (undirected,
   length-weighted, in ``ORIENTATION_BINS`` equal-area bins of the hemisphere), over its maximum:
   0 for a tree running one way, 1 for directions spread evenly (OSMnx's street-orientation entropy,
-  in three dimensions).
+  in three dimensions). It rises with the number of segments as well as with their spread (evenly
+  spread directions read 0.67 at 20 segments, 0.87 at 72, 0.99 at 1000), so a small tree reads low
+  for its size alone: compare trees of similar size.
 """
 from __future__ import annotations
 
@@ -74,15 +76,14 @@ def horton(graph: TubeGraph, structure: str) -> dict:
     """Horton's ratios and the per-order stream table (see the module docstring)."""
     st = streams(graph, structure)
     orders = sorted({s["order"] for s in st})
-    table = {}
+    table, length, diameter = {}, [], []
     for k in orders:
         mine = [s for s in st if s["order"] == k]
-        table[str(k)] = dict(streams=len(mine),
-                             mean_length_mm=round(float(np.mean([s["length_mm"] for s in mine])), 3),
-                             mean_diameter_mm=round(float(np.mean([s["diameter_mm"] for s in mine])), 3))
+        length.append(float(np.mean([s["length_mm"] for s in mine])))
+        diameter.append(float(np.mean([s["diameter_mm"] for s in mine])))
+        table[str(k)] = dict(streams=len(mine), mean_length_mm=round(length[-1], 3),
+                             mean_diameter_mm=round(diameter[-1], 3))
     n = [table[str(k)]["streams"] for k in orders]
-    length = [table[str(k)]["mean_length_mm"] for k in orders]
-    diameter = [table[str(k)]["mean_diameter_mm"] for k in orders]
     return dict(bifurcation_ratio=_ratio(orders, n, increasing=False),
                 length_ratio=_ratio(orders, length, increasing=True),
                 diameter_ratio=_ratio(orders, diameter, increasing=True), orders=table)
@@ -116,7 +117,10 @@ def orientation_entropy(graph: TubeGraph, structure: str) -> float | None:
         seg = np.linalg.norm(d, axis=1)
         ok = seg > 0
         u = d[ok] / seg[ok, None]
-        u = np.where(u[:, 2:3] < 0, -u, u)                        # undirected: fold to z >= 0
+        u = u + 0.0                                               # no negative zeros
+        z, y, x = u[:, 2], u[:, 1], u[:, 0]                       # undirected: one of each +-u pair,
+        flip = (z < 0) | ((z == 0) & ((y < 0) | ((y == 0) & (x < 0))))   # the equator folded too
+        u = np.where(flip[:, None], -u, u) + 0.0
         # equal-area bins: uniform in cos(theta), uniform in azimuth
         polar = np.minimum((u[:, 2] * POLAR_BINS).astype(int), POLAR_BINS - 1)
         az = np.minimum(((np.arctan2(u[:, 1], u[:, 0]) + np.pi) / (2 * np.pi) * AZIMUTH_BINS).astype(int),
@@ -125,7 +129,7 @@ def orientation_entropy(graph: TubeGraph, structure: str) -> float | None:
     if w.sum() == 0:
         return None
     p = w[w > 0] / w.sum()
-    return float(-(p * np.log(p)).sum() / np.log(ORIENTATION_BINS))
+    return max(0.0, float(-(p * np.log(p)).sum() / np.log(ORIENTATION_BINS)))
 
 
 def tree_statistics(graph: TubeGraph, structure: str) -> dict:

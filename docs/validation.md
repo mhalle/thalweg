@@ -119,6 +119,14 @@ and the QC columns do not depend on the root.
   arteries against 1052), and nothing failed.
 - **Centerline outside the field** is 0–3.5 mm per tree, out of meters, with one exception: the
   C3N 2 mm airways at 9.0 mm.
+- **The MSB airway root is the trachea, but not a clean inlet.** In all four MSB reconstructions
+  the model's trachea tapers out inside the field instead of running off it (0 truncated ends),
+  and the inlet is one of three prongs at the taper (widths 5.2, 4.1, 3.9 mm), so the tree has a
+  spurious junction at depth 0 and its `bifurcation_depth` is offset by one against C3N, whose
+  root is the truncated tracheal end. The same stores drop a separate component of 16.6 % of the
+  airway lattice, 5 cm lateral of the trachea and touching the grid's top (`qc.json`
+  `dropped_components`): probably mislabeled. Read `dropped_components.lattice_share` and the
+  airway root's `attributes.end` before comparing airway depths across cases.
 
 ## 3. Tubes that are not vessels
 
@@ -276,37 +284,66 @@ wall at every airway section station (branch table: `wall_area_mm2`, `wall_area_
 `wall_thickness_mm`; `summary.json`: Pi10). A phantom lumen of 2 mm in a 1 mm wall reads a wall
 area within 5 %, WA% within 2 points and thickness within 0.05 mm (`tests/test_measure.py`).
 
-| Case | Pi10 (mm) | WA%, Strahler 1 / 2 / 3 | Thickness (mm), Strahler 1 / 2 / 3 |
-|---|---|---|---|
-| C3N-00704 0.625 | 4.17 (1151 stations) | 85.6 / 73.7 / 61.1 | 1.37 / 1.30 / 1.12 |
-| MSB-02664 0.625 | 4.34 (431 stations) | 85.4 / 69.8 / 67.8 | 1.45 / 1.36 / 1.30 |
+| Case | Pi10 (mm) | Pi10 of a constant wall of the median thickness | WA%, Strahler 1 / 2 / 3 | Thickness (mm), Strahler 1 / 2 / 3 | Stations with a wall, Strahler 1 / 2 / 3 |
+|---|---|---|---|---|---|
+| C3N-00704 0.625 | 4.17 (1151 of 2205 stations) | 4.40 | 85.6 / 73.7 / 61.1 | 1.37 / 1.30 / 1.12 | 809 of 1443 / 186 of 460 / 35 of 140 |
+| MSB-02664 0.625 | 4.34 (431 of 1103 stations) | 4.46 | 85.4 / 69.8 / 67.8 | 1.45 / 1.36 / 1.30 | 307 of 774 / 28 of 174 / 8 of 35 |
 
 **The wall is at the model's resolution.** The measured thickness is nearly constant, 1.1–1.45 mm
-at every order: about two voxels of the 0.7 mm grid, the thinnest shell the model draws. Real
-small-airway walls are thinner, so small-airway WA% and Pi10 read high, the airway analog of the
-vessels' ~1 mm radius floor. Pi10 here (4.2–4.3 mm) is above the ~3.6–3.8 mm usually reported for
-healthy lungs on CT for the same reason. Compare these across cases on one model and grid, not
-against the literature.
+at every order: about two voxels of the 0.7 mm grid, the thinnest shell the model draws. Its
+correlation with lumen diameter is 0.07 and 0.02 on the two cases. Real small-airway walls are
+thinner, so small-airway WA% reads high, the airway analog of the vessels' ~1 mm radius floor.
+
+**Pi10 restates that constant thickness; it does not measure these airways.** A wall of the
+median thickness t at every caliber has Pi10 = √(π t (10/π + t)): 4.40 and 4.46 mm, against the
+fitted 4.17 and 4.34 (`summary.json` reports both, as `pi10_mm` and `constant_wall_pi10_mm`). The
+fit also runs over every station, from lumens under a voxel (internal perimeter 0.75 mm) to the
+trachea (52 mm); restricting it to perimeters of 6–20 mm moves C3N by 0.16 mm, as much as the
+difference between the two cases (0.17). So a difference in Pi10 between cases reflects the
+model's shell and the mix of stations, not the patients. It is above the ~3.6–3.8 mm usually
+reported for healthy lungs on CT for the same reason.
+
+**Under half of the stations have a wall measure, and the wide airways have the fewest.** A
+station is measured only where the outer contour closes inside the section window. Where a
+neighboring airway's wall touches (at and near every bifurcation), the contour runs on into the
+neighbor and the station is dropped: 52 % of stations are measured on C3N and 39 % on MSB, falling
+from 56 % at Strahler 1 to 25 % at 3 (C3N), and 132 of 265 and 59 of 162 branches have any. The
+order 2 and 3 medians for MSB rest on 28 and 8 stations. Dropping is the safe choice (two phantom
+airways with touching walls give no wall stations, not wrong ones), but it biases the sample
+toward isolated airways. The branch table's `wall_station_count` beside `station_count` says how
+much each branch's medians rest on.
 
 ## 5c. Bronchoarterial pairing
 
 Each airway centerline sample is paired with the nearest artery sample within 8 mm that runs
-parallel (|cos| ≥ 0.7). Each airway branch then gets its companion artery and the median
-bronchus-to-artery diameter ratio (`thalweg.pairing`; a synthetic parallel pair gives exactly
-the radius ratio, and a crossing artery nearer than the partner does not pair).
+parallel (|cos| ≥ 0.7). Each airway branch then gets the artery edge holding most of its paired
+samples and the median bronchus-to-artery diameter ratio (`thalweg.pairing`; a synthetic
+parallel pair gives exactly the radius ratio, and a crossing artery nearer than the partner does
+not pair).
 
-| Case | Airway samples paired | Paired branches | Ratio median | Paired branches above 1 | Ratio by Strahler 1 / 2 / 3 |
-|---|---|---|---|---|---|
-| C3N-00704 0.625 | 84 % | 235 | 0.58 | 4 % | 0.53 / 0.62 / 0.62 |
-| MSB-02664 0.625 | 66 % | 118 | 0.51 | 7 % | 0.48 / 0.50 / 0.64 |
+| Case | Airway samples paired | Paired branches | Ratio median | Paired branches above 1 | Ratio by Strahler 1 / 2 / 3 | Ratios resting on under 5 samples |
+|---|---|---|---|---|---|---|
+| C3N-00704 0.625 | 84 % | 235 | 0.58 | 4 % | 0.53 / 0.62 / 0.62 | 23 |
+| MSB-02664 0.625 | 66 % | 118 | 0.51 | 7 % | 0.48 / 0.50 / 0.64 | 25 |
 
-The medians sit below the ~0.65–0.7 usually reported for healthy lungs on CT. Two causes are
-plausible, and neither has been separated from the other:
-- the airway lumen class at the model's resolution;
-- pairing to the nearest parallel artery, which can be a wider parent rather than the bronchus's
-  own companion.
+**`paired_artery_edge` is the nearest parallel artery, not a verified companion.** Measured by
+the round-3 review on the two cases (C3N / MSB):
 
-As with the walls, compare across cases on one model and grid.
+- both children of an airway bifurcation paired with one artery edge: 29 % / 33 % of bifurcations;
+- a child airway's artery not downstream of its parent airway's artery: 25 % / 39 %;
+- a branch's paired samples spread over a median of 3 / 2 artery edges, with 60 % / 74 % of them
+  on the one reported.
+
+A wider parent artery 3 mm away beats the true companion 4 mm away (a phantom gives 0.33 where
+0.83 is right). `paired_sample_count` says how many samples a branch's ratio rests on.
+
+**The ratio is low because of the calibers the model draws, not because of mis-pairing.** The
+medians sit below the ~0.65–0.7 usually reported for healthy lungs on CT. Restricted to branches
+whose pairing is consistent with the trees (the artery is a proper descendant of the parent
+airway's artery and is not shared with a sibling), the ratio is unchanged: 0.58 against 0.57 on
+C3N, 0.49 against 0.50 on MSB. In that set the airway radius is 1.08 mm against 1.9–2.0 mm for
+the artery: the airway lumen class sits at the model's floor beside a wider artery class. As with
+the walls, compare across cases on one model and grid.
 
 ## 5d. Artery/vein plausibility
 
@@ -353,7 +390,8 @@ root), 0.625 mm reconstructions:
   1.26 mm radius, just above the model's ~1 mm floor, so almost nothing falls under it. It cannot
   be compared with "BV5" from segmentations that reach smaller vessels.
 - **Orientation entropy is saturated** (0.97–0.99): a lung tree points everywhere, so this
-  statistic separates little here.
+  statistic separates little here. It also rises with the number of segments (evenly spread
+  directions read 0.67 at 20 segments, 0.97 at 300), so a small tree reads low for its size alone.
 - **The per-point radius interval** (`radius_lower_mm`, `radius_upper_mm`: margin +2 and −2
   logits) has a half-width of 0.14–0.21 mm on the C3N arteries, widening slowly with radius: 1.01 mm
   reads 0.80–1.13, 1.64 reads 1.47–1.74, 3.56 reads 3.30–3.76. On the Y phantom it is 2 / slope, as it

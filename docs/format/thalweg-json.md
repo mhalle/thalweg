@@ -47,8 +47,9 @@ migration; 1.0 will be the first stable version.
     end). `attributes.end` says what the node was (`tip` or `truncated`; a truncated one also has
     `on_grid_boundary`). With `root: "deepest"` it is the tracer's own start, the deepest point,
     which need not be an end: the arteries' deepest point lies inside the pulmonary trunk (the
-    research reference). With the default, `statistics.deepest_point` records the tracer's start;
-    with `root: "deepest"` the root node is that point and the key is absent;
+    research reference). `statistics.deepest_point` records the tracer's start either way, and
+    `statistics.inlet_end_width_mm` beside `widest_end_width_mm` how the inlet was chosen: an end
+    running off the field is preferred only when it is at least half as wide as the widest end;
   - `junction`: degree 3 or more;
   - `tip`: a free end, degree 1;
   - `truncated`: an end where the structure runs off the edge of the source field, degree 1.
@@ -103,7 +104,8 @@ migration; 1.0 will be the first stable version.
 - `components`, `component_sizes` (only the largest piece is traced; the rest are listed here);
 - `zero_crossings`, `cell_interior_joins`;
 - `branches_before_pruning`, `branches`, `pruned_by_wall` (with `prune: "wall"`);
-- `max_distance_mm`.
+- `max_distance_mm`, `deepest_point` (where the tracer started);
+- `inlet_end_width_mm`, `widest_end_width_mm` (with `root: "inlet"`).
 
 **`statistics`, from the graph:**
 - `edges`, `tips`, `truncated_ends`, `junctions`, `joints`, `length_mm`;
@@ -162,7 +164,8 @@ bifurcations correspond.
   - for an airway whose wall the model labels: `wall_area_mm2`, `wall_area_percent`,
     `wall_thickness_mm`, `internal_perimeter_mm` (medians over the edge's stations) and
     `wall_station_count`. `thalweg table` writes these too;
-  - for an airway traced with the arteries: `paired_artery_edge`, `paired_fraction`,
+  - for an airway traced with the arteries: `paired_artery_edge` (the nearest parallel artery
+    edge, not a verified companion), `paired_fraction`, `paired_sample_count`,
     `bronchus_to_artery_ratio` (`thalweg.pairing`). `thalweg run` only.
 
   Columns a structure does not have are null in its rows.
@@ -188,8 +191,10 @@ bifurcations correspond.
       Strahler order `streams`, `mean_length_mm`, `mean_diameter_mm`;
     - `volume_mm3`, `small_vessel_volume_fraction`, `small_area_mm2` (the threshold, 5);
     - `orientation_entropy`;
-  - `wall` (airways with a labeled wall): `pi10_mm`, `slope`, `stations`,
-    `internal_perimeter_range_mm`;
+  - `wall` (airways with a labeled wall): `pi10_mm`, `slope`, `stations` (those with a wall
+    measure) out of `lumen_stations`, `internal_perimeter_range_mm`, and
+    `constant_wall_pi10_mm` (what a wall of the median thickness at every caliber would give: on
+    TotalSegmentator's wall class Pi10 restates it, docs/validation.md §5b);
   - `bronchoarterial` (airways traced with the arteries): `paired_sample_share`,
     `paired_branches`, `bronchus_to_artery_ratio_median`, `share_of_paired_branches_above_1`,
     `reach_mm`, `parallel_cosine`;

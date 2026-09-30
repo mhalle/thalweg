@@ -31,7 +31,19 @@ def test_run_is_consistent(airways):
     assert qc["acquisition"]["1"]["source_spacing_mm"][0] == pytest.approx(0.625)
     # one decode per class across trace, measure and qc: the airways and their wall
     assert case.decodes == 2 == len(case.margins)
-    assert res["summary"]["lung_airways"]["wall"]["pi10_mm"] > 0
+    wall = sm["wall"]
+    assert wall["pi10_mm"] > 0 and wall["stations"] <= wall["lumen_stations"] == len(res["stations"])
+    # everything the batch promises is wired in
+    cols = g.points.columns
+    assert {"lobe", "radius_lower_mm", "radius_upper_mm"} <= set(cols)
+    assert set(cols["lobe"]) <= set(range(6)) and len(set(cols["lobe"])) > 3
+    assert all("lobe" in r and "lobe_length_fraction" in r for r in rows)
+    assert sm["tree"]["horton"]["bifurcation_ratio"] > 1.5 and 0 < sm["tree"]["orientation_entropy"] <= 1
+    assert "outside_lobes" in sm["lobes"]
+    assert qc["artery_vein"]["plausible"] is None and "needs both" in qc["artery_vein"]["reason"]
+    assert qc["lobes"]["named_by"] is not None
+    st = g.structures[0].statistics
+    assert st["inlet_end_width_mm"] >= 0.5 * st["widest_end_width_mm"] and len(st["deepest_point"]) == 3
     assert res["summary"]["lung_airways"]["coarse_slices"] is False
 
 

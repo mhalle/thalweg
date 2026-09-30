@@ -8,8 +8,12 @@ default 0.7), the rule of ``explorations/catchments/artery_segments.py``.
 
 Per airway edge (:func:`airway_rows`):
 
-- ``paired_artery_edge``: the artery edge holding most of its paired samples;
-- ``paired_fraction``: the share of its samples that found a partner;
+- ``paired_artery_edge``: the artery edge holding most of its paired samples. It is the nearest
+  parallel artery, not a verified companion: on the two cases measured about 30 % of airway
+  bifurcations pair both children with one artery edge, and a branch's samples spread over a
+  median of 2-3 artery edges (docs/validation.md §5c);
+- ``paired_fraction``: the share of its samples that found a partner, and
+  ``paired_sample_count``, how many did (a ratio resting on a handful is weak);
 - ``bronchus_to_artery_ratio``: the median over paired samples of the airway's lumen diameter over
   the partner artery's diameter (both the traced, ridge-refined inscribed diameters). This is the
   clinical bronchoarterial ratio: above 1 means the bronchus is wider than its artery, the CT sign
@@ -47,6 +51,8 @@ def _samples(graph: TubeGraph, structure: str):
 def pair(graph: TubeGraph, airway: str, artery: str, reach: float = REACH_MM, parallel: float = PARALLEL):
     """Per airway sample: (partner artery edge or -1, airway radius, partner radius or NaN, airway
     edge). Among the artery samples within ``reach``, the nearest parallel one is the partner."""
+    for name in (airway, artery):
+        graph.structure(name)                                  # a ThalwegError if it is not there
     Pa, Ta, Ra, Ea = _samples(graph, airway)
     Pv, Tv, Rv, Ev = _samples(graph, artery)
     partner = np.full(len(Pa), -1)
@@ -68,8 +74,8 @@ def pair(graph: TubeGraph, airway: str, artery: str, reach: float = REACH_MM, pa
 
 def airway_rows(graph: TubeGraph, airway: str, artery: str, rows: list[dict], **kw) -> dict:
     """Add the pairing columns (see the module docstring) to the airway's branch-table rows, in
-    place; returns a summary: the paired share of airway samples, the median ratio, and the share of paired
-    airway branches whose ratio exceeds 1."""
+    place; returns a summary: the paired share of airway samples, the median ratio, and the share
+    of paired airway branches whose ratio exceeds 1."""
     partner, ra, rv, edge = pair(graph, airway, artery, **kw)
     ok = (partner >= 0) & (ra > 0) & (rv > 0)
     by_edge = {}
@@ -82,10 +88,10 @@ def airway_rows(graph: TubeGraph, airway: str, artery: str, rows: list[dict], **
             ratio = float(np.median(ra[both] / rv[both]))
             by_edge[r["edge"]] = ratio
             r.update(paired_artery_edge=int(ids[np.argmax(counts)]), paired_fraction=float(both.sum() / n),
-                     bronchus_to_artery_ratio=ratio)
+                     paired_sample_count=int(both.sum()), bronchus_to_artery_ratio=ratio)
         else:
             r.update(paired_artery_edge=None, paired_fraction=0.0 if n else None,
-                     bronchus_to_artery_ratio=None)
+                     paired_sample_count=0, bronchus_to_artery_ratio=None)
     ratios = np.array(list(by_edge.values()))
     return dict(paired_sample_share=float(ok.mean()) if len(ok) else 0.0,
                 paired_branches=len(ratios),
