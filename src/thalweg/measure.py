@@ -38,6 +38,14 @@ the airways), so depth, order and angles run from where the tree enters. With
 as a tip with Strahler order 1, and a root that lands on a bifurcation leaves that bifurcation
 without a junction node (no angles there).
 
+- **wall** (a lumen whose wall the model labels, e.g. ``lung_airways`` with ``lung_airways_wall``;
+  pass the lumen-or-wall margin as ``outer``): at each station the outer contour's area minus the
+  lumen's is the wall area; ``wall_area_percent`` = 100 x wall / outer area (the clinical WA%);
+  ``wall_thickness_mm`` = wall area / the mean of the two perimeters; ``internal_perimeter_mm`` is
+  the lumen's perimeter (for :func:`pi10`). Medians over the stations where the outer contour
+  closes; ``wall_station_count`` counts them. The model's wall is a shell about one voxel thick,
+  so thin walls are at its resolution.
+
 Sections near a junction cut through the neighboring branches too, so stations within the
 junction's radius + 1 mm of a junction end are left out (an edge shorter than that has none).
 """
@@ -113,10 +121,13 @@ def _angle(a, b) -> float:
 
 
 def branch_table(graph: TubeGraph, structure: str, margin: np.ndarray | None = None, geometry=None,
-                 step: float = 1.0, max_pixels: int = 256, stations_out: list | None = None) -> list[dict]:
+                 step: float = 1.0, max_pixels: int = 256, stations_out: list | None = None,
+                 outer: np.ndarray | None = None) -> list[dict]:
     """One row per edge of ``structure`` (see the module docstring). ``margin``/``geometry``: the
     structure's field; without them the section columns are left out. ``stations_out``: a list
-    that receives one row per section station (the profile)."""
+    that receives one row per section station (the profile). ``outer``: for a lumen with a
+    labeled wall, the margin of lumen-or-wall (the max of the two classes' margins, same grid):
+    adds the wall columns (see the module docstring)."""
     tree = graph.tree(structure)
     nodes = {nd.id: nd for nd in graph.nodes}
     order = strahler(graph, structure, tree)
@@ -159,7 +170,7 @@ def branch_table(graph: TubeGraph, structure: str, margin: np.ndarray | None = N
                        torsion_mean_absolute_per_mm=None)
         row.update(_branching(graph, tree, e))
         if margin is not None:
-            row.update(_sections(path, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels,
+            row.update(_sections(path, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels, outer,
                                  stations_out))
         rows.append(row)
     return rows
@@ -199,15 +210,30 @@ SECTION_KEYS = ("area_mm2", "area_low_mm2", "area_high_mm2", "equivalent_diamete
                 "max_feret_mm", "aspect_ratio")
 
 
-def _sections(path, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels, stations_out) -> dict:
-    empty = {k: None for k in SECTION_KEYS} | {"station_count": 0, "stations_center_outside": 0}
+WALL_KEYS = ("wall_area_mm2", "wall_area_percent", "wall_thickness_mm", "internal_perimeter_mm")
+
+
+def _wall(img_outer, g, lumen: dict) -> dict:
+    """The wall around one lumen section: outer contour (lumen or wall) minus the lumen."""
+    o = S.describe(img_outer, g, 0.0)
+    if not o["area"] or not o["closed"] or o["area"] < lumen["area"]:
+        return {k: None for k in WALL_KEYS}
+    wa = o["area"] - lumen["area"]
+    return dict(wall_area_mm2=wa, wall_area_percent=100.0 * wa / o["area"],
+                wall_thickness_mm=wa / (0.5 * (lumen["perimeter"] + o["perimeter"])),
+                internal_perimeter_mm=lumen["perimeter"])
+
+
+def _sections(path, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels, outer, stations_out) -> dict:
+    keys = SECTION_KEYS + (WALL_KEYS if outer is not None else ())
+    empty = {k: None for k in keys} | {"station_count": 0, "stations_center_outside": 0}
     if path is None:
         return empty
     st = path.stations(step)
     guard_a = (r[0] + 1.0) if a_kind in ("junction", "root") else 0.0
     guard_b = (r[-1] + 1.0) if b_kind == "junction" else 0.0
     L = st.s[-1] if len(st.s) else 0.0
-    vals = {k: [] for k in SECTION_KEYS}
+    vals = {k: [] for k in keys}
     outside = 0
     for i in range(len(st.s)):
         if st.s[i] < guard_a or st.s[i] > L - guard_b:
@@ -223,8 +249,12 @@ def _sections(path, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels,
         rec = dict(area_mm2=d["area"], area_low_mm2=float(areas[2]), area_high_mm2=float(areas[0]),
                    equivalent_diameter_mm=d["equivalent_diameter"], min_feret_mm=d["min_feret"],
                    max_feret_mm=d["max_feret"], aspect_ratio=d["aspect_ratio"])
-        for k in SECTION_KEYS:
-            vals[k].append(rec[k])
+        if outer is not None:
+            img_o, _ = S.section_image(outer, geometry, st.centers[i], st.n1[i], st.n2[i], half, pixel)
+            rec.update(_wall(img_o, g, d))
+        for k in keys:
+            if rec[k] is not None:
+                vals[k].append(rec[k])
         if stations_out is not None:
             stations_out.append(dict(structure=e.structure, edge=e.id, arc_length_mm=float(st.s[i]),
                                      position_x_mm=float(st.centers[i, 0]),
@@ -235,8 +265,24 @@ def _sections(path, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels,
                                      centroid_offset_mm=d["centroid_offset"], **rec))
     out = {k: (float(np.median(v)) if v else None) for k, v in vals.items()}
     out["station_count"] = len(vals["area_mm2"])
+    if outer is not None:
+        out["wall_station_count"] = len(vals["wall_area_mm2"])
     out["stations_center_outside"] = outside
     return out
+
+
+def pi10(stations: list[dict]) -> dict:
+    """Pi10: the square root of wall area (mm) predicted at an internal perimeter of 10 mm, from a
+    least-squares line of sqrt(wall area) on internal perimeter over every measured station - the
+    airway-wall summary of Nakano et al. (2005). Also the fit's slope and station count."""
+    pts = [(s_["internal_perimeter_mm"], np.sqrt(s_["wall_area_mm2"])) for s_ in stations
+           if s_.get("wall_area_mm2") is not None and s_.get("internal_perimeter_mm")]
+    if len(pts) < 10:
+        return dict(pi10_mm=None, slope=None, stations=len(pts))
+    x, y = np.asarray(pts, float).T
+    b, a = np.polyfit(x, y, 1)
+    return dict(pi10_mm=float(a + 10.0 * b), slope=float(b), stations=len(pts),
+                internal_perimeter_range_mm=[float(x.min()), float(x.max())])
 
 
 def write_table(rows: list[dict], path) -> None:

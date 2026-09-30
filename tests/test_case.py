@@ -29,8 +29,9 @@ def test_run_is_consistent(airways):
     assert q["unrefined_points"] == 0 and q["field_loops"] >= 0 and q["outside_mm"] < 0.01 * q["length_mm"]
     assert qc["acquisition"]["1"]["coarse_slices"] is False
     assert qc["acquisition"]["1"]["source_spacing_mm"][0] == pytest.approx(0.625)
-    # one decode per structure across trace, measure and qc
-    assert case.decodes == 1
+    # one decode per class across trace, measure and qc: the airways and their wall
+    assert case.decodes == 2 == len(case.margins)
+    assert res["summary"]["lung_airways"]["wall"]["pi10_mm"] > 0
     assert res["summary"]["lung_airways"]["coarse_slices"] is False
 
 

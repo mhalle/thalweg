@@ -126,6 +126,9 @@ bifurcations correspond.
   crop stage (`thalweg.lobes`). The branch table gets `lobe` (the lobe holding most of the edge's
   length, by name) and `lobe_length_fraction`; `summary.json` gets per-lobe counts, lengths,
   volumes and length densities.
+- Airway walls (not in the graph; `thalweg run` and `thalweg table`): branch-table columns
+  `wall_area_mm2`, `wall_area_percent`, `wall_thickness_mm`, `internal_perimeter_mm`,
+  `wall_station_count`, and Pi10 under `summary.json` `lung_airways.wall`.
 
 ## The tube requirements (docs/port-plan.md), as of 0.1
 

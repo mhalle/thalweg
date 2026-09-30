@@ -39,10 +39,11 @@ from .errors import ThalwegError
 from .graph import TubeGraph
 from .kernel.field import sample
 from .kernel.topology import surface_loops
-from .measure import branch_table, strahler
+from .measure import branch_table, pi10, strahler
 from .store import FieldStore, open_store
 
 COARSE_MM = 3.0
+WALL_OF = {"lung_airways": "lung_airways_wall"}       # a lumen and the class the model labels its wall
 
 
 def outside_length(graph: TubeGraph, structure: str, margin: np.ndarray, geometry,
@@ -104,6 +105,7 @@ class Case:
     margins: dict = field(default_factory=dict)
     timings: dict = field(default_factory=dict)
     decodes: int = 0
+    pi10: dict = field(default_factory=dict)
     lobe_error: str | None = None
 
     @classmethod
@@ -132,14 +134,29 @@ class Case:
             self.timings[f"trace {n}"] = round(time.time() - t, 3)
         return graphs[0] if len(graphs) == 1 else combine(graphs)
 
+    def outer(self, name: str, part: int | None, m: np.ndarray):
+        """For a lumen whose wall the store labels (:data:`WALL_OF`), the lumen-or-wall margin on
+        the lumen's grid; otherwise None."""
+        wall = WALL_OF.get(name)
+        if wall is None or not any(s.name == wall for s in self.store.structures):
+            return None
+        mw, _, ref = self.margin(wall, part)
+        return np.maximum(m, mw) if mw.shape == m.shape else None
+
     def measure(self, graph: TubeGraph, step: float = 1.0, stations: bool = True):
-        rows, prof = [], ([] if stations else None)
+        rows, prof = [], []
+        self.pi10 = {}
         for s in graph.structures:
             t = time.time()
             m, geo, _ = self.margin(s.name, s.source.part)
-            rows.extend(branch_table(graph, s.name, m, geo, step=step, stations_out=prof))
+            outer = self.outer(s.name, s.source.part, m)
+            mine = []
+            rows.extend(branch_table(graph, s.name, m, geo, step=step, stations_out=mine, outer=outer))
+            if outer is not None:
+                self.pi10[s.name] = pi10(mine)
+            prof.extend(mine)
             self.timings[f"measure {s.name}"] = round(time.time() - t, 3)
-        return rows, prof
+        return rows, (prof if stations else None)
 
     def qc(self, graph: TubeGraph) -> dict:
         out = {}
@@ -205,6 +222,8 @@ class Case:
             sm = summarize(g, s.name, [r for r in rows if r["structure"] == s.name])
             coarse = acquisition.get(str(s.source.part), {}).get("coarse_slices")
             sm["coarse_slices"] = coarse
+            if s.name in self.pi10:
+                sm["wall"] = self.pi10[s.name]
             if s.name in edge_lobe:
                 sm["lobes"] = lobes_mod.lobe_summary(g, s.name, edge_lobe[s.name],
                                                      lobes_mod.lobe_volumes(lobes))

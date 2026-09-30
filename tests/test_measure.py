@@ -168,3 +168,42 @@ def test_strahler_ignores_truncated_ends():
     into = next(e for e in h.edges if e.end_node == tip["id"])
     assert order[into.id] is None
     assert max(o for o in order.values() if o is not None) == 1          # the trunk no longer reaches 2
+
+
+def _lumen_and_wall(r_in=2.0, r_out=3.0, length=30.0, spacing=0.5):
+    """Three classes like a store's: lumen (d < r_in), wall (r_in < d < r_out), background; their
+    margins are each logit minus the best other, clipped like a ranked store."""
+    from rankfield.geometry import Geometry
+    from phantoms import CLIP, SLOPE
+    lo = np.array([-r_out - 4, -r_out - 4, -4.0])
+    shape = (int(2 * (r_out + 4) / spacing) + 1,) * 2 + (int((length + 8) / spacing) + 1,)
+    geo = Geometry(shape=shape, directions=((spacing, 0, 0), (0, spacing, 0), (0, 0, spacing)),
+                   origin=tuple(lo))
+    X = np.stack(np.meshgrid(*[lo[a] + np.arange(shape[a]) * spacing for a in range(3)], indexing="ij"), -1)
+    d = np.hypot(X[..., 0], X[..., 1])
+    along = np.clip(X[..., 2], 0, length)
+    d = np.maximum(d, np.abs(X[..., 2] - along))                       # closed ends
+    lumen = SLOPE * (r_in - d)
+    wall = SLOPE * np.minimum(d - r_in, r_out - d)
+    bg = SLOPE * (d - r_out)
+    m_lumen = np.clip(lumen - np.maximum(wall, bg), -CLIP, CLIP).astype(np.float32)
+    m_wall = np.clip(wall - np.maximum(lumen, bg), -CLIP, CLIP).astype(np.float32)
+    return m_lumen, m_wall, geo
+
+
+def test_wall_measures_on_a_lumen_in_its_wall():
+    """A 2 mm lumen in a 1 mm wall: wall area pi (9 - 4) = 15.7 mm^2, WA% 55.6, thickness 1.0 mm."""
+    m_lumen, m_wall, geo = _lumen_and_wall()
+    T = medial.trace(m_lumen, geo)
+    nodes, edges, pos, rad, s = graph_from_tree(T, "a", m_lumen, geo, Source(), {"connectivity": "field"})
+    g = TubeGraph(structures=[s], nodes=nodes, edges=edges, points=Points(position=pos, radius=rad))
+    stations = []
+    rows = branch_table(g, "a", m_lumen, geo, outer=np.maximum(m_lumen, m_wall), stations_out=stations)
+    main = max(rows, key=lambda r: r["length_mm"])
+    assert main["wall_station_count"] > 10
+    assert abs(main["wall_area_mm2"] - 5 * np.pi) / (5 * np.pi) < 0.05, main["wall_area_mm2"]
+    assert abs(main["wall_area_percent"] - 500 / 9) < 2.0
+    assert abs(main["wall_thickness_mm"] - 1.0) < 0.05
+    from thalweg.measure import pi10
+    p = pi10(stations)
+    assert p["stations"] > 10                                          # one caliber: the fit is flat

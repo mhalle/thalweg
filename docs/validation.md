@@ -264,6 +264,25 @@ Effect on the trees:
     39.5 mm of 60 mm). Measured from one tube's axis, the other tube's tip lies inside the merged
     wall. That matters for the self-contact requirement (colon loops that touch).
 
+## 5b. Airway walls
+
+The model labels the airway lumen and its wall as separate classes; `thalweg run` measures the
+wall at every airway section station (branch table: `wall_area_mm2`, `wall_area_percent`,
+`wall_thickness_mm`; `summary.json`: Pi10). A phantom lumen of 2 mm in a 1 mm wall reads a wall
+area within 5 %, WA% within 2 points and thickness within 0.05 mm (`tests/test_measure.py`).
+
+| Case | Pi10 (mm) | WA%, Strahler 1 / 2 / 3 | Thickness (mm), Strahler 1 / 2 / 3 |
+|---|---|---|---|
+| C3N-00704 0.625 | 4.17 (1151 stations) | 85.6 / 73.7 / 61.1 | 1.37 / 1.30 / 1.12 |
+| MSB-02664 0.625 | 4.34 (431 stations) | 85.4 / 69.8 / 67.8 | 1.45 / 1.36 / 1.30 |
+
+**The wall is at the model's resolution.** The measured thickness is nearly constant, 1.3–1.45 mm
+at every order: about two voxels of the 0.7 mm grid, the thinnest shell the model draws. Real
+small-airway walls are thinner, so small-airway WA% and Pi10 read high, the airway analog of the
+vessels' ~1 mm radius floor. Pi10 here (4.2–4.3 mm) is above the ~3.6–3.8 mm usually reported for
+healthy lungs on CT for the same reason. Compare these across cases on one model and grid, not
+against the literature.
+
 ## 6. Not yet validated
 
 - **Thin-caliber ground truth.** The ~1 mm radius floor belongs to the model; checking the

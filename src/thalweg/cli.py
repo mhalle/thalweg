@@ -124,6 +124,9 @@ def table(graph, store, output, names, stations, step):
     needs pyarrow, the `tables` extra). Column definitions: thalweg.measure."""
     from .centerlines import check_source
     from .graph import TubeGraph
+    import numpy as np
+
+    from .case import WALL_OF
     from .lobes import annotate, lobe_fields, lobe_rows
     from .measure import branch_table, write_table
     from .store import open_store
@@ -145,7 +148,12 @@ def table(graph, store, output, names, stations, step):
                 continue
             m, geo, ref = st.margin(s.name, s.source.part)
             check_source(s, geo, ref)
-            mine = branch_table(g, s.name, m, geo, step=step, stations_out=prof)
+            wall = WALL_OF.get(s.name)
+            outer = None
+            if wall and any(x.name == wall for x in st.structures):
+                mw, _, _ = st.margin(wall, s.source.part)
+                outer = np.maximum(m, mw) if mw.shape == m.shape else None
+            mine = branch_table(g, s.name, m, geo, step=step, stations_out=prof, outer=outer)
             if lobes is not None:
                 lobe_rows(mine, edge_lobe[s.name])
             rows.extend(mine)
