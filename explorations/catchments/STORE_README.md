@@ -31,10 +31,10 @@ something different here, and one does not hold at all.
 |---|---|
 | `ranks` (4, Z, Y, X) | class + 1 of the 4 nearest territories, nearest first; 0 = none |
 | `support` (3, Z, Y, X) | how much farther rank j is than rank 1, as a byte through the level table. The "logit" is **−distance / 0.25 mm** (`gap_unit`), so a decoded gap in logits × 0.25 = **mm of extra distance** (d_j − d_1) |
-| `distance` (Z, Y, X) | mm to the nearest place the winning territory changes, **including the lung surface**: how deep a voxel sits inside its territory. Decoded as in the appendix; truncated at 20 mm |
+| `distance` (Z, Y, X) | mm to the nearest place the winning territory changes, **including the lung surface**: how deep a voxel sits inside its territory. Its values are stated (a linear `value_transforms`, `sample_units: mm`), so any duckn reader gets millimeters; truncated at 20 mm |
 | `junction`, `junction_pair` | the appendix's triple-line layer. **Not sparse here:** at a 20 mm truncation a partition this fine has triple lines everywhere, and the layer covers every lung voxel |
-| `d1` (Z, Y, X) uint16 | **not in the generic format.** mm from the voxel to the centerline of the branch that supplies it: (value − 1) × 0.01; 0 = outside the lungs. A softmax needs only differences, so the format never stores an absolute score; here the absolute distance is the point (poorly supplied tissue) |
-| `walls` (Z, Y, X) uint8 | 0 outside, 1 left lung, 2 right lung |
+| `d1` (Z, Y, X) float32 | **not in the generic format.** mm from the voxel to the centerline of the branch that supplies it, NaN outside the lungs; values stated (`value_transforms: []`, `sample_units: mm`). A softmax needs only differences, so the format never stores an absolute score; here the absolute distance is the point (poorly supplied tissue) |
+| `walls` (Z, Y, X) uint8 | 0 outside, 1 left lung, 2 right lung: a code, so its values are left unstated (duckn 1.2) and explained in `extensions.thalweg` |
 | `occupancy` | the generic skip index, unchanged |
 | `tail` | absent: there is no probability mass to account for |
 
@@ -52,7 +52,9 @@ inside large territories (see below).
 
 ## The hierarchy: groups
 
-The coarser territories are declared as nested duckn groups (`members`, seg 0.9):
+The coarser territories are declared as nested duckn groups (`members`) in the seg block on the
+store's group (seg 0.10, which also names `parts/0` as the layer whose labelmap is the ranked
+winner):
 `strahler5_<segment>` contains `strahler4_<segment>` groups, which contain the stored classes.
 **Each level is complete on its own:** the `strahler4_*` segments partition the lungs, and so do
 the `strahler5_*` segments, even where a group has a single member. Take a level by its prefix.
@@ -73,6 +75,12 @@ limit: no haversack reader converts a non-logit unit yet, so a tool that reports
 logits" is reporting units of 0.25 mm here. Rank order, winners and boundaries are unaffected.
 Its warnings about a missing `tail` and `frame` are expected for the same reasons.
 
+## Layout
+
+Written under duckn convention 1.2 through haversack 0.16's builder: metadata on the store's group,
+every extension versioned (`thalweg` is 0.1, unstable), array values stated where they are a
+quantity (`distance`, `d1`) and left unstated where they are codes (`ranks`, `walls`).
+
 ## Geometry
 
 1.5 mm isotropic grid, axis-aligned in LPS, `centering: cell`; the origin is the first voxel's
@@ -88,8 +96,7 @@ from haversack.ranked_restore import parts_of
 st = open_store("C3N-00704_ctpa0625.lung_artery_catchments.duckn.zip")
 code = parts_of(st.root)[0].field                  # a rankfield.RankField
 winner = code.ranks[0].astype(int) - 1             # territory class per voxel; 0 = outside
-d1 = st.root["parts/0/d1"][:]
-d1_mm = np.where(d1 > 0, (d1 - 1) * 0.01, np.nan)  # distance to the supplying branch
+d1_mm = st.root["parts/0/d1"][:]                   # mm to the supplying branch; NaN outside the lungs
 
 segs = {s.id: s for s in read_segmentation(st.root).segments}
 def classes(sid):                                  # a group's classes, resolving members

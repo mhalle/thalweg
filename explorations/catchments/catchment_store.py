@@ -9,9 +9,11 @@ a `source_grid` part (the path FastSurfer uses: the grid is stated, not derived 
 so occupancy, the distance and junction layers, the segments, validation and the generic format
 README are the standard ones. Then, inside the same write:
 
-- `parts/0/d1`: mm to the supplying vessel, uint16 in 0.01 mm with 0 = outside the lungs
-  (the store's zero-means-nothing rule), and `parts/0/walls` (0 outside, 1 left, 2 right lung);
-- the Strahler hierarchy as nested duckn groups (`members`, seg 0.9): order >= 5 territories
+- `parts/0/d1`: mm to the supplying vessel, float32 with NaN outside the lungs, its values STATED
+  (duckn 1.2: `value_transforms: []`, `sample_units: mm`), and `parts/0/walls` (0 outside, 1 left,
+  2 right lung), a code whose values are left unstated and explained in the `thalweg` extension;
+- the Strahler hierarchy as nested duckn groups (`members`; the seg block is the store group's,
+  seg 0.10, with its `layers`, exactly as haversack's builder writes it): order >= 5 territories
   containing order >= 4 territories containing the stored classes. These unions are
   authoritative here - the tree grouping is how the classes were made;
 - provenance that says what actually happened (no model ran on these classes);
@@ -77,24 +79,36 @@ try:
         root = st.root
         g = root["parts/0"]
         eff, direction = [H, H, H], [1, 0, 0, 0, 1, 0, 0, 0, 1]
+        import copy
         a3 = ranked_build.attrs(direction, eff, origin, list_axis=False, centering="cell")
         chunks, shards = ranked_build.layout(d1.shape)
-        q = np.where(inside, np.clip(np.round(d1 * 100) + 1, 1, 65535), 0).astype(np.uint16)
-        for name, arr in (("d1", q), ("walls", walls)):
+        # duckn 1.2: d1 IS millimeters, so its values are stated ([] = the stored values are the
+        # quantity); outside the lungs there is no quantity, so NaN there, never a sentinel that a
+        # stated mapping would turn into a distance. walls is a code, not a quantity: unstated.
+        d1_attrs = copy.deepcopy(a3)
+        d1_attrs["duckn"]["value_transforms"] = []
+        d1_attrs["duckn"]["sample_units"] = "mm"
+        d1_mm = np.where(inside, d1, np.nan).astype(np.float32)
+        for name, arr, at in (("d1", d1_mm, d1_attrs), ("walls", walls, a3)):
             z = g.create_array(name, shape=arr.shape, dtype=arr.dtype, chunks=chunks, shards=shards,
-                               compressors=ranked_build.zarr.codecs.ZstdCodec(level=9), attributes=a3)
+                               compressors=ranked_build.zarr.codecs.ZstdCodec(level=9), attributes=at,
+                               fill_value=(np.nan if arr.dtype.kind == "f" else 0))
             z[:] = arr
         pa = g.attrs.asdict()
         pa["duckn"].setdefault("extensions", {})["thalweg"] = {
+            "version": "0.1",                                         # duckn 1.2: every extension versioned
             "kind": "vascular catchments",
             "d1": {"meaning": "distance from the voxel to the centerline of the branch that supplies it",
-                   "unit": "mm", "decode": "(value - 1) * 0.01; 0 = outside the lungs"},
+                   "values": "stated (value_transforms [] and sample_units mm); NaN outside the lungs"},
             "walls": {"meaning": "territories never cross a wall", "values": {"0": "outside the lungs",
                                                                               "1": "left lung", "2": "right lung"}}}
         g.attrs.update(pa)
 
-        # the hierarchy: nested groups, container first (seg 0.9 section 5)
-        leaves = {s.id: s for s in read_segmentation(root).segments}
+        # the hierarchy: nested groups, container first (seg section 5). The builder wrote the seg
+        # block on the store's group (seg 0.10, with `layers`); rebuild it with the same layers.
+        built = read_segmentation(root)
+        layers = [l.path if hasattr(l, "path") else l["path"] for l in (built.layers or [])] or None
+        leaves = {s.id: s for s in built.segments}
         leaf_id = {c + 1: f"c{c + 1}" for c in range(K)}
         anc4, anc5 = ancestor_at(order, parent, 4), ancestor_at(order, parent, 5)
         g4 = {}
@@ -113,7 +127,7 @@ try:
                         members=sorted(m)) for t, m in sorted(g4.items())]
         bg = [s for s in leaves.values() if s.role == "background"]
         rest = [s for s in leaves.values() if s.role != "background"]
-        seg_ext = segmentation(bg + seg5 + seg4 + rest)
+        seg_ext = segmentation(bg + seg5 + seg4 + rest, layers=layers)
         ra = root.attrs.asdict()
         ext = ra["duckn"]["extensions"]
         ext["seg"] = seg_ext.model_dump(exclude_none=True)
@@ -140,7 +154,7 @@ try:
              "description": "haversack's ranked builder (occupancy, distance and junction layers at a "
                             f"{TRUNC} mm truncation), plus d1, walls and the Strahler hierarchy as groups",
              "software": {"name": "thalweg explorations/catchments/catchment_store.py", "version": "prototype"}}]
-        ext["thalweg"] = {"kind": "vascular catchments", "tree": "lung_arteries", "case": run,
+        ext["thalweg"] = {"version": "0.1", "kind": "vascular catchments", "tree": "lung_arteries", "case": run,
                           "levels": {"stored classes": f"Strahler >= {TRIM}", "groups": ["Strahler >= 4", "Strahler >= 5"]},
                           "classes": [{"value": c + 1, "segment": s_, "strahler": order[s_]} for c, s_ in enumerate(group_seg)]}
         root.attrs.update(ra)
@@ -153,4 +167,4 @@ try:
 finally:
     shutil.rmtree(emit, ignore_errors=True)
 print(f"wrote {out} ({out.stat().st_size / 1e6:.2f} MB) in {time.time() - t0:.1f} s: {K} classes, "
-      f"{len(seg4)} Strahler>=4 groups, {len(seg5)} Strahler>=5 groups")
+      f"{len(seg4)} Strahler>=4 groups, {len(seg5)} Strahler>=5 groups, seg {seg_ext.version}, layers {layers}")

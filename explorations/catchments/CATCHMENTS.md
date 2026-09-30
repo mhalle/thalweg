@@ -22,7 +22,7 @@ So territories get everything rankfield and haversack already provide: sub-voxel
 compact storage, and the derived distance and junction layers.
 
 **The store file:** `~/tmp/data/vessels/C3N-00704_ctpa0625.lung_artery_catchments.duckn.zip`
-(5.3 MB), a standard haversack ranked store (duckn zarr zip) with its own `README.md` inside. It
+(6.6 MB), a standard haversack ranked store (duckn zarr zip, convention 1.2 since 2026-09-30) with its own `README.md` inside. It
 is written by `catchment_store.py` through haversack's own builder, and read back with the
 standard readers: ranks, support and the distance layer are byte-identical to the prototype's.
 
@@ -64,8 +64,9 @@ basal origins in 4-10 % of left lower lobes). Walls from a lobe model are a defa
 6. **Encoding.** Those rankings become a `rankfield.RankField` directly (ranks plus
    one support byte per rank), without ever forming a dense 158-channel volume.
 7. **The store.** `catchment_store.py` writes it as a duckn zarr zip through haversack's builder,
-   adds `d1` and the wall map, declares the Strahler hierarchy as nested duckn groups (`members`,
-   seg 0.9; every level complete on its own: 67 territories at Strahler ≥ 4, 21 at ≥ 5), records
+   adds `d1` (float32 mm, values stated, NaN outside the lungs) and the wall map, declares the
+   Strahler hierarchy as nested duckn groups (`members`, in the seg 0.10 block on the store's
+   group; every level complete on its own: 67 territories at Strahler ≥ 4, 21 at ≥ 5), records
    the source series, and puts a README inside that says what differs from a segmentation store.
 
 ## What the store holds

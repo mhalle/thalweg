@@ -13,7 +13,7 @@ and run with haversack's environment, like the research scripts.
   it unmodified, adds the one plane rankfield lacks (d1, distance to the supplying vessel),
   decodes coarser levels with `rf.decode_groups`, and tests whether pulmonary veins run between
   arterial territories. `catchments_figure.py [RUN] [Y_MM]` evaluates one coronal slice directly
-  at 0.25 mm. `catchment_store.py` writes it as a real haversack store (duckn zarr zip, 5.3 MB) with
+  at 0.25 mm. `catchment_store.py` writes it as a real haversack store (duckn zarr zip, convention 1.2, 6.6 MB) with
   its own README inside (`STORE_README.md` + the generic format reference). `airway_centerlines.py`, `airway_catchments.py` and `airway_figure.py`
   do the same for the airway tree and compare it with the arteries (they agree best at segment scale:
   ARI 0.70 vs 0.37 for random partitions). `_catch.py` holds the shared pieces and two switches:
