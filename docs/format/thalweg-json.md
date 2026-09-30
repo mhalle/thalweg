@@ -33,10 +33,10 @@ migration; 1.0 will be the first stable version.
 - **Structures.** A file holds one or more structures, each with its own nodes and edges. Every
   node and edge names its structure.
   - `source` records where the structure came from: `store` (path), `labeling_scheme` (the scheme
-    that names this class, e.g. `ts.v2:lung_vessels`; `degraded:labelmap` or `degraded:sdf` when
-    the input was a labelmap or distance image, whose field is not a model's), `part` (the store's
-    `parts/<part>`; 0 for an image), `label_value`, and `grid` (`shape`, `directions`, `origin` of
-    the field).
+    that names this class, e.g. `ts.v2:lung_vessels`; `degraded:labelmap`, `degraded:sdf` or
+    `degraded:dicom-seg` when the input was a labelmap, distance image or DICOM SEG, whose field
+    is not a model's), `part` (the store's `parts/<part>`; 0 for an image), `label_value` (the
+    segment number for a SEG), and `grid` (`shape`, `directions`, `origin` of the field).
   - `parameters` records the tracer's settings: `connectivity` (`field` or `voxel`),
     `cover_scale`, `cover_constant_mm`, `cost_epsilon_mm`, `ridge_passes` (default 4; 1 is the
     research reference), `prune` (default `length`) and `root` (`inlet`, the default, or

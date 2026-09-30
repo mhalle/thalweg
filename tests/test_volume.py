@@ -128,3 +128,61 @@ def test_the_cli_runs_on_a_labelmap(tmp_path):
     r = CliRunner().invoke(main, ["export", str(graph), str(path), "-s", "label_3", "--mesh",
                                   str(tmp_path / "y.vtp"), "--cap-kinds", "tip,root"])
     assert r.exit_code == 0, r.output + str(r.exception)
+
+
+def _seg_case(tmp_path, fractional=False):
+    pytest.importorskip("highdicom")
+    from dicom_seg import ct_series, world_points, write_seg
+    from phantoms import capsule_distance
+    rd = np.array([0.8, 0.6, 0.0])
+    cd = np.array([-0.36, 0.48, 0.8])
+    cd -= (cd @ rd) * rd
+    cd /= np.linalg.norm(cd)
+    shape, sp, org = (40, 50, 45), (0.8, 0.6, 0.7), np.array([-12.0, -14.0, -3.0])
+    W = world_points(shape, sp, org, rd, cd).reshape(-1, 3)
+    trunk = capsule_distance(W, np.zeros(3), np.array([0.0, 0, 20]), 3.0, 3.0).reshape(shape)
+    side = capsule_distance(W, np.array([-2.0, 0, 10]), np.array([8.0, 5, 15]), 1.5, 1.5).reshape(shape)
+    if fractional:
+        masks = [np.clip(0.5 + trunk / 0.7, 0, 1), np.clip(0.5 + side / 0.7, 0, 1)]
+    else:
+        masks = [trunk > 0, side > 0]
+    path = write_seg(tmp_path / "seg.dcm", ct_series(shape, sp, org, rd, cd), masks,
+                     ["trunk", "side branch"], fractional=fractional)
+    return path, trunk > 0, side > 0
+
+
+@pytest.mark.parametrize("fractional", [False, True])
+def test_a_dicom_seg_on_an_oblique_series(tmp_path, fractional):
+    """A two-segment SEG (overlapping segments) of oblique, anisotropic CT slices: each segment is a
+    structure named by its label; its voxels lie where the truth says, in world space; the two
+    overlap as drawn; a fractional segment counts from 0.5."""
+    from phantoms import capsule_distance
+    path, trunk, side = _seg_case(tmp_path, fractional)
+    st = open_store(path)
+    assert isinstance(st, VolumeStore) and st.kind == "dicom-seg" and st.names == ["side branch", "trunk"]
+    assert st.ref("trunk").label_value == 1 and st.labeling_scheme == "degraded:dicom-seg"
+    m, geo, _ = st.margin("trunk")
+    inside = to_world(geo, np.argwhere(m > 0))
+    assert len(inside) == trunk.sum()                                   # every segmented voxel, no other
+    assert (capsule_distance(inside, np.zeros(3), np.array([0.0, 0, 20]), 3.0, 3.0) > -1e-6).all()
+    both = st.labelmap_mask(st.ref("trunk")) & st.labelmap_mask(st.ref("side branch"))
+    assert both.sum() == (trunk & side).sum() > 0
+    edge = m[:3].max(), m[-3:].max(), m[:, :3].max(), m[:, -3:].max()
+    assert max(edge) < 0                                                 # the padding is outside
+
+
+def test_the_cli_runs_on_a_dicom_seg_and_refuses_other_dicom(tmp_path):
+    path, _, _ = _seg_case(tmp_path)
+    graph = tmp_path / "t.thalweg.json.gz"
+    r = CliRunner().invoke(main, ["centerlines", str(path), "-s", "trunk", "-o", str(graph), "-q"])
+    assert r.exit_code == 0, r.output + str(r.exception)
+    from thalweg.graph import TubeGraph
+    g = TubeGraph.read(graph)
+    P = g.positions()
+    long = max(g.edges, key=lambda e: e.length_mm)
+    assert long.length_mm > 10 and np.median(np.hypot(P[:, 0], P[:, 1])) < 0.4    # on the trunk's axis
+    from dicom_seg import ct_series
+    ct = ct_series((2, 8, 8), (1, 1, 1), (0, 0, 0), (1, 0, 0), (0, 1, 0))[0]
+    ct.save_as(str(tmp_path / "ct.dcm"))
+    with pytest.raises(ThalwegError, match="not a Segmentation"):
+        open_store(tmp_path / "ct.dcm")

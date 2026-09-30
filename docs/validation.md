@@ -616,9 +616,15 @@ mm (the wall half a voxel out), times 10 logits/mm, clipped at ±8. Every verb r
   1,064 and 10,360 mm. The centerlines lie a median 0.2 mm apart (90th percentile 0.6 mm), and the
   labelmap's radius is a median 0.05 mm smaller. So a labelmap gives nearly the same tree, a
   little rougher.
+- **DICOM SEG** (read with highdicom, the `dicom` extra): a two-segment SEG (overlapping
+  segments; binary and fractional) of synthetic oblique, anisotropic CT slices. Every segmented
+  voxel lands inside the true tube in world space and no other voxel is labeled; the overlap is
+  kept (each segment is its own mask); the trunk's centerline lies a median 0.2 mm from the true
+  axis. Tested on SEGs written by highdicom only, not yet on SEGs from other tools (IDC, dcmqi,
+  Slicer).
 - **What degraded mode cannot give**: the model's interval. The ±2 logit levels become ±0.2 mm
   offsets of the wall - a convention, not an uncertainty. The graph's
-  `source.labeling_scheme` says `degraded:labelmap` or `degraded:sdf`.
+  `source.labeling_scheme` says `degraded:labelmap`, `degraded:sdf` or `degraded:dicom-seg`.
 
 ## 5l. A 0-D flow model (svZeroDSolver input)
 

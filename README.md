@@ -29,7 +29,7 @@ a field. Here the field is a model's per-class margin, decoded from a
 
 Install and test (from the repo):
 
-    uv sync --extra test --extra tables --extra volumes
+    uv sync --extra test --extra tables --extra volumes --extra dicom
     uv run pytest                      # ~70 s with the case data in ~/tmp/data/vessels, ~12 s without
     uv run pytest -m "not slow"        # the quick loop, ~16 s
 

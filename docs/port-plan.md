@@ -100,7 +100,7 @@ tiers, ported after phase 5.
 |---|---|---|---|
 | `vmtkimageviewer`, `vmtksurfaceviewer` | sdfview renders the field | out | — |
 | `vmtkimagecurvedmpr` | Straightened view of any volume along any path, parallel-transport frames (`straighten.straighten`, `straighten.path_to`) | done | T3 |
-| `vmtk*reader`, `vmtk*writer` | In: a ranked store via rankfield (`store`), or a labelmap or signed distance image (NIfTI, NRRD, MetaImage, Slicer `.seg.nrrd` names) in degraded mode (`volume`, the `volumes` extra: SimpleITK). Out: `.thalweg.json`, Parquet tables, VTP mesh and centerlines, SWC, Slicer markups (`graph`, `measure`, `export`), and an svZeroDSolver input (`solver`, `thalweg export --zero-d`: Poiseuille vessels, junctions, placeholder boundary conditions; a 1-D solver format is not written) | done | 1 in, 4 out |
+| `vmtk*reader`, `vmtk*writer` | In: a ranked store via rankfield (`store`), or a labelmap or signed distance image (NIfTI, NRRD, MetaImage, Slicer `.seg.nrrd` names; the `volumes` extra: SimpleITK) or a DICOM SEG (segments by label, overlapping allowed; the `dicom` extra: highdicom) in degraded mode (`volume`). Out: `.thalweg.json`, Parquet tables, VTP mesh and centerlines, SWC, Slicer markups (`graph`, `measure`, `export`), and an svZeroDSolver input (`solver`, `thalweg export --zero-d`: Poiseuille vessels, junctions, placeholder boundary conditions; a 1-D solver format is not written) | done | 1 in, 4 out |
 
 ## What thalweg adds that vmtk lacks
 

@@ -25,6 +25,7 @@ dependencies = [
 torch = ["torch>=2.7"]
 tables = ["pyarrow>=15"]
 volumes = ["SimpleITK>=2.3"]
+dicom = ["highdicom>=0.23"]
 test = ["pytest>=8"]
 
 [project.scripts]

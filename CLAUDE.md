@@ -37,7 +37,7 @@ exactly (tests marked `data`).
 
 ## Environments
 
-- thalweg itself: `uv sync --extra test --extra tables --extra volumes` in the repo (its own `.venv`, Python
+- thalweg itself: `uv sync --extra test --extra tables --extra volumes --extra dicom` in the repo (its own `.venv`, Python
   3.12); `uv run pytest` (data tests skip without `~/tmp/data/vessels`), `uv run thalweg ...`.
 - Research scripts: **haversack's venv**, from `research/vessels/`:
   `../../../haversack/.venv/bin/python script.py [RUN]`. Never a bare `python3` (Homebrew's).
