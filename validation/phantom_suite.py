@@ -1,6 +1,6 @@
 """Phase 5 validation: analytic tube phantoms with known truth, through thalweg's own pipeline.
 
-    uv run python validation/phantom_suite.py [--spacing 0.7] [--out results.json]
+    uv run python validation/phantom_suite.py [--spacing 0.7] [--oblique] [--out results.json]
 
 Every phantom is a margin field built from capsule chains (tests/phantoms.py): known centerline,
 radius, ends, junctions and branching angles. For each, the field is traced
@@ -17,9 +17,11 @@ and scored:
 Phantoms: Y bifurcations at 30/60/90 degrees, a trifurcation, a tapered branch, a curved (arc)
 tube, a flattened (elliptic) tube, a closed loop (torus: the tracer builds trees, so the loop's
 presence is checked in the field topology instead), two tubes in contact, and a thin tube (radius
-0.8 voxel, diameter 1.6 voxels). The round tubes are axis-aligned (their axes on lattice lines):
-the ridge refinement's quantization reads best-case here. Numbers go to stdout and optionally JSON;
-nothing here asserts - tests/ does that for the cases that must hold.
+0.8 voxel, diameter 1.6 voxels). By default the round tubes are axis-aligned (their axes on
+lattice lines), the best case; ``--oblique`` turns every phantom by a random rotation, shifts it
+by a fraction of a voxel and samples it on an anisotropic 0.62 x 0.7 x 0.8 mm grid, and scores the
+trace turned back. Sections are also scored against the TRUE diameter. Numbers go to stdout
+and optionally JSON; nothing here asserts - tests/ does that for the cases that must hold.
 """
 from __future__ import annotations
 
@@ -48,6 +50,28 @@ def field_of(dist_fn, lo, hi, spacing):
     idx = np.stack(np.meshgrid(*[np.arange(s) for s in shape], indexing="ij"), -1).reshape(-1, 3)
     X = np.asarray(lo) + idx * spacing
     d = dist_fn(X)
+    return np.clip(d * SLOPE, -CLIP, CLIP).astype(np.float32).reshape(shape), geo
+
+
+# the oblique setting: the phantom turned by Q and shifted by SHIFT in world space, on an anisotropic
+# grid whose lattice lines no phantom axis follows (Y = (X - SHIFT) @ Q maps world X to phantom Y)
+Q = np.linalg.qr(np.random.default_rng(7).normal(size=(3, 3)))[0]
+SHIFT = np.array([0.137, -0.291, 0.418])
+OBLIQUE_SPACING = (0.62, 0.7, 0.8)
+
+
+def field_oblique(dist_fn, lo, hi, spacing=OBLIQUE_SPACING):
+    """The phantom (defined on [lo, hi] in its own frame) sampled on an anisotropic world grid
+    covering it after the turn."""
+    corners = np.array([[x, y, z] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
+    world = corners @ Q.T + SHIFT
+    wlo, whi = world.min(0), world.max(0)
+    sp = np.asarray(spacing, float)
+    shape = tuple(int(np.ceil((b - a) / s)) + 1 for a, b, s in zip(wlo, whi, sp))
+    geo = Geometry(shape=shape, directions=tuple(tuple(r) for r in np.diag(sp)), origin=tuple(wlo))
+    idx = np.stack(np.meshgrid(*[np.arange(s) for s in shape], indexing="ij"), -1).reshape(-1, 3)
+    X = wlo + idx * sp
+    d = dist_fn((X - SHIFT) @ Q)
     return np.clip(d * SLOPE, -CLIP, CLIP).astype(np.float32).reshape(shape), geo
 
 
@@ -123,8 +147,11 @@ def contact(gap=-0.3, r=1.5):
                       deflections=[])
 
 
-def score(name, m, geo, truth, spacing):
+def score(name, m, geo, truth, spacing, oblique=False):
     out = dict(phantom=name)
+    def to_phantom(P):
+        P = np.asarray(P, float)
+        return (P - SHIFT) @ Q if oblique else P
     ncomp_idx = field_edges(m)
     ncomp, _ = components(len(ncomp_idx[0]), ncomp_idx[1], ncomp_idx[2])
     out["field_components"] = int(ncomp)
@@ -135,9 +162,10 @@ def score(name, m, geo, truth, spacing):
     T = medial.trace(m, geo)
     nodes, edges, pos, rad, s = graph_from_tree(T, name, m, geo, Source(), {"graph": "field"})
     g = TubeGraph(structures=[s], nodes=nodes, edges=edges, points=Points(position=pos, radius=rad))
-    ends = np.array([n.position for n in g.nodes if n.kind in ("tip", "truncated")]
-                    + [n.position for n in g.nodes if n.kind == "root" and sum(
-                        1 for e in g.edges if n.id in (e.start_node, e.end_node)) == 1])
+    deg = g.degree()
+    ends = to_phantom(np.array([n.position for n in g.nodes
+                                if n.kind in ("tip", "truncated") or (n.kind == "root" and deg[n.id] == 1)])
+                      .reshape(-1, 3))
     out["traced_ends"] = len(ends)
     out["traced_junctions"] = sum(n.kind == "junction" for n in g.nodes)
     if "ends" in truth:
@@ -147,7 +175,7 @@ def score(name, m, geo, truth, spacing):
         d = np.linalg.norm(te[:, None] - ends[None], axis=2).min(1) if len(ends) else np.full(len(te), np.inf)
         out["end_error_mm_max"] = round(float(d.max()), 3)
     if "axes" in truth:
-        P, R = g.positions(), g.radii()
+        P, R = to_phantom(g.positions()), g.radii()
         segs = truth["axes"]
         dist = np.min([_seg_dist(P, a, b) for a, b, *_ in segs], axis=0)
         keyp = np.array([*truth.get("ends", []), *truth.get("junctions", [])], float).reshape(-1, 3)
@@ -165,6 +193,16 @@ def score(name, m, geo, truth, spacing):
           if r.get("equivalent_diameter_mm")]
     if eq:
         out["equivalent_diameter_over_traced_diameter"] = round(float(np.median(eq)), 3)
+    if "axes" in truth and "semi_axes" not in truth:              # sections against the TRUE diameter
+        true_eq = []
+        for r in rows:
+            if not r.get("equivalent_diameter_mm") or not r.get("shape_reliable"):
+                continue
+            p = to_phantom(g.edge_points(r["edge"]))
+            mid = p[len(p) // 2][None]
+            true_eq.append(r["equivalent_diameter_mm"] / (2 * _true_radius(mid, truth["axes"])[0]))
+        if true_eq:
+            out["equivalent_diameter_over_true_diameter"] = round(float(np.median(true_eq)), 3)
     if "semi_axes" in truth:
         a, b = truth["semi_axes"]
         ar = [r["aspect_ratio"] for r in rows if r.get("aspect_ratio")]
@@ -174,6 +212,8 @@ def score(name, m, geo, truth, spacing):
         out["feret_mm"] = ([round(float(np.median([x[0] for x in mf])), 3),
                             round(float(np.median([x[1] for x in mf])), 3)] if mf else None)
         out["true_feret_mm"] = [2 * b, 2 * a]
+        areas = [r["area_mm2"] for r in rows if r.get("area_mm2")]
+        out["area_over_true"] = round(float(np.median(areas)) / (np.pi * a * b), 3) if areas else None
     if truth.get("deflections"):
         got = sorted(r["deflection_deg"] for r in rows
                      if r.get("deflection_deg") is not None and r["start_kind"] == "junction")
@@ -208,8 +248,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--spacing", type=float, default=0.7)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--oblique", action="store_true",
+                    help="turn every phantom off the lattice onto an anisotropic 0.62 x 0.7 x 0.8 mm grid")
     a = ap.parse_args()
     sp = a.spacing
+    def make(f, lo, hi):
+        return field_oblique(f, lo, hi) if a.oblique else field_of(f, lo, hi, sp)
     cases = []
     for ang in (30, 60, 90):
         cases.append((f"y{ang}", *y_phantom(ang)))
@@ -222,16 +266,16 @@ def main():
     for name, segs, truth in cases:
         pts = np.concatenate([[s[0], s[1]] for s in segs]).astype(float)
         rmax = max(max(s[2], s[3]) for s in segs)
-        m, geo = field_of(chain_distance(segs), pts.min(0) - rmax - 4, pts.max(0) + rmax + 4, sp)
-        results.append(score(name, m, geo, truth, sp))
+        m, geo = make(chain_distance(segs), pts.min(0) - rmax - 4, pts.max(0) + rmax + 4)
+        results.append(score(name, m, geo, truth, sp, a.oblique))
         print(json.dumps(results[-1]))
     f, truth = elliptic()
-    m, geo = field_of(f, (-4, -7, -5), (44, 7, 5), sp)
-    results.append(score("elliptic", m, geo, truth, sp))
+    m, geo = make(f, (-4, -7, -5), (44, 7, 5))
+    results.append(score("elliptic", m, geo, truth, sp, a.oblique))
     print(json.dumps(results[-1]))
     f, truth = torus()
-    m, geo = field_of(f, (-18, -18, -6), (18, 18, 6), sp)
-    results.append(score("torus", m, geo, truth, sp))
+    m, geo = make(f, (-18, -18, -6), (18, 18, 6))
+    results.append(score("torus", m, geo, truth, sp, a.oblique))
     print(json.dumps(results[-1]))
     if a.out:
         Path(a.out).write_text(json.dumps(results, indent=1))

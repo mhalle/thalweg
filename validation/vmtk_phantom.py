@@ -10,7 +10,9 @@ On the MSB-02664 subtree the two methods agree to ~0.1 mm for radius < 2.5 mm bu
                                                               # thalweg with N ridge passes (default 1)
 
 Phantoms (0.7 mm grid, slope 10.6 logit/mm): Y bifurcations with a wide trunk (r 3, 5 and 8 mm)
-and daughters at 60 degrees, and a wide arc (r 5 mm, curvature radius 30 mm). vmtk sees the
+and daughters at 60 degrees, a wide arc (r 5 mm, curvature radius 30 mm), and two flattened
+tubes (elliptic sections, semi-axes 3 x 1.5 and 4.5 x 1.5 mm): the inscribed radius there is the
+minor semi-axis, 1.5 mm, which both methods should read. vmtk sees the
 field's zero set (marching cubes at 0, unsmoothed - as in the research comparisons), seeded at
 the true ends; thalweg traces the field. Scores: distance from each method's points to the true
 axis, away from ends and the junction (median, p95), and radius error there.
@@ -34,6 +36,9 @@ def phantoms():
         out[f"y_r{int(r0)}"] = (segs, truth)
     segs, truth = PS.arc(radius_of_curvature=30.0, r=5.0, sweep_deg=120)
     out["arc_r5"] = (segs, truth)
+    for a, b in ((3.0, 1.5), (4.5, 1.5)):                 # flattened tubes: semi-axes a x b, a/b 2 and 3
+        f, truth = PS.elliptic(a=a, b=b, L=40.0)
+        out[f"ellipse_{a:g}x{b:g}"] = (f, truth)
     return out, PS
 
 
@@ -43,9 +48,14 @@ def prep():
     OUT.mkdir(parents=True, exist_ok=True)
     ph, PS = phantoms()
     for name, (segs, truth) in ph.items():
-        pts = np.concatenate([[s[0], s[1]] for s in segs]).astype(float)
-        rmax = max(max(s[2], s[3]) for s in segs)
-        m, geo = PS.field_of(PS.chain_distance(segs), pts.min(0) - rmax - 4, pts.max(0) + rmax + 4, 0.7)
+        if callable(segs):                                 # an elliptic tube: a field function, its axis
+            f, segs = segs, truth["axes"]
+            a, b = truth["semi_axes"]
+            m, geo = PS.field_of(f, (-4.0, -a - 4, -b - 4), (44.0, a + 4, b + 4), 0.7)
+        else:
+            pts = np.concatenate([[s[0], s[1]] for s in segs]).astype(float)
+            rmax = max(max(s[2], s[3]) for s in segs)
+            m, geo = PS.field_of(PS.chain_distance(segs), pts.min(0) - rmax - 4, pts.max(0) + rmax + 4, 0.7)
         v, f, _, _ = marching_cubes(np.pad(m, 1, constant_values=-8.0), level=0.0)
         ends = np.asarray(truth["ends"], float)
         np.savez(OUT / f"{name}.npz", verts=to_world(geo, v - 1.0), faces=f, source=ends[0], targets=ends[1:],

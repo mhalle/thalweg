@@ -5,33 +5,52 @@ ports reproduce vmtk's own output (see `docs/port-plan.md`). This document recor
 behaves on inputs it was not tuned on. Numbers are rough (one machine, one session). The scripts
 live in `validation/`.
 
-## 1. Analytic phantoms (`validation/phantom_suite.py`, 0.7 mm grid, 3 s)
+## 1. Analytic phantoms (`validation/phantom_suite.py [--oblique]`, a few seconds each)
 
 Margin fields built from capsule chains with a known axis, radius, ends and angles; logit slope
-10.6 / mm, clipped at ±8, as in a real store.
+10.6 / mm, clipped at ±8, as in a real store. Each phantom is traced with the defaults (four ridge
+passes) on two grids:
 
-| Phantom | Ends (traced / true) | Junctions | Axis error median / p95 (mm) | Radius error median / p95 (mm) | Other |
-|---|---|---|---|---|---|
-| Y, 30° | 3 / 3 | 1 / 1 | 0.035 / 0.080 | 0.030 / 0.069 | deflection 15.3, 15.9 (true 15, 15) |
-| Y, 60° | 3 / 3 | 1 / 1 | 0.022 / 0.100 | 0.026 / 0.091 | deflection 29.7, 30.1 (true 30, 30) |
-| Y, 90° | 3 / 3 | 1 / 1 | 0.055 / 0.072 | 0.050 / 0.062 | deflection 45.0, 45.0 (true 45, 45) |
-| Trifurcation | 4 / 4 | 1 / 1 | 0.050 / 0.071 | 0.042 / 0.067 | deflection 36.6 to 39.5 (true 36.9) |
-| Tapered (3 → 1 mm) | 2 / 2 | 0 / 0 | 0.000 / 0.000 | 0.006 / 0.015 | |
-| Arc (radius of curvature 15 mm, r 1.5) | 2 / 2 | 0 / 0 | 0.104 / 0.120 | 0.095 / 0.108 | |
-| Thin (r = 0.8 voxel) | 2 / 2 | 0 / 0 | 0.127 / 0.127 | 0.069 / 0.069 | |
-| Elliptic (semi-axes 3 × 1.2 mm) | **24 / 2** | **11 / 0** | 0.269 / 2.302 | n/a | aspect ratio 0.393 (true 0.40); Feret 2.36 / 5.76 (true 2.4 / 6.0) |
-| Two tubes in contact (0.3 mm overlap) | **13 / 4** | **10 / 0** | 0.141 / 1.005 | 0.128 / 0.537 | one field component |
-| Torus | 2 (a tree) | 0 | n/a | n/a | field loops 1 (true 1) |
+- **on the lattice**: 0.7 mm isotropic, the phantom's axes on lattice lines (the best case);
+- **oblique**: the same phantom turned by a random rotation and shifted by a fraction of a voxel,
+  on an anisotropic 0.62 × 0.7 × 0.8 mm grid, so no axis follows the lattice; scored after
+  turning the trace back.
+
+"Sections" is the branch table's equivalent diameter over the TRUE diameter at the edge's middle
+(edges whose shape is reliable). Each pair of cells is on the lattice / oblique.
+
+| Phantom | Ends, junctions (traced / true), lattice | Oblique | Axis error median / p95 (mm), lattice | Oblique | Radius error median / p95 (mm), lattice | Oblique | Other, lattice | Oblique |
+|---|---|---|---|---|---|---|---|---|
+| Y, 30° | 3 / 3, 1 / 1 | 3 / 3, 1 / 1 | 0.005 / 0.012 | 0.007 / 0.018 | 0.003 / 0.015 | 0.013 / 0.020 | sections 0.989; deflection 15.6, 16.0 | sections 0.988; deflection 7.4, 7.7 |
+| Y, 60° | 3 / 3, 1 / 1 | 3 / 3, 1 / 1 | 0.002 / 0.016 | 0.007 / 0.016 | 0.004 / 0.009 | 0.014 / 0.019 | sections 0.989; deflection 29.9, 30.1 | sections 0.991; deflection 30.1, 30.2 |
+| Y, 90° | 3 / 3, 1 / 1 | 3 / 3, 1 / 1 | 0.003 / 0.006 | 0.007 / 0.015 | 0.006 / 0.008 | 0.013 / 0.019 | sections 0.989; deflection 45.0, 45.0 | sections 0.989; deflection 45.0, 45.1 |
+| Trifurcation | 4 / 4, 1 / 1 | 4 / 4, 2 / 1 | 0.004 / 0.014 | 0.008 / 0.018 | 0.008 / 0.014 | 0.011 / 0.020 | sections 0.987; deflection 37.0, 37.2, 38.7 | sections 0.986; no reliable angle |
+| Tapered (3 → 1 mm) | 2 / 2, 0 / 0 | 2 / 2, 0 / 0 | 0.000 / 0.000 | 0.009 / 0.022 | 0.011 / 0.030 | 0.016 / 0.026 | sections 0.960 | sections 0.954 |
+| Arc (radius of curvature 15 mm, r 1.5) | 2 / 2, 0 / 0 | 2 / 2, 0 / 0 | 0.011 / 0.026 | 0.011 / 0.023 | 0.010 / 0.017 | 0.010 / 0.021 | sections 0.982 | sections 0.982 |
+| Two tubes in contact (0.3 mm overlap) | 13 / 4, 10 / 0 | 9 / 4, 7 / 0 | 0.003 / 0.836 | 0.022 / 0.454 | 0.024 / 0.351 | 0.009 / 0.369 |  | sections 1.391 |
+| Thin (r 0.56 mm = 0.8 of the 0.7 mm voxel) | 2 / 2, 0 / 0 | 2 / 2, 0 / 0 | 0.000 / 0.000 | 0.038 / 0.083 | 0.090 / 0.090 | 0.011 / 0.022 | sections 0.845 | sections 0.755 |
+| Elliptic (semi-axes 3 × 1.2 mm) | 24 / 2, 11 / 0 | 14 / 2, 12 / 0 | 0.289 / 2.136 | 0.463 / 1.913 | n/a | n/a | aspect 0.376, Feret 2.35 / 6.08, area 0.936 | aspect 0.351, Feret 2.39 / 6.89, area 1.121 |
+| Torus | 2 / –, 0 / – | 2 / –, 0 / – | n/a | n/a | n/a | n/a | field loops 1 | field loops 1 |
 
 ### What this says
 
-- **Round tubes are traced right.**
-  - Topology is exact on every round phantom, including a trifurcation and a tube of radius
-    0.8 voxel (diameter 1.6 voxels).
-  - The axis is within ~0.1 mm and the radius within ~0.1 mm.
-  - Deflection angles are within 1° at 30–90° and within 2.6° on the trifurcation. The chords
-    start at arc length r_J, outside the junction's ball. The first version started them at the
-    junction point and read wide angles low: 73.6° for a T junction, 59° for 70°.
+- **Round tubes are traced right, off the lattice too.**
+  - Topology is exact on every round phantom on both grids, including a tube of radius 0.8 voxel.
+    Oblique, the trifurcation traces as two close bifurcations (2 junctions for 1), as vmtk
+    splits one too.
+  - The axis is within 0.01 mm (median) on the lattice and 0.04 mm oblique; the radius within
+    0.02 mm on both (the thin tube reads 0.09 mm small on the lattice, 0.01 oblique).
+  - **Sections read 1–2 % small against the true diameter** on both grids (0.982–0.991 on round
+    tubes; 0.95–0.96 on the tapered one, whose median station lies where it is thinnest over a
+    3 mm window; 0.76–0.85 on the thin tube, a section 1.6 voxels across).
+  - Deflection angles are within 1° at 60° and 90° on both grids and at 30° on the lattice. The
+    chords start at arc length r_J, outside the junction's ball (the first version started them
+    at the junction point and read wide angles low: 73.6° for a T junction, 59° for 70°).
+  - **At 30° the angle depends on where the junction lands.** Oblique, the tracer places the
+    30° Y's junction 5.7 mm upstream of the true branch point (the daughters' tubes overlap for
+    that long), and the deflection measured from there reads 7.4° and 7.7° for 15°. On the
+    lattice the junction lands 0.8 mm off and the angles read right. For shallow bifurcations
+    of overlapping tubes the junction's position, and so the angle, is not well determined.
 - **Flattened lumens break the spur rule.**
   - The tracer keeps a terminal branch longer than 2 × (radius at its junction) + 1 mm. In a flat
     lumen that radius is half the *depth*, so side lobes across the *width* survive as branches:
@@ -194,6 +213,18 @@ radius error median, in mm:
 | Y, trunk r 5 mm | 0.002 / −0.006 | 0.105 / −0.108 | 0.028 / −0.027 | 0.007 / −0.012 | 0.003 / −0.009 |
 | Y, trunk r 8 mm | 0.001 / −0.004 | 0.102 / −0.102 | 0.026 / −0.025 | 0.007 / −0.010 | 0.002 / −0.007 |
 | Arc, r 5 mm | 0.003 / −0.006 | 0.101 / −0.100 | 0.025 / −0.029 | 0.006 / −0.010 | 0.003 / −0.007 |
+| Flattened, semi-axes 3 × 1.5 mm | 0.260 / +0.062 | 0.269 / −0.056 | | | 0.258 / +0.060 |
+| Flattened, semi-axes 4.5 × 1.5 mm | 0.221 / +0.073 | **1.005** / −0.087 | | | **1.020** / +0.030 |
+
+**On flattened tubes the axis is ill-defined, and thalweg's wanders.** The inscribed radius of a
+flat section is its minor semi-axis (1.5 mm here); both methods read it within 0.09 mm. At 2:1
+both put the centerline 0.26 mm from the axis - the same place, so it is the sampled field's
+(a 3 mm-deep section on a 0.7 mm grid), not either method. At 3:1 vmtk stays within 0.22 mm but
+thalweg's centerline wanders across the flat width, a median 1.0 mm and up to 3.8 mm from the
+axis: a flat lumen's medial set is a sheet, and the tracer's minimal path through it is not
+held to its middle as vmtk's Voronoi-based path is (the same cause as the comb of side branches
+in §1). Centerlines of flat tubes - esophagus, colon, compressed veins - need a rule that keeps
+the path at the middle of the width; this is the tube track's open item.
 
 **With one pass, vmtk is more accurate on clean round tubes.** The cause is thalweg's ridge
 refinement:
@@ -610,8 +641,10 @@ a steady inflow at the root and one resistance per outlet as placeholders.
 
 - **Thin-caliber ground truth.** The ~1 mm radius floor belongs to the model; checking the
   method below it needs a phantom scan or a gated high-resolution acquisition.
-- **vmtk on non-round phantoms.** Not motivated by the MSB wide-vessel gap (a prep artifact,
-  §4), but still open.
-- **Phantoms off the lattice and on anisotropic grids,** scoring sections against the truth
-  (the suite's round tubes are axis-aligned; its equivalent diameter is scored against the traced
-  radius, and reads 1–2 % small against the true one).
+- **Flat tubes.** vmtk against thalweg on flattened phantoms is now measured (§4): the radius
+  agrees, the centerline of a 3:1 tube does not stay at its middle. Fixing that is the tube
+  track's work, not validation.
+- **Off the lattice** (§1, `--oblique`): done for every phantom; sections against the true
+  diameter read 1–2 % small on round tubes on both grids.
+- **Degraded input** (§5k) is checked on one phantom and one case's own labelmap, not on
+  labelmaps from other tools.
