@@ -31,11 +31,12 @@ nodes) :func:`branch_table` reports:
   False when a chord could not reach its full length; an angle is None when a path does not
   reach 0.5 mm beyond the junction's ball at all (no direction is defined there).
 
-The root is the structure's deepest point, not its inlet (docs/format/thalweg-json.md): the end
-of an edge leaving the root is typed ``tip`` even where it is the inlet (the arteries' pulmonary
-trunk), so it counts as a tip and gets Strahler order 1, and a root that lands on a bifurcation
-leaves that bifurcation without a junction node (no angles there). Choosing the inlet as the
-root is deferred (docs/port-plan.md).
+Everything here follows the tree's root. By default that is the structure's inlet
+(:func:`thalweg.centerlines.inlet`: the pulmonary trunk's end for the arteries, the trachea for
+the airways), so depth, order and angles run from where the tree enters. With
+``root="deepest"`` (the research reference) the root lies inside the trunk: the inlet then counts
+as a tip with Strahler order 1, and a root that lands on a bifurcation leaves that bifurcation
+without a junction node (no angles there).
 
 Sections near a junction cut through the neighboring branches too, so stations within the
 junction's radius + 1 mm of a junction end are left out (an edge shorter than that has none).

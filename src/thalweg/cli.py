@@ -36,6 +36,9 @@ def _method_options(f):
                      help="Coarse-to-fine ridge refinement passes. 4 (the default) removes the one-pass "
                           "refinement's radius deficit (0.03-0.07 mm) and matches vmtk; 1 is the research "
                           "reference, ~1.9x faster to trace. docs/validation.md.")(f)
+    f = click.option("--root", type=click.Choice(["inlet", "deepest"]), default="inlet", show_default=True,
+                     help="Root each tree at its inlet (the widest end, or one running off the field) or at "
+                          "the tracer's deepest point (the research reference).")(f)
     f = click.option("--prune", type=click.Choice(["length", "wall"]), default="length", show_default=True,
                      help="Spur rule: 'length' (the reference) or 'wall' (also drops terminal branches that "
                           "do not protrude beyond the parent's wall: flat-lumen lobes, and 9-26 % of vessel "
@@ -72,7 +75,7 @@ def structures(store):
               help="Connectivity: decided by the field, or the 26-connected labelmap (comparison only).")
 @click.option("-q", "--quiet", is_flag=True, help="No progress messages.")
 @_method_options
-def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune):
+def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, root):
     """Trace seed-free centerline trees of STORE's structures into one graph file.
 
     Only the largest connected piece of each structure is traced; the others are listed in the
@@ -93,7 +96,7 @@ def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune):
         for n in names:
             log(f"{n}: decoding and tracing")
             graphs.append(centerline_graph(st, n, part=part, graph=graph, ridge_passes=ridge_passes,
-                                           prune=prune, log=lambda m, n=n: log(f"{n}: {m}")))
+                                           prune=prune, root=root, log=lambda m, n=n: log(f"{n}: {m}")))
         g = graphs[0] if len(graphs) == 1 else combine(graphs)
         g.write(output)
     except ThalwegError as e:
@@ -156,7 +159,7 @@ def table(graph, store, output, names, stations, step):
 @click.option("--no-stations", is_flag=True, help="Skip the per-station profile table.")
 @click.option("-q", "--quiet", is_flag=True, help="No progress messages.")
 @_method_options
-def run(store, output, names, step, no_stations, quiet, ridge_passes, prune):
+def run(store, output, names, step, no_stations, quiet, ridge_passes, prune, root):
     """The batch product for one case: graph.thalweg.json.gz, branches.parquet, stations.parquet,
     summary.json and qc.json in OUTPUT."""
     from pathlib import Path
@@ -177,7 +180,7 @@ def run(store, output, names, step, no_stations, quiet, ridge_passes, prune):
         for n in names:
             case.store.ref(n)                                  # every structure exists, before any output
         res = case.run(names, step=step, stations=not no_stations, log=log, ridge_passes=ridge_passes,
-                       prune=prune)
+                       prune=prune, root=root)
     except ThalwegError as e:
         raise click.ClickException(str(e))
     out.mkdir(parents=True, exist_ok=True)

@@ -40,8 +40,13 @@ migration; 1.0 will be the first stable version.
     research reference) and `prune` (default `length`).
   - `statistics` records counts from the tracer and the graph (below).
 - **Nodes** have one of these kinds:
-  - `root`: where the tracer started, the deepest point of the structure (not necessarily an
-    end: the arteries' root lies inside the main pulmonary artery);
+  - `root`: where the tree starts. By default (`parameters.root: "inlet"`) this is the
+    structure's inlet: the widest end running off the field (a trachea, a trunk leaving the crop),
+    or failing that the end of the widest terminal edge (the pulmonary trunk; the veins' atrial
+    end). `attributes.end` says what the node was (`tip` or `truncated`; a truncated one also has
+    `on_grid_boundary`). With `root: "deepest"` it is the tracer's own start, the deepest point,
+    which need not be an end: the arteries' deepest point lies inside the pulmonary trunk (the
+    research reference). `statistics.deepest_point` records that point either way;
   - `junction`: degree 3 or more;
   - `tip`: a free end, degree 1;
   - `truncated`: an end where the structure runs off the edge of the source field, degree 1.

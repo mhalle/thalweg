@@ -111,15 +111,20 @@ def graph_from_tree(tree: medial.MedialTree, name: str, m: np.ndarray, geometry,
 
 def centerline_graph(store: FieldStore | str, name: str, *, part: int | None = None, graph: str = "field",
                      scale: float = medial.SCALE, const: float = medial.CONST, eps: float = medial.EPS,
-                     ridge_passes: int = 4, prune: str = "length", margin=None, log=None) -> TubeGraph:
+                     ridge_passes: int = 4, prune: str = "length", root: str = "inlet", margin=None,
+                     log=None) -> TubeGraph:
     """Trace structure ``name`` of a ranked store into a one-structure :class:`TubeGraph`.
 
     ``graph``: connectivity, ``"field"`` (decided by the interpolant) or ``"voxel"`` (the argmax
     labelmap, 26-connected; comparison only). ``ridge_passes`` and ``prune``: see
     :func:`thalweg.kernel.medial.trace` (``ridge_passes=1`` reproduces the research reference; the
-    default is 4). ``margin``: an
-    already decoded ``(margin, geometry, ref)`` from :meth:`FieldStore.margin`, to skip the decode
-    (``thalweg.case.Case`` keeps them). Kernel errors come back as ThalwegError."""
+    default is 4). ``root``: ``"inlet"`` (the default) re-roots the traced tree at its inlet
+    (:func:`inlet`); ``"deepest"`` keeps the tracer's root, its deepest point (the research
+    reference). ``margin``: an already decoded ``(margin, geometry, ref)`` from
+    :meth:`FieldStore.margin`, to skip the decode (``thalweg.case.Case`` keeps them). Kernel errors
+    come back as ThalwegError."""
+    if root not in ("inlet", "deepest"):
+        raise ThalwegError(f"root must be 'inlet' or 'deepest'; got {root!r}")
     st = open_store(store) if not isinstance(store, FieldStore) else store
     m, geometry, ref = margin if margin is not None else st.margin(name, part)
     mask = st.labelmap_mask(ref) if graph == "voxel" else None
@@ -134,10 +139,13 @@ def centerline_graph(store: FieldStore | str, name: str, *, part: int | None = N
                               directions=tuple(tuple(map(float, r)) for r in geometry.directions),
                               origin=tuple(map(float, geometry.origin))))
     params = dict(connectivity=graph, cover_scale=scale, cover_constant_mm=const, cost_epsilon_mm=eps,
-                  ridge_passes=ridge_passes, prune=prune)
+                  ridge_passes=ridge_passes, prune=prune, root=root)
     nodes, edges, pos, rad, structure = graph_from_tree(tree, name, m, geometry, source, params)
-    return TubeGraph(created_by=f"thalweg {__version__}", structures=[structure], nodes=nodes, edges=edges,
-                     points=Points(position=pos, radius=rad))
+    g = TubeGraph(created_by=f"thalweg {__version__}", structures=[structure], nodes=nodes, edges=edges,
+                  points=Points(position=pos, radius=rad))
+    if root == "inlet" and g.edges:
+        g = reroot(g, name, inlet(g, name))
+    return g
 
 
 def combine(graphs: list[TubeGraph]) -> TubeGraph:
@@ -185,3 +193,93 @@ def check_source(structure, geometry, ref) -> None:
                            f"{tuple(round(v, 3) for v in src.grid.origin)}, "
                            f"store grid {tuple(geometry.shape)} at "
                            f"{tuple(round(float(v), 3) for v in geometry.origin)})")
+
+
+def end_width(graph: TubeGraph, node: int) -> float:
+    """How wide the tube is that ends at ``node``: the 75th percentile of the traced radius along the
+    node's terminal edge. Not the radius at the end itself - a tube narrows into its rounded end,
+    and where a crop cuts a wide trunk (the pulmonary trunk leaving a lung crop) its last
+    millimeters can read narrower than a side twig's."""
+    for e in graph.edges:
+        if node in (e.start_node, e.end_node):
+            r = graph.edge_radius(e)
+            r = r[r > 0]
+            return float(np.percentile(r, 75)) if len(r) else 0.0
+    return 0.0
+
+
+def inlet(graph: TubeGraph, structure: str) -> int:
+    """The structure's inlet: where the tree enters, the node a rooted tree should start from.
+
+    Among its ends (degree-1 nodes): the widest of those that run off the field (``truncated``, or
+    a degree-1 root ``on_grid_boundary``) - a trachea or a pulmonary trunk leaving the crop - and if
+    none runs off the field, the widest end. Width is :func:`end_width`. The tracer's own root is
+    its deepest point, which on a lung artery tree lies inside the pulmonary trunk, not at an end."""
+    deg = graph.degree()
+    ends = [nd for nd in graph.nodes if nd.structure == structure and deg[nd.id] == 1]
+    if not ends:
+        return graph.structure(structure).roots[0]
+    off = [nd for nd in ends if nd.kind == "truncated" or nd.attributes.get("on_grid_boundary")]
+    pool = off or ends
+    return max(pool, key=lambda nd: end_width(graph, nd.id)).id
+
+
+def reroot(graph: TubeGraph, structure: str, node: int) -> TubeGraph:
+    """The structure re-rooted at ``node``: edges on the path from the old root to it are reversed
+    (their samples and point columns reversed in place), so every edge points away from the new
+    root. The new root keeps a record of what it was (``attributes.end``: ``tip`` or
+    ``truncated``); the old root takes the kind its degree gives. Counts in the structure's
+    statistics are recomputed."""
+    t = graph.tree(structure)
+    if node == t.root:
+        return graph
+    if graph.nodes[node].structure != structure:
+        raise ThalwegError(f"node {node} is not in {structure!r}")
+    path = []                                              # edges from the old root down to node
+    n = node
+    while n != t.root:
+        eid = t.parent[n]
+        path.append(eid)
+        n = graph.edges[eid].start_node
+    flip = set(path)
+    pos = list(graph.points.position)
+    rad = list(graph.points.radius)
+    cols = {k: list(v) for k, v in graph.points.columns.items()}
+    edges = []
+    for e in graph.edges:
+        if e.id in flip:
+            a, b = e.point_range
+            pos[a:b] = pos[a:b][::-1]
+            rad[a:b] = rad[a:b][::-1]
+            for v in cols.values():
+                v[a:b] = v[a:b][::-1]
+            e = e.model_copy(update={"start_node": e.end_node, "end_node": e.start_node})
+        edges.append(e)
+    deg = graph.degree()
+    nodes = []
+    for nd in graph.nodes:
+        if nd.id == node:
+            attrs = dict(nd.attributes, end=nd.kind)
+            if nd.kind == "truncated":
+                attrs["on_grid_boundary"] = True
+            nd = nd.model_copy(update={"kind": "root", "attributes": attrs})
+        elif nd.id == t.root:
+            kind = "tip" if deg[nd.id] == 1 else ("joint" if deg[nd.id] == 2 else "junction")
+            if kind == "tip" and nd.attributes.get("on_grid_boundary"):
+                kind = "truncated"
+            nd = nd.model_copy(update={"kind": kind, "attributes": {k: v for k, v in nd.attributes.items()
+                                                                     if k != "on_grid_boundary"}})
+        nodes.append(nd)
+    structures = []
+    for s in graph.structures:
+        if s.name == structure:
+            mine = [nd for nd in nodes if nd.structure == structure]
+            stats = dict(s.statistics, tips=sum(nd.kind == "tip" for nd in mine),
+                         truncated_ends=sum(nd.kind == "truncated" for nd in mine),
+                         junctions=sum(nd.kind == "junction" for nd in mine),
+                         joints=sum(nd.kind == "joint" for nd in mine),
+                         deepest_point=list(graph.nodes[t.root].position))
+            s = s.model_copy(update={"roots": [node], "statistics": stats})
+        structures.append(s)
+    return graph.model_copy(update={"nodes": nodes, "edges": edges, "structures": structures,
+                                    "points": Points(position=pos, radius=rad, columns=cols)})

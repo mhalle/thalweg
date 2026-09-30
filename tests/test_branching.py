@@ -51,7 +51,7 @@ def test_frames_follow_groups_on_the_case(vessels_data):
     from thalweg.centerlines import centerline_graph
     from cases import reference_source
     g = centerline_graph(vessels_data / "runs" / "C3N-00704_ctpa0625.lung_vessels.duckn.zip", "lung_arteries",
-                         ridge_passes=1)                         # the graph vmtk was fed
+                         ridge_passes=1, root="deepest")        # the graph vmtk was fed
     b = vmtk_branching(g, "lung_arteries", source=reference_source(g))
     h = annotate(g, "lung_arteries", b)
     bad = 0
@@ -85,7 +85,7 @@ def test_field_to_vmtk_groups_end_to_end(vessels_data, case_oracle):
     from thalweg.vmtk import Centerlines
     from cases import reference_source
     g = centerline_graph(vessels_data / "runs" / "C3N-00704_ctpa0625.lung_vessels.duckn.zip", "lung_arteries",
-                         ridge_passes=1)                         # the graph vmtk was fed
+                         ridge_passes=1, root="deepest")        # the graph vmtk was fed
     b = vmtk_branching(g, "lung_arteries", source=reference_source(g), vmtk_compatible=True)
     ref = Centerlines.from_npz(case_oracle["extract"])
     assert [len(c) for c in b.split.cells] == [len(c) for c in ref.cells]

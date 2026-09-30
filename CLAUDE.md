@@ -92,6 +92,9 @@ need the user's permission.
   processing is now ported to numpy (`thalweg.vmtk`, 2026-09-30), so vmtk runs only in the oracle
   script. Our field -> graph -> vmtk convention -> ported extractor reproduces vmtk's own groups
   exactly on the C3N-00704 subtree (`tests/test_branching.py`).
+- **Trees are rooted at their inlet by default (2026-09-30):** the widest end running off the
+  field, else the end of the widest terminal edge (`centerlines.inlet`, `reroot`); `--root deepest`
+  keeps the tracer's deepest point (the research reference, which the vmtk-comparison tests pin).
 - **Tracer defaults (decided 2026-09-30):** `ridge_passes=4` (coarse-to-fine radius refinement:
   removes a 0.03-0.07 mm radius deficit, matches vmtk, 1.85x trace time), `prune="length"` (the
   reference; `wall` is an option for flat lumens). `ridge_passes=1` is the research reference and

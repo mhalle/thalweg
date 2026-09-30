@@ -26,7 +26,7 @@ def test_subtree_matches_the_oracle_input(vessels_data, case_oracle):
     the oracle's input polylines and radii exactly."""
     from thalweg.centerlines import centerline_graph
     g = centerline_graph(vessels_data / "runs" / "C3N-00704_ctpa0625.lung_vessels.duckn.zip", "lung_arteries",
-                         ridge_passes=1)                         # the graph vmtk was fed
+                         ridge_passes=1, root="deepest")        # the graph vmtk was fed
     paths = to_vmtk(g, "lung_arteries", source=reference_source(g))
     ref = Centerlines.from_npz(case_oracle["input"])
     assert paths.centerlines.n_cells == ref.n_cells == 51
