@@ -23,7 +23,7 @@ migration; 1.0 will be the first stable version.
   "edges":  [ { "id": 0, "structure": "lung_arteries", "start_node": 0, "end_node": 1,
                 "point_range": [0, 57], "length_mm": 17.2,
                 "provenance": { "method": "field" },
-                "branch": 0, "generation": 0, "attributes": {} }, … ],
+                "tracer_branch": 0, "tracer_generation": 0, "attributes": {} }, … ],
   "points": { "position": [[x, y, z], …], "radius": [r, …],
               "columns": { "branch_group": [3, 3, …], … } }
 }
@@ -64,10 +64,11 @@ migration; 1.0 will be the first stable version.
     - `field`: connected in the model's field;
     - `voxel`: the 26-connected labelmap graph, kept for comparison;
     - `bridged`: a gap was closed, and the edge then carries `gap_mm` and `reason`.
-  - `branch` is the tracer's branch id.
-  - `generation` is the tracer's attachment depth: how many traced branches the edge's branch
-    hangs from. It is **not** the number of bifurcations to the root; the branch table's
-    `bifurcation_depth` is.
+  - `tracer_branch` is the tracer's branch the edge was cut from, and `tracer_generation` how
+    many tracer branches that branch hangs from. Both count from the tracer's deepest point and
+    are not changed when the tree is re-rooted at its inlet, so they describe how the tree was
+    traced, not its anatomy. The number of bifurcations to the root is the branch table's
+    `bifurcation_depth`; the table has no generation column.
 - **Points** are stored one column per quantity.
   - `position` and `radius` are always present. `radius` is the inscribed-ball radius in mm, and
     -1 where no inside point was found.

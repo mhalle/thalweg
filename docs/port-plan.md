@@ -107,7 +107,7 @@ tiers, ported after phase 5.
 These are carried in the data model from phase 1, not bolted on afterwards:
 
 - **Names.** Classes come from the model; points carry their lobe, and the branch table gives
-  each edge's lobe and generation.
+  each edge's lobe and bifurcation depth.
 - **Field topology.** Connectivity is decided by the interpolant, loops by the genus of the zero
   set, and artery–vein contacts stay separate.
 - **Intervals.** Radius and area carry the model's own ± interval.

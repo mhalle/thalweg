@@ -316,7 +316,7 @@ def test_swc_is_a_tree_of_the_graph(y, tmp_path):
 def test_swc_of_a_multigeneration_tree_with_a_truncated_end(tree2, tmp_path):
     from thalweg.export import write_swc
     _, _, g = tree2
-    assert any(nd.kind == "truncated" for nd in g.nodes) and max(e.generation for e in g.edges) >= 1
+    assert any(nd.kind == "truncated" for nd in g.nodes) and max(e.tracer_generation for e in g.edges) >= 1
     text = write_swc(g, "t", tmp_path / "t.swc").read_text()
     rows = np.array([[float(v) for v in ln.split()] for ln in text.splitlines() if not ln.startswith("#")])
     ids, parents = rows[:, 0].astype(int), rows[:, 6].astype(int)

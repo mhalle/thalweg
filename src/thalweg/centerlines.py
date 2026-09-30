@@ -106,8 +106,8 @@ def graph_from_tree(tree: medial.MedialTree, name: str, m: np.ndarray, geometry,
         n = len(pts)
         edges.append(Edge(id=sg["id"] + edge_offset, structure=name, start_node=sg["a"] + node_offset,
                           end_node=sg["b"] + node_offset, point_range=(at, at + n), length_mm=length,
-                          provenance=Provenance(method=method), branch=sg["branch"],
-                          generation=gen[sg["branch"]]))
+                          provenance=Provenance(method=method), tracer_branch=sg["branch"],
+                          tracer_generation=gen[sg["branch"]]))
         pos.extend(pts)
         rad.extend(rr)
         at += n

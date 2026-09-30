@@ -42,7 +42,7 @@
     "provenance": {
      "$ref": "#/$defs/Provenance"
     },
-    "branch": {
+    "tracer_branch": {
      "anyOf": [
       {
        "type": "integer"
@@ -52,10 +52,10 @@
       }
      ],
      "default": null,
-     "description": "the tracer's branch this edge belongs to",
-     "title": "Branch"
+     "description": "the tracer's branch this edge was cut from; the tracer starts at its deepest point, so this numbering does not follow a tree re-rooted at its inlet",
+     "title": "Tracer Branch"
     },
-    "generation": {
+    "tracer_generation": {
      "anyOf": [
       {
        "type": "integer"
@@ -65,8 +65,8 @@
       }
      ],
      "default": null,
-     "description": "the tracer's attachment depth: how many branches its branch hangs from (not the number of bifurcations between it and the root)",
-     "title": "Generation"
+     "description": "how many tracer branches that branch hangs from, counted from the tracer's deepest point (not the number of bifurcations between the edge and the root)",
+     "title": "Tracer Generation"
     },
     "attributes": {
      "additionalProperties": true,

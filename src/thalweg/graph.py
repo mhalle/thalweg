@@ -101,10 +101,12 @@ class Edge(_Model):
     point_range: tuple[int, int] = Field(description="[start, stop) rows of the point table")
     length_mm: float = Field(ge=0)
     provenance: Provenance
-    branch: int | None = Field(None, description="the tracer's branch this edge belongs to")
-    generation: int | None = Field(
-        None, description="the tracer's attachment depth: how many branches its branch hangs from (not "
-                          "the number of bifurcations between it and the root)")
+    tracer_branch: int | None = Field(
+        None, description="the tracer's branch this edge was cut from; the tracer starts at its deepest "
+                          "point, so this numbering does not follow a tree re-rooted at its inlet")
+    tracer_generation: int | None = Field(
+        None, description="how many tracer branches that branch hangs from, counted from the tracer's "
+                          "deepest point (not the number of bifurcations between the edge and the root)")
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 

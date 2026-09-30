@@ -4,7 +4,7 @@ A structure must be a tree rooted at its root with edges pointing away from it
 (:meth:`TubeGraph.tree`; a cycle is an error, not a hang). For every edge (a branch between two
 nodes) :func:`branch_table` reports:
 
-- **topology**: its end kinds; ``generation`` (the tracer's attachment depth, see the format);
+- **topology**: its end kinds;
   ``bifurcation_depth`` (junctions between the root and its start); ``strahler_order`` (a tip's
   edge 1; a parent takes the highest child order, plus one when two or more children share it;
   an edge ending at a ``truncated`` end - the structure runs on beyond the field - has no order,
@@ -142,7 +142,7 @@ def branch_table(graph: TubeGraph, structure: str, margin: np.ndarray | None = N
         rr = np.where(r > 0, r, 0.5)
         a_kind, b_kind = nodes[e.start_node].kind, nodes[e.end_node].kind
         row = dict(structure=structure, edge=e.id, start_node=e.start_node, end_node=e.end_node,
-                   start_kind=a_kind, end_kind=b_kind, generation=e.generation,
+                   start_kind=a_kind, end_kind=b_kind,
                    bifurcation_depth=depth[e.id], strahler_order=order[e.id],
                    provenance_method=e.provenance.method, length_mm=e.length_mm,
                    radius_mean_mm=float(pos.mean()) if len(pos) else None,
