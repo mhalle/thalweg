@@ -570,6 +570,25 @@ from a field that thalweg's test rebuilds exactly (a union of spheres along the 
 - **Straightened view**: a tube of radius 2 mm bent through a quarter circle straightens to
   centered disks of area π r² within 3 %, with arc length 10π mm and no twist between sections.
 
+## 5k. Labelmaps and distance images as input (degraded mode)
+
+`thalweg.volume.VolumeStore` reads a labelmap or a signed distance image (SimpleITK: the `volumes`
+extra) and gives each structure a field like the model's margin: the mask's signed distance in
+mm (the wall half a voxel out), times 10 logits/mm, clipped at ±8. Every verb runs on it.
+
+- **Geometry**: on an oblique, anisotropic grid every voxel's world point equals SimpleITK's.
+- **The Y phantom as a labelmap** (0.7 mm voxels): three branches, radii 0.15–0.3 mm below the
+  true 1.8, 2.2 and 3.0 mm - the inscribed ball of a staircase touches its inner corners. The
+  field of the same phantom reads 1.79, 2.20 and 3.01.
+- **C3N-00704, the store's own labelmap** (the argmax of its logits) against its ranked field:
+  airways 274 edges and 3,425 mm against 265 and 3,392 mm; arteries 1,066 and 10,466 mm against
+  1,064 and 10,360 mm. The centerlines lie a median 0.2 mm apart (90th percentile 0.6 mm), and the
+  labelmap's radius is a median 0.05 mm smaller. So a labelmap gives nearly the same tree, a
+  little rougher.
+- **What degraded mode cannot give**: the model's interval. The ±2 logit levels become ±0.2 mm
+  offsets of the wall - a convention, not an uncertainty. The graph's
+  `source.labeling_scheme` says `degraded:labelmap` or `degraded:sdf`.
+
 ## 6. Not yet validated
 
 - **Thin-caliber ground truth.** The ~1 mm radius floor belongs to the model; checking the

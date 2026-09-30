@@ -28,7 +28,7 @@ exactly (tests marked `data`).
   `deliverables.md` (proposed batch product: a 2–5 MB core package per case, opt-in extras, on-demand queries).
 - `src/thalweg/` — `kernel/` (numpy/scipy, no files or names), `vmtk/` (vmtk ports, numpy
   only), and the pipeline modules (store, centerlines, graph, adapters, branching, measure, lobes,
-  pairing, partition, wallmap, straighten, plausibility, statistics, case, export, cli). `tests/test_layering.py` enforces the split.
+  pairing, partition, wallmap, straighten, volume, plausibility, statistics, case, export, cli). `tests/test_layering.py` enforces the split.
 - `tests/` — `fixtures/vmtk_oracle/phantom/` (frozen vmtk output on a synthetic tree, in git);
   `oracle/vmtk_centerline_oracle.py` regenerates it and the case oracle
   (`$VESSELS_DATA/oracle/C3N-00704_ctpa0625/`) in the isolated vmtk env.
@@ -37,7 +37,7 @@ exactly (tests marked `data`).
 
 ## Environments
 
-- thalweg itself: `uv sync --extra test --extra tables` in the repo (its own `.venv`, Python
+- thalweg itself: `uv sync --extra test --extra tables --extra volumes` in the repo (its own `.venv`, Python
   3.12); `uv run pytest` (data tests skip without `~/tmp/data/vessels`), `uv run thalweg ...`.
 - Research scripts: **haversack's venv**, from `research/vessels/`:
   `../../../haversack/.venv/bin/python script.py [RUN]`. Never a bare `python3` (Homebrew's).

@@ -20,7 +20,8 @@ STDLIB = set(sys.stdlib_module_names) - {"sqlite3", "tkinter", "json", "gzip", "
 KERNEL_OK = {"numpy", "scipy", "skimage.measure", "torch", "rankfield.geometry"} | STDLIB
 VMTK_OK = {"numpy"} | STDLIB
 PIPELINE = {"store", "graph", "centerlines", "cli", "errors", "adapters", "branching", "measure", "case",
-            "lobes", "pairing", "plausibility", "statistics", "export", "partition", "wallmap", "straighten"}
+            "lobes", "pairing", "plausibility", "statistics", "export", "partition", "wallmap",
+            "straighten", "volume"}
 
 
 def imports(path: Path):

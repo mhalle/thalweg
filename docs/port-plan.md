@@ -100,7 +100,7 @@ tiers, ported after phase 5.
 |---|---|---|---|
 | `vmtkimageviewer`, `vmtksurfaceviewer` | sdfview renders the field | out | — |
 | `vmtkimagecurvedmpr` | Straightened view of any volume along any path, parallel-transport frames (`straighten.straighten`, `straighten.path_to`) | done | T3 |
-| `vmtk*reader`, `vmtk*writer` | In: a ranked store via rankfield (`store`; a plain labelmap or SDF in degraded mode is todo). Out: `.thalweg.json`, Parquet tables, VTP mesh and centerlines, SWC, Slicer markups (`graph`, `measure`, `export`); a 0-D/1-D solver input is todo | done (in part) | 1 in, 4 out |
+| `vmtk*reader`, `vmtk*writer` | In: a ranked store via rankfield (`store`), or a labelmap or signed distance image (NIfTI, NRRD, MetaImage, Slicer `.seg.nrrd` names) in degraded mode (`volume`, the `volumes` extra: SimpleITK). Out: `.thalweg.json`, Parquet tables, VTP mesh and centerlines, SWC, Slicer markups (`graph`, `measure`, `export`); a 0-D/1-D solver input is todo | done (in part) | 1 in, 4 out |
 
 ## What thalweg adds that vmtk lacks
 

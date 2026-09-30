@@ -169,5 +169,12 @@ class FieldStore:
         return float(self.field(part).meta["clip"])
 
 
-def open_store(path) -> FieldStore:
+def open_store(path):
+    """A ranked store (:class:`FieldStore`), or - for a NIfTI, NRRD or MetaImage file - a labelmap
+    or signed distance image read in degraded mode (:class:`thalweg.volume.VolumeStore`)."""
+    from .volume import VolumeStore, is_volume
+    if hasattr(path, "margin") and hasattr(path, "structures"):     # already open
+        return path
+    if is_volume(path):
+        return VolumeStore(path)
     return FieldStore(path)
