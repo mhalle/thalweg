@@ -252,7 +252,7 @@ def inlet(graph: TubeGraph, structure: str) -> int:
 def reroot(graph: TubeGraph, structure: str, node: int) -> TubeGraph:
     """The structure re-rooted at ``node``: edges on the path from the old root to it are reversed
     (their samples and point columns reversed in place), so every edge points away from the new
-    root. The new root keeps a record of what it was (``attributes.end``: ``tip`` or
+    root. The new root keeps a record of what it was (``attributes.end_kind``: ``tip`` or
     ``truncated``); the old root takes the kind its degree gives and loses that record. Counts in
     the structure's statistics are recomputed; ``deepest_point`` (the tracer's start) is kept."""
     t = graph.tree(structure)
@@ -284,7 +284,7 @@ def reroot(graph: TubeGraph, structure: str, node: int) -> TubeGraph:
     nodes = []
     for nd in graph.nodes:
         if nd.id == node:
-            attrs = dict(nd.attributes, end=nd.kind)
+            attrs = dict(nd.attributes, end_kind=nd.kind)
             if nd.kind == "truncated":
                 attrs["on_grid_boundary"] = True
             nd = nd.model_copy(update={"kind": "root", "attributes": attrs})
@@ -292,7 +292,7 @@ def reroot(graph: TubeGraph, structure: str, node: int) -> TubeGraph:
             kind = "tip" if deg[nd.id] == 1 else ("joint" if deg[nd.id] == 2 else "junction")
             if kind == "tip" and nd.attributes.get("on_grid_boundary"):
                 kind = "truncated"
-            attrs = {k: v for k, v in nd.attributes.items() if k not in ("on_grid_boundary", "end")}
+            attrs = {k: v for k, v in nd.attributes.items() if k not in ("on_grid_boundary", "end_kind")}
             nd = nd.model_copy(update={"kind": kind, "attributes": attrs})
         nodes.append(nd)
     structures = []

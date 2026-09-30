@@ -36,7 +36,7 @@ def test_edges_take_the_lobe_of_most_of_their_length():
     g = _y()
     F = _halves(g)
     h, el = annotate(g, F)
-    assert len(h.points.columns["lobe"]) == len(h.points.position)
+    assert len(h.points.columns["lobe_number"]) == len(h.points.position)
     lobes = {}
     for e in h.edges:
         mid = h.edge_points(e)[len(h.edge_points(e)) // 2]
@@ -50,8 +50,8 @@ def test_edges_take_the_lobe_of_most_of_their_length():
     lobe_rows(rows, el["y"])
     assert {r["lobe"] for r in rows} <= {None, LOBES[1], LOBES[5]}
     s = lobe_summary(h, "y", el["y"], lobe_volumes(F))
-    assert s["lung_upper_lobe_right"]["edges"] == 0 and s[LOBES[1]]["lobe_volume_ml"] > 0
-    assert sum(v["edges"] for v in s.values()) == len(h.edges)
+    assert s["lung_upper_lobe_right"]["edge_count"] == 0 and s[LOBES[1]]["lobe_volume_ml"] > 0
+    assert sum(v["edge_count"] for v in s.values()) == len(h.edges)
 
 
 @pytest.mark.data

@@ -117,10 +117,10 @@ def lobe_volumes(fields: LobeFields) -> dict[int, float]:
 
 def annotate(graph: TubeGraph, fields: LobeFields
              ) -> tuple[TubeGraph, dict[str, dict[int, tuple[int, float]]]]:
-    """The graph with a ``lobe`` point column (0-5, :data:`LOBES`), and each structure's edge lobes."""
+    """The graph with a ``lobe_number`` point column (0-5, :data:`LOBES`), and each structure's edge lobes."""
     pl = point_lobes(graph, fields)
     cols = dict(graph.points.columns)
-    cols["lobe"] = [int(v) for v in pl]
+    cols["lobe_number"] = [int(v) for v in pl]
     g = graph.model_copy(update={"points": graph.points.model_copy(update={"columns": cols})})
     return g, {s.name: edge_lobes(g, s.name, pl) for s in g.structures}
 
@@ -142,7 +142,8 @@ def lobe_summary(graph: TubeGraph, structure: str, edge_lobe: dict[int, tuple[in
     for k in [*LOBES, 0]:
         es = [e for e in graph.edges if e.structure == structure and edge_lobe.get(e.id, (0, 0))[0] == k]
         length = sum(e.length_mm for e in es)
-        row = dict(edges=len(es), tips=sum(kind[e.end_node] == "tip" for e in es), length_mm=round(length, 3))
+        row = dict(edge_count=len(es), tip_count=sum(kind[e.end_node] == "tip" for e in es),
+                   length_mm=round(length, 3))
         if k:
             ml = volumes[k] / 1000.0
             row.update(lobe_volume_ml=round(ml, 2),

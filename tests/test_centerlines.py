@@ -67,7 +67,7 @@ def test_reroot_keeps_a_valid_tree():
     TubeGraph.model_validate_json(h.dumps())                       # every invariant still holds
     t = h.tree("t")
     assert t.root == tip and len(t.order) == len(h.edges)
-    assert h.nodes[tip].kind == "root" and h.nodes[tip].attributes["end"] == "tip"
+    assert h.nodes[tip].kind == "root" and h.nodes[tip].attributes["end_kind"] == "tip"
     old = g.structures[0].roots[0]
     assert h.nodes[old].kind in ("tip", "joint", "junction")
     assert h.structures[0].statistics["deepest_point"] == list(g.nodes[old].position)
@@ -122,7 +122,7 @@ def test_reroot_reverses_radii_and_columns_with_the_points():
     for p, r, t in zip(h.points.position, h.points.radius, h.points.columns["tag"]):
         assert (r, t) in at[tuple(p)]
     k = reroot(h, "t", tips[1])                                     # the first inlet is demoted
-    assert "end" not in k.nodes[tips[0]].attributes and k.nodes[tips[0]].kind == "tip"
+    assert "end_kind" not in k.nodes[tips[0]].attributes and k.nodes[tips[0]].kind == "tip"
     assert k.structures[0].statistics["deepest_point"] == deepest
     TubeGraph.model_validate_json(k.dumps())
 
@@ -139,6 +139,6 @@ def test_artery_inlet_is_the_pulmonary_trunk(vessels_data):
     root = g.structures[0].roots[0]
     first = next(e for e in g.edges if e.start_node == root)
     assert np.percentile(g.edge_radius(first), 75) > 10.0
-    assert g.degree()[root] == 1 and g.nodes[root].attributes["end"] == "tip"
+    assert g.degree()[root] == 1 and g.nodes[root].attributes["end_kind"] == "tip"
     deep = centerline_graph(st, "lung_arteries", root="deepest")
     assert g.structures[0].statistics["tips"] == deep.structures[0].statistics["tips"] - 1

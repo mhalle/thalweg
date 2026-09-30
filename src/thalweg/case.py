@@ -73,7 +73,7 @@ def outside_length(graph: TubeGraph, structure: str, margin: np.ndarray, geometr
 
 def summarize(graph: TubeGraph, structure: str, rows: list[dict] | None = None) -> dict:
     """Counts, lengths and Strahler orders of one structure. ``strahler_order`` maps each order
-    to its edge count and length; ``unordered`` holds the edges that have none (they lead only to
+    to its ``edge_count`` and length; ``unordered`` holds the edges that have none (they lead only to
     truncated ends). Order-based statistics are fragile across reconstructions of one scan (one
     lost thin tip can demote a subtree; docs/validation.md §2)."""
     edges = [e for e in graph.edges if e.structure == structure]
@@ -92,12 +92,13 @@ def summarize(graph: TubeGraph, structure: str, rows: list[dict] | None = None) 
     rr = r[pts]
     rr = rr[rr > 0]
     unordered = by_order.pop(None, (0, 0.0))
-    out = dict(edges=len(edges), nodes=kinds, length_mm=round(sum(e.length_mm for e in edges), 3),
+    out = dict(edge_count=len(edges), node_count_by_kind=kinds,
+               length_mm=round(sum(e.length_mm for e in edges), 3),
                radius_percentiles_mm=({f"p{q}": round(float(np.percentile(rr, q)), 3) for q in (10, 50, 90)}
                                       if len(rr) else {}),
-               strahler_order={str(o): dict(edges=n, length_mm=round(L, 3))
+               strahler_order={str(o): dict(edge_count=n, length_mm=round(L, 3))
                                for o, (n, L) in sorted(by_order.items())},
-               unordered=dict(edges=unordered[0], length_mm=round(unordered[1], 3)))
+               unordered=dict(edge_count=unordered[0], length_mm=round(unordered[1], 3)))
     if rows:
         out["sectioned_branches"] = sum(1 for x in rows if x.get("area_mm2"))
     return out
@@ -235,9 +236,9 @@ class Case:
             sm = summarize(g, s.name, [r for r in rows if r["structure"] == s.name])
             coarse = acquisition.get(str(s.source.part), {}).get("coarse_slices")
             sm["coarse_slices"] = coarse
-            sm["tree"] = tree_statistics(g, s.name)
+            sm["tree_statistics"] = tree_statistics(g, s.name)
             if s.name in self.pi10:
-                sm["wall"] = self.pi10[s.name]
+                sm["pi10"] = self.pi10[s.name]
             if s.name in pairing:
                 sm["bronchoarterial"] = pairing[s.name]
             if s.name in edge_lobe:
@@ -249,8 +250,8 @@ class Case:
                 if log:
                     log(f"WARNING {s.name}: {sm['warning']}")
             summary[s.name] = sm
-        qc = dict(thalweg=__version__, store=str(self.store.path), labeling_scheme=self.store.labeling_scheme,
-                  acquisition=acquisition,
+        qc = dict(thalweg_version=__version__, store=str(self.store.path),
+                  labeling_scheme=self.store.labeling_scheme, acquisition=acquisition,
                   lobes=(dict(named_by=lobes.named_by, part=lobes.part) if lobes is not None
                          else dict(named_by=None, reason=self.lobe_error)),
                   artery_vein=plausibility.check(g, self.store),

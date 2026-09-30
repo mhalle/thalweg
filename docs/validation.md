@@ -126,7 +126,7 @@ and the QC columns do not depend on the root.
   root is the truncated tracheal end. The same stores drop a separate component of 16.6 % of the
   airway lattice, 5 cm lateral of the trachea and touching the grid's top (`qc.json`
   `dropped_components`): probably mislabeled. Read `dropped_components.lattice_share` and the
-  airway root's `attributes.end` before comparing airway depths across cases.
+  airway root's `attributes.end_kind` before comparing airway depths across cases.
 
 ## 3. Tubes that are not vessels
 
@@ -372,7 +372,7 @@ arteries ≤ 2 %).
 
 ## 5e. Tree statistics and the radius interval
 
-`summary.json` `<tree>.tree` (`thalweg.statistics`), default options (four ridge passes, inlet
+`summary.json` `<tree>.tree_statistics` (`thalweg.statistics`), default options (four ridge passes, inlet
 root), 0.625 mm reconstructions:
 
 | Case | Tree | Streams by Strahler order | Bifurcation ratio | Length ratio | Diameter ratio | Small-vessel volume fraction | Orientation entropy |

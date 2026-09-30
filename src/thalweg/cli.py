@@ -209,7 +209,7 @@ def run(store, output, names, step, no_stations, quiet, ridge_passes, prune, roo
     (out / "summary.json").write_text(json.dumps(res["summary"], indent=1) + "\n")
     (out / "qc.json").write_text(json.dumps(res["qc"], indent=1) + "\n")
     for n, q in res["qc"]["structures"].items():
-        log(f"{n}: {res['summary'][n]['edges']} branches, {q['length_mm'] / 10:.1f} cm, "
+        log(f"{n}: {res['summary'][n]['edge_count']} branches, {q['length_mm'] / 10:.1f} cm, "
             f"{q['truncated_ends']} truncated ends, {q['dropped_components']['count']} pieces dropped, "
             f"{q['outside_mm']:.1f} mm outside")
     log(f"wrote {out}")

@@ -44,7 +44,7 @@ migration; 1.0 will be the first stable version.
   - `root`: where the tree starts. By default (`parameters.root: "inlet"`) this is the
     structure's inlet: the widest end running off the field (a trachea, a trunk leaving the crop),
     or failing that the end of the widest terminal edge (the pulmonary trunk; the veins' atrial
-    end). `attributes.end` says what the node was (`tip` or `truncated`; a truncated one also has
+    end). `attributes.end_kind` says what the node was (`tip` or `truncated`; a truncated one also has
     `on_grid_boundary`). With `root: "deepest"` it is the tracer's own start, the deepest point,
     which need not be an end: the arteries' deepest point lies inside the pulmonary trunk (the
     research reference). `statistics.deepest_point` records the tracer's start either way, and
@@ -115,7 +115,7 @@ migration; 1.0 will be the first stable version.
 **`statistics.vmtk_bifurcations`** (from `thalweg.branching.annotate`): how junctions and vmtk's
 bifurcations correspond.
 
-**Attributes.** From the tracer, on a root node: `end` and `on_grid_boundary` (see Nodes). From
+**Attributes.** From the tracer, on a root node: `end_kind` and `on_grid_boundary` (see Nodes). From
 `thalweg.branching.annotate`, which no CLI verb runs yet:
 - on a node, `bifurcation_frames`: a list of `{group, origin, normal, up_normal}`, vmtk's
   bifurcation reference systems at that junction;
@@ -127,7 +127,7 @@ bifurcations correspond.
 **Point columns:**
 - `branch_group` (vmtk group id) and `bifurcation_region` (1 inside vmtk's bifurcation region,
   else 0), both from `thalweg.branching.annotate`;
-- `lobe` (written by `thalweg run` for lung stores): 1 left upper, 2 left lower, 3 right upper,
+- `lobe_number` (written by `thalweg run` for lung stores): 1 left upper, 2 left lower, 3 right upper,
   4 right middle, 5 right lower, 0 outside every lobe (the hilum). Lobes come from the store's own
   crop stage (`thalweg.lobes`). The branch table gets `lobe` (the lobe holding most of the edge's
   length, by name; null when most of it lies outside every lobe) and `lobe_length_fraction`.
@@ -180,28 +180,28 @@ bifurcations correspond.
     `centroid_offset_mm`, `contour_closed`;
   - the wall columns above, per station, for an airway with a labeled wall.
 - **`summary.json`** (`thalweg run`): one object per structure, keyed by its name.
-  - `edges`; `nodes` (a count per node kind); `length_mm`;
+  - `edge_count`; `node_count_by_kind`; `length_mm`;
   - `radius_percentiles_mm` (`p10`, `p50`, `p90` of the traced radius over the samples);
-  - `strahler_order`: per order, `edges` and `length_mm`; `unordered`: the same for edges that
+  - `strahler_order`: per order, `edge_count` and `length_mm`; `unordered`: the same for edges that
     lead only to truncated ends and so have no order;
   - `sectioned_branches`: edges with at least one measured section;
   - `coarse_slices` (see `qc.json`), and a `warning` string when it is true;
-  - `tree` (`thalweg.statistics`):
+  - `tree_statistics` (`thalweg.statistics`):
     - `horton`: `bifurcation_ratio`, `length_ratio`, `diameter_ratio`, and `orders`, per
       Strahler order `streams`, `mean_length_mm`, `mean_diameter_mm`;
     - `volume_mm3`, `small_vessel_volume_fraction`, `small_area_mm2` (the threshold, 5);
     - `orientation_entropy`;
-  - `wall` (airways with a labeled wall): `pi10_mm`, `slope`, `stations` (those with a wall
+  - `pi10` (airways with a labeled wall): `pi10_mm`, `slope`, `stations` (those with a wall
     measure) out of `lumen_stations`, `internal_perimeter_range_mm`, and
     `constant_wall_pi10_mm` (what a wall of the median thickness at every caliber would give: on
     TotalSegmentator's wall class Pi10 restates it, docs/validation.md §5b);
   - `bronchoarterial` (airways traced with the arteries): `paired_sample_share`,
     `paired_branches`, `bronchus_to_artery_ratio_median`, `share_of_paired_branches_above_1`,
     `reach_mm`, `parallel_cosine`;
-  - `lobes` (a lung store): per lobe name, and `outside_lobes`: `edges`, `tips`, `length_mm`,
+  - `lobes` (a lung store): per lobe name, and `outside_lobes`: `edge_count`, `tip_count`, `length_mm`,
     and for a lobe `lobe_volume_ml`, `length_mm_per_ml`.
 - **`qc.json`** (`thalweg run`; meanings in `src/thalweg/case.py`):
-  - `thalweg` (the version), `store` (its path);
+  - `thalweg_version`, `store` (its path);
   - `labeling_scheme`: a string, or a list with one scheme per cascade stage in newer stores;
   - `acquisition`: keyed by part number (as a string), `source_spacing_mm` and `coarse_slices`
     (the largest spacing exceeds 3 mm);
@@ -230,12 +230,12 @@ bifurcations correspond.
   - The sidecar `M.vtp.boundaries.json` holds `space` (`"LPS"`), `units` (`"mm"`) and:
     - `boundaries`, one object per BoundaryId in order:
       - the wall: `{"id": 0, "name": "wall", "area_mm2"}`;
-      - each cap: `{"id", "name"` (e.g. `"lung_arteries tip 812"`), `"end"` (tip, truncated or
+      - each cap: `{"id", "name"` (e.g. `"lung_arteries tip 812"`), `"end_kind"` (tip, truncated or
         root), `"node"` (graph node id), `"edge"` (the graph edge cut), `"center"` (where the
         centerline crosses the cap's plane), `"normal"` (unit, pointing out of the structure),
         `"inscribed_radius_mm"` (the centerline's radius at the cut), `"area_mm2"`,
         `"centroid"` (the cap's area centroid, on the plane)`}`;
-    - `skipped`: `[{"name", "end", "node", "reason"}]`, every requested end that got no cap, and
+    - `skipped`: `[{"name", "end_kind", "node", "reason"}]`, every requested end that got no cap, and
       why. The reasons are:
       - the edge is too short to clear the junction;
       - its radius is below the minimum;
