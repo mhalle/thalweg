@@ -126,16 +126,20 @@ def test_the_other_verbs_run_end_to_end(vessels_data, tmp_path):
     assert r.exit_code == 0, r.output + str(r.exception)
     mesh = tmp_path / "a.vtp"
     r = run.invoke(main, ["export", str(graph), str(vessels_data / STORE), "-s", "lung_airways",
-                          "--mesh", str(mesh), "--flow-extensions", "3"])
+                          "--mesh", str(mesh), "--flow-extensions", "3", "--extension-transition", "0.5"])
     assert r.exit_code == 0, r.output + str(r.exception)
     caps = json.loads((tmp_path / "a.vtp.boundaries.json").read_text())["boundaries"][1:]
     assert len(caps) > 50
     for c in caps:
         assert c["extension_length_mm"] == pytest.approx(3 * c["extension_radius_mm"], abs=1e-5)
-        assert c["ring_mean_radius_mm"] == pytest.approx(c["extension_radius_mm"], rel=0.05)
+        assert c["extension_transition"] == 0.5 and c["extension_vertices_inside_structure"] >= 0
+        assert 0.8 * c["extension_radius_mm"] < c["ring_mean_radius_mm"] <= c["extension_radius_mm"] + 1e-6
     r = run.invoke(main, ["export", str(graph), str(vessels_data / STORE), "-s", "lung_airways",
                           "--swc", str(tmp_path / "a.swc"), "--flow-extensions", "3"])
     assert r.exit_code != 0 and "needs --mesh" in r.output
+    r = run.invoke(main, ["export", str(graph), str(vessels_data / STORE), "-s", "lung_airways",
+                          "--mesh", str(mesh), "--extension-transition", "0.5"])
+    assert r.exit_code != 0 and "needs --flow-extensions" in r.output
     z = np.load(maps)
     assert len(z["edges"]) > 100 and len(z["angle_rad"]) == 72
     steps = np.concatenate([np.diff(z[f"edge_{int(e)}_arc_length_mm"]) for e in z["edges"]])

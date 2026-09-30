@@ -670,14 +670,18 @@ def capped_surface(graph: TubeGraph, structure: str, margin: np.ndarray, geometr
 
 def cap_ring(mesh: Mesh, k: int) -> np.ndarray:
     """The vertex ids around cap ``k``, in order, counterclockwise seen from outside the structure
-    (along the cap's normal). ThalwegError if the cap is not a disk (no loop, or several)."""
+    (along the cap's normal). ThalwegError if there is no such cap or it is not a disk (its rim is
+    not one simple loop: a hole, a pinch, or two pieces)."""
+    if not 1 <= int(k) <= len(mesh.caps):
+        raise ThalwegError(f"there is no cap {k}; the mesh has {len(mesh.caps)}")
     f = mesh.faces[mesh.boundary == k]
     e = np.concatenate([f[:, [0, 1]], f[:, [1, 2]], f[:, [2, 0]]])
     have = set(map(tuple, e.tolist()))
     rim = [(a, b) for a, b in have if (b, a) not in have]
     loops = _loops(rim)
     if len(loops) != 1 or len(loops[0]) != len(rim):
-        raise ThalwegError(f"cap {k} ({mesh.names[k]}) is not a disk: {len(loops)} boundary loops")
+        raise ThalwegError(f"cap {k} ({mesh.names[k]}) is not a disk: its rim has {len(rim)} edges in "
+                           f"{len(loops)} closed loop(s)")
     return np.asarray(loops[0], np.int64)
 
 
@@ -686,8 +690,9 @@ def boundary_reference_system(mesh: Mesh, k: int, vmtk_vertex_mean: bool = False
     ring's barycenter, its mean distance from the barycenter (vmtk's boundary radius) and the
     outward normal.
 
-    The barycenter and the radius are averages along the ring's length (each vertex weighted by
-    half the length of its two edges), so they do not depend on how the ring's vertices are spaced.
+    The barycenter and the radius are averages along the ring's length (the polygon's perimeter
+    centroid, and the mean distance from it integrated along each edge), so they do not depend on
+    how the ring's vertices are spaced.
     vmtk averages the vertices, which pulls both toward
     wherever the mesh happens to be dense; ``vmtk_vertex_mean=True`` reproduces that (on the
     C3N-00704 subtree's nine rings it moves the barycenter by 0.05-0.26 mm)."""
@@ -698,9 +703,12 @@ def boundary_reference_system(mesh: Mesh, k: int, vmtk_vertex_mean: bool = False
         b = P.mean(0)
         radius = float(np.linalg.norm(P - b, axis=1).mean())
     else:
-        wv = 0.5 * (w + np.roll(w, 1))                         # each vertex: half of its two edges
-        b = (P * wv[:, None]).sum(0) / wv.sum()
-        radius = float((np.linalg.norm(P - b, axis=1) * wv).sum() / wv.sum())
+        mid = 0.5 * (P + Q)
+        b = (mid * w[:, None]).sum(0) / w.sum()                # the polygon's perimeter centroid, exactly
+        t = np.linspace(0.0, 1.0, 33)                          # composite Simpson along each edge
+        simpson = np.r_[1.0, np.tile([4.0, 2.0], 15), 4.0, 1.0] / 96.0
+        along = np.linalg.norm(P[:, None, :] + t[None, :, None] * (Q - P)[:, None, :] - b, axis=2)
+        radius = float(((along * simpson).sum(1) * w).sum() / w.sum())
     return dict(barycenter=b, mean_radius_mm=radius, normal=np.asarray(mesh.caps[k - 1].normal, float),
                 perimeter_mm=float(w.sum()))
 
@@ -713,16 +721,30 @@ def flow_extensions(mesh: Mesh, ratio: float = 5.0, transition: float = 0.25, ca
     ring's barycenter over the first ``transition`` of its length (a smoothstep blend, so the wall
     has no kink where it starts or ends), then runs straight, and ends in a flat cap.
 
+    Each ring vertex goes to the circle point at its own fraction of the ring's length (the circle
+    turned to lie as close to the ring as it can), so the tube does not fold whatever the ring's
+    shape - a ring that is not star-shaped about its barycenter would fold if its vertices were
+    sent out radially. The circle's vertices are spaced as the ring's are: a ring with a very short
+    edge gives a strip of thin triangles along the whole tube.
+
     The tube's faces are wall (``BoundaryId`` 0); the new end cap keeps the cap's id and name.
     ``caps``: the BoundaryIds to extend (default: all). ``Mesh.extensions[k]`` records each one:
-    ``length_mm``, ``radius_mm``, and the ``ring_barycenter`` it grew from; the cap's ``center``
-    moves to the extension's end. An extension is straight and knows nothing of what is around
-    it: a long one from a small branch can run into a neighbor, which :func:`mesh_defects` does
-    not see (the surface stays closed and manifold; it may self-intersect)."""
+    ``length_mm``, ``radius_mm``, ``transition``, the ``ring_barycenter`` it grew from and its
+    ``vertices`` (the range of new vertex ids); the cap's ``center`` moves to the extension's end.
+    A cap that already has an extension is refused. An extension is straight and knows nothing of
+    what is around it: see :func:`extension_collisions`."""
     from dataclasses import replace
     if not ratio > 0 or not 0 <= transition <= 1:
         raise ThalwegError(f"ratio must be positive and transition in [0, 1]; got {ratio}, {transition}")
-    ids = list(range(1, len(mesh.caps) + 1)) if caps is None else [int(k) for k in caps]
+    if caps is None:
+        ids = list(range(1, len(mesh.caps) + 1))
+    else:
+        if any(int(k) != k for k in caps):
+            raise ThalwegError(f"caps must be BoundaryIds (integers); got {list(caps)}")
+        ids = sorted({int(k) for k in caps})
+    again = [k for k in ids if k in mesh.extensions]
+    if again:
+        raise ThalwegError(f"cap {again[0]} already has a flow extension")
     V = [mesh.vertices]
     nv = len(mesh.vertices)
     keep = ~np.isin(mesh.boundary, ids)
@@ -730,16 +752,20 @@ def flow_extensions(mesh: Mesh, ratio: float = 5.0, transition: float = 0.25, ca
     new_caps = list(mesh.caps)
     ext = dict(mesh.extensions)
     for k in ids:
-        if not 1 <= k <= len(mesh.caps):
-            raise ThalwegError(f"there is no cap {k}; the mesh has {len(mesh.caps)}")
         ring = cap_ring(mesh, k)
         ref = boundary_reference_system(mesh, k)
         n, b, R = ref["normal"], ref["barycenter"], ref["mean_radius_mm"]
         P = mesh.vertices[ring]
         P = P - ((P - b) @ n)[:, None] * n                      # in the cap's plane (they already are)
-        u = P - b
-        u /= np.linalg.norm(u, axis=1, keepdims=True)
-        circle = b + R * u
+        e1 = np.cross(n, [1.0, 0, 0] if abs(n[0]) < 0.9 else [0, 1.0, 0])
+        e1 /= np.linalg.norm(e1)
+        e2 = np.cross(n, e1)                                    # (e1, e2, n) right-handed: ccw about n
+        edge = np.linalg.norm(np.roll(P, -1, axis=0) - P, axis=1)
+        phi = 2.0 * np.pi * np.r_[0.0, np.cumsum(edge)[:-1]] / edge.sum()
+        z = (P - b) @ e1 + 1j * ((P - b) @ e2)
+        wv = 0.5 * (edge + np.roll(edge, 1))
+        turn = np.angle((wv * z * np.exp(-1j * phi)).sum())     # the rotation bringing the circle nearest
+        circle = b + R * (np.cos(phi + turn)[:, None] * e1 + np.sin(phi + turn)[:, None] * e2)
         L = ratio * R
         h = ref["perimeter_mm"] / len(ring)                     # layers about as far apart as ring vertices
         n_layers = max(2, int(np.ceil(L / h)))
@@ -748,6 +774,7 @@ def flow_extensions(mesh: Mesh, ratio: float = 5.0, transition: float = 0.25, ca
         w = t * t * (3.0 - 2.0 * t)                             # smoothstep
         layers = (1.0 - w)[:, None, None] * P[None] + w[:, None, None] * circle[None] + s[:, None, None] * n
         m = len(ring)
+        first = nv
         ids_layer = [ring] + [nv + j * m + np.arange(m) for j in range(n_layers)]
         V.append(layers.reshape(-1, 3))
         nv += n_layers * m
@@ -763,7 +790,9 @@ def flow_extensions(mesh: Mesh, ratio: float = 5.0, transition: float = 0.25, ca
         B.append(np.full(m, k, mesh.boundary.dtype))
         nv += 1
         new_caps[k - 1] = replace(mesh.caps[k - 1], center=end)
-        ext[k] = dict(length_mm=float(L), radius_mm=float(R), ring_barycenter=b)
+        ext[k] = dict(length_mm=float(L), radius_mm=float(R), transition=float(transition),
+                      ring_barycenter=b, cut_center=np.asarray(mesh.caps[k - 1].center, float),
+                      vertices=(first, nv))
     out = Mesh(np.concatenate(V), np.concatenate(F), np.concatenate(B), list(mesh.names), list(mesh.skipped),
                new_caps, ext)
     if check:
@@ -771,6 +800,31 @@ def flow_extensions(mesh: Mesh, ratio: float = 5.0, transition: float = 0.25, ca
         if not _is_good(d):
             raise ThalwegError("the extended surface is not closed and manifold ("
                                + ", ".join(f"{a} {v}" for a, v in d.items()) + ")")
+    return out
+
+
+def extension_collisions(mesh: Mesh, margin: np.ndarray, geometry) -> dict[int, int]:
+    """Per flow extension: how many of its vertices lie inside the structure beyond the stub it
+    grew from - the extension has run into another branch (or back into its own, around a bend).
+
+    The vessel goes on a little past the cut (the stub the cut removed), so an extension starts
+    inside the field; where its axis leaves the field the stub has ended. Vertices more than one
+    radius past that point with margin > 0 are counted. An extension whose axis never leaves the
+    field within its length has every vertex counted that is inside. The count is also written to
+    ``Mesh.extensions[k]["vertices_inside_structure"]``. It is a sign, not a proof: it samples the
+    field at the tube's vertices and does not test triangles against each other."""
+    from .kernel.rays import first_crossing
+    out = {}
+    for k, e in mesh.extensions.items():
+        n = np.asarray(mesh.caps[k - 1].normal, float)
+        a, z = e["vertices"]
+        x = mesh.vertices[a:z - 1]                               # the tube's layers (then the end center)
+        s = (x - e["ring_barycenter"]) @ n
+        leave = first_crossing(margin, geometry, e["ring_barycenter"][None], n[None], e["length_mm"])[0]
+        past = s > (leave + e["radius_mm"] if np.isfinite(leave) else 0.0)
+        inside = sample(margin, geometry, x[past], cval=-1.0) > 0 if past.any() else np.zeros(0, bool)
+        out[k] = int(inside.sum())
+        e["vertices_inside_structure"] = out[k]
     return out
 
 
@@ -802,8 +856,11 @@ def boundaries(mesh: Mesh) -> dict:
                "ring_mean_radius_mm": round(ref["mean_radius_mm"], 6)}
         if k in mesh.extensions:
             e = mesh.extensions[k]
+            if "vertices_inside_structure" in e:
+                row["extension_vertices_inside_structure"] = e["vertices_inside_structure"]
             row.update(extension_length_mm=round(e["length_mm"], 6),
                        extension_radius_mm=round(e["radius_mm"], 6),
+                       extension_transition=e["transition"], cut_center=vec(e["cut_center"]),
                        extension_start_barycenter=vec(e["ring_barycenter"]))
         rows.append(row)
     return {"space": "LPS", "units": "mm", "boundaries": rows,

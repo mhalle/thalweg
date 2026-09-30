@@ -268,6 +268,8 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
     from .graph import TubeGraph
     if extension_ratio is not None and not mesh:
         raise click.UsageError("--flow-extensions needs --mesh")
+    if extension_ratio is None and extension_transition != 0.25:
+        raise click.UsageError("--extension-transition needs --flow-extensions")
     if not (mesh or vmtk_out or swc or markups or wall_maps_out):
         raise click.UsageError("nothing to export: give --mesh, --vmtk-centerlines, --swc, --markups "
                                "and/or --wall-maps")
@@ -293,14 +295,21 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
         m, geo, ref = open_store(store).margin(name, s.source.part)
         check_source(s, geo, ref)
         msh = capped_surface(g, name, m, geo, kinds=cap_kinds, refine=refine)
+        hits = None
         if extension_ratio is not None:
-            from .export import flow_extensions
+            from .export import extension_collisions, flow_extensions
             msh = flow_extensions(msh, ratio=extension_ratio, transition=extension_transition)
+            hits = extension_collisions(msh, m, geo)
         write_vtp_mesh(msh, mesh)
         n_ends = len(msh.caps) + len(msh.skipped)
         more = f", {len(msh.skipped)} not (see below)" if msh.skipped else ""
         click.echo(f"{mesh}: {len(msh.faces)} faces, {n_ends} ends ({'/'.join(cap_kinds)}): "
                    f"{len(msh.caps)} capped{more}", err=True)
+        if hits is not None:
+            bad = sorted(k for k, v in hits.items() if v)
+            click.echo(f"  {len(hits)} flow extensions, {extension_ratio:g} ring radii long; {len(bad)} run "
+                       "back into the structure (extension_vertices_inside_structure in the sidecar)",
+                       err=True)
         for sk in msh.skipped:
             click.echo(f"  not capped: {sk}", err=True)
     if vmtk_out:

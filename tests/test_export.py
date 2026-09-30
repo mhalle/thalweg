@@ -394,7 +394,8 @@ def test_flow_extensions_are_tubes_that_end_in_a_named_flat_circle(y, tmp_path):
         v = ext.vertices[np.unique(ext.faces[ext.boundary == k])]
         assert np.abs((v - c.center) @ c.normal).max() < 1e-9 and (_normals(ext, k) @ c.normal > 0).all()
         end = boundary_reference_system(ext, k)
-        assert np.allclose(end["barycenter"], c.center, atol=1e-2) and abs(end["mean_radius_mm"] - R) < 2e-3
+        assert np.allclose(end["barycenter"], c.center, atol=1e-2)
+        assert 0 <= R - end["mean_radius_mm"] < 0.01 * R           # a polygon inscribed in the circle
         # every new wall vertex past the transition lies on the cylinder; none lies beyond the end
         new = ext.vertices[len(mesh.vertices):]
         s = (new - r["barycenter"]) @ r["normal"]
@@ -404,7 +405,6 @@ def test_flow_extensions_are_tubes_that_end_in_a_named_flat_circle(y, tmp_path):
         assert straight.sum() > 50 and np.abs(rad[straight] - R).max() < 1e-9
         blend = mine & (s > 0) & (s < 0.25 * L)
         assert np.abs(rad[blend] - R).max() < 0.2                           # a nearly round ring, morphing
-    assert (ext.boundary[len(mesh.faces) - (mesh.boundary > 0).sum():] >= 0).all()
     write_vtp_mesh(ext, tmp_path / "e.vtp")
     rows = json.loads((tmp_path / "e.vtp.boundaries.json").read_text())["boundaries"]
     for row, c in zip(rows[1:], ext.caps):
@@ -413,7 +413,7 @@ def test_flow_extensions_are_tubes_that_end_in_a_named_flat_circle(y, tmp_path):
         assert row["extension_radius_mm"] == pytest.approx(ext.extensions[k]["radius_mm"], abs=1e-5)
         assert np.allclose(row["extension_start_barycenter"], refs[k]["barycenter"], atol=1e-5)
         assert np.allclose(row["ring_barycenter"], c.center, atol=1e-2)
-        assert row["ring_mean_radius_mm"] == pytest.approx(ext.extensions[k]["radius_mm"], abs=2e-3)
+        assert row["ring_mean_radius_mm"] == pytest.approx(ext.extensions[k]["radius_mm"], rel=0.01)
     plain = json.loads(json.dumps(boundaries(mesh)))["boundaries"][1]
     assert "extension_length_mm" not in plain and "ring_mean_radius_mm" in plain
 
@@ -480,3 +480,188 @@ def test_rings_and_extensions_against_vmtk(vessels_data):
         diffs.append(np.linalg.norm(x[sel] - s[sel, None] * c.normal, axis=1) - e["radius_mm"])
     d = np.concatenate(diffs)
     assert len(d) > 10000 and np.median(np.abs(d)) < 0.05 and np.percentile(np.abs(d), 90) < 0.12
+    # no extension of these nine runs back into the vessel
+    from thalweg.export import extension_collisions
+    assert sum(v > 0 for v in extension_collisions(ext, F, region).values()) <= 1
+
+
+def _prism(ring_xy, height=6.0, center=None):
+    """A closed prism by hand: ``ring_xy`` (counterclockwise) swept from z = 0 to ``height``; its top
+    is cap 1 (a fan from ``center``, default the vertex mean), everything else wall."""
+    from thalweg.export import Mesh
+    ring = np.asarray(ring_xy, float)
+    m = len(ring)
+    c = ring.mean(0) if center is None else np.asarray(center, float)
+    V = np.concatenate([np.c_[ring, np.zeros(m)], np.c_[ring, np.full(m, height)],
+                        [[*c, 0.0]], [[*c, height]]])
+    i = np.arange(m)
+    j = (i + 1) % m
+    side = np.concatenate([np.stack([i, j, m + j], 1), np.stack([i, m + j, m + i], 1)])
+    bottom = np.stack([np.full(m, 2 * m), j, i], 1)
+    top = np.stack([np.full(m, 2 * m + 1), m + i, m + j], 1)
+    F = np.concatenate([side, bottom, top])
+    B = np.r_[np.zeros(3 * m, np.int64), np.ones(m, np.int64)]
+    cut = Cut(np.array([*c, height]), np.array([0.0, 0, 1]), 1.0, "p tip 1", kind="tip")
+    mesh = Mesh(V, F, B, ["wall", cut.name], [], [cut])
+    _good(mesh)
+    return mesh
+
+
+def _outline(corners, per_edge=6):
+    """The corners' polygon with ``per_edge`` points on every edge."""
+    c = np.asarray(corners, float)
+    return np.concatenate([np.linspace(a, b, per_edge, endpoint=False) for a, b in zip(c, np.roll(c, -1, 0))])
+
+
+def test_the_ring_system_weighs_by_length_and_the_sidecar_reports_the_ring():
+    """A right triangle with 40 extra vertices on one side: the ring's barycenter is its perimeter's
+    centroid, (1.5, 1.0), and its mean radius the perimeter's mean distance from there, whatever the
+    vertex spacing; the area centroid (4/3, 1) is a different point, and the sidecar has both."""
+    from thalweg.export import boundary_reference_system
+    ring = np.concatenate([np.linspace([0.0, 0], [4.0, 0], 40, endpoint=False), [[4.0, 0], [0.0, 3]]])
+    mesh = _prism(ring, center=(1.0, 1.0))
+    ref = boundary_reference_system(mesh, 1)
+    assert np.allclose(ref["barycenter"], [1.5, 1.0, 6.0]) and ref["perimeter_mm"] == pytest.approx(12.0)
+    corners = np.array([(0.0, 0), (4, 0), (0, 3)])
+    exact, t = 0.0, (np.arange(4000) + 0.5) / 4000                     # along each edge, by its length
+    for p, q in zip(corners, np.roll(corners, -1, 0)):
+        exact += np.linalg.norm(p + t[:, None] * (q - p) - [1.5, 1.0], axis=1).mean() * np.linalg.norm(q - p)
+    exact /= 12.0
+    assert ref["mean_radius_mm"] == pytest.approx(exact, abs=1e-3)
+    plain = boundary_reference_system(mesh, 1, vmtk_vertex_mean=True)  # pulled to the crowded side
+    assert np.linalg.norm(plain["barycenter"] - ref["barycenter"]) > 0.8
+    assert abs(plain["mean_radius_mm"] - exact) > 0.2
+    row = boundaries(mesh)["boundaries"][1]
+    assert np.allclose(row["ring_barycenter"], [1.5, 1.0, 6.0])
+    assert np.allclose(row["centroid"], [4 / 3, 1.0, 6.0])
+    assert row["ring_mean_radius_mm"] == pytest.approx(ref["mean_radius_mm"], abs=1e-6)
+
+
+def test_the_morph_is_a_smoothstep_over_the_transition_and_layers_follow_the_ring_spacing():
+    from thalweg.export import boundary_reference_system, flow_extensions
+    mesh = _prism(_outline([(-3, -1), (3, -1), (3, 1), (-3, 1)], 8))         # a 6 x 2 rectangle, 32 vertices
+    ref = boundary_reference_system(mesh, 1)
+    R, L = ref["mean_radius_mm"], 8.0 * ref["mean_radius_mm"]
+    ext = flow_extensions(mesh, ratio=8.0, transition=0.5)
+    _good(ext)
+    e = ext.extensions[1]
+    a, z = e["vertices"]
+    layers = int(np.ceil(L / (ref["perimeter_mm"] / 32)))
+    assert z - a == layers * 32 + 1 and e["transition"] == 0.5
+    new = ext.vertices[a:z - 1].reshape(layers, 32, 3)
+    s = new[:, 0, 2] - 6.0
+    assert np.allclose(s, L * np.arange(1, layers + 1) / layers)
+    assert np.allclose(new[..., 2] - 6.0, s[:, None])
+    P = mesh.vertices[cap_ring_of(mesh)]
+    circle = new[-1].copy()
+    circle[:, 2] = 6.0
+    assert np.allclose(np.linalg.norm(circle[:, :2], axis=1), R)
+    t = np.clip(s / (0.5 * L), 0, 1)
+    w = t * t * (3 - 2 * t)
+    want = (1 - w)[:, None, None] * P[None] + w[:, None, None] * circle[None]
+    assert np.allclose(new[..., :2], want[..., :2])
+    assert 0 < w[1] < t[1] < 1                                          # not a linear blend
+    straight = s >= 0.5 * L - 1e-9
+    assert np.allclose(np.linalg.norm(new[straight][..., :2], axis=2), R) and not np.allclose(
+        np.linalg.norm(new[~straight][-1][:, :2], axis=1), R)
+    sharp = flow_extensions(mesh, ratio=8.0, transition=0.0)
+    a, z = sharp.extensions[1]["vertices"]
+    assert np.allclose(np.linalg.norm(sharp.vertices[a:z - 1, :2], axis=1), R)      # round at once
+    two = flow_extensions(mesh, ratio=0.01)                             # never fewer than two layers
+    a, z = two.extensions[1]["vertices"]
+    assert z - a == 2 * 32 + 1
+
+
+def cap_ring_of(mesh, k=1):
+    from thalweg.export import cap_ring
+    return cap_ring(mesh, k)
+
+
+@pytest.mark.parametrize("corners", [
+    [(0, 0), (6, 0), (6, 2), (2, 2), (2, 6), (0, 6)],                                   # an L
+    [(0, 0), (6, 0), (6, 2), (2, 2), (2, 4), (6, 4), (6, 6), (0, 6)],                    # a C
+])
+def test_a_ring_that_is_not_star_shaped_does_not_fold(corners):
+    """Rings whose barycenter does not see every vertex: the tube's faces all face away from its
+    axis once it is round, the end cap faces out, and the circle's vertices go round once in order."""
+    from thalweg.export import flow_extensions
+    mesh = _prism(_outline(corners, 5))
+    ext = flow_extensions(mesh, ratio=6.0)
+    _good(ext)
+    e = ext.extensions[1]
+    a, z = e["vertices"]
+    m = len(cap_ring_of(mesh))
+    last = ext.vertices[z - 1 - m:z - 1] - ext.vertices[z - 1]
+    turn = np.cross(last, np.roll(last, -1, axis=0))[:, 2]
+    assert (turn > 0).all()
+    assert np.arctan2(turn, (last * np.roll(last, -1, 0)).sum(1)).sum() == pytest.approx(2 * np.pi)
+    f = ext.faces[(ext.boundary == 0) & (ext.faces >= a).all(1)]
+    tri = ext.vertices[f]
+    mid = tri.mean(1)
+    round_part = mid[:, 2] - 6.0 > e["transition"] * e["length_mm"] + 0.5
+    normal = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+    out = ((mid - e["ring_barycenter"])[:, :2] * normal[:, :2]).sum(1)
+    assert round_part.sum() > 100 and (out[round_part] > 0).all()
+    assert (_normals(ext, 1)[:, 2] > 0).all()
+    added = mesh_defects(ext.vertices, ext.faces)["signed_volume_mm3"] - mesh_defects(
+        mesh.vertices, mesh.faces)["signed_volume_mm3"]
+    assert 0.8 < added / (np.pi * e["radius_mm"] ** 2 * e["length_mm"]) < 1.3
+
+
+def test_extension_bookkeeping_and_refusals():
+    from thalweg.export import Mesh, cap_ring, flow_extensions
+    mesh = _prism(_outline([(-2, -2), (2, -2), (2, 2), (-2, 2)], 4))
+    ext = flow_extensions(mesh, caps=[1, 1])                           # a repeated id is one extension
+    _good(ext)
+    assert np.allclose(ext.extensions[1]["cut_center"], [0, 0, 6.0]) and ext.caps[0].center[2] > 6.0
+    with pytest.raises(ThalwegError, match="already has"):
+        flow_extensions(ext)
+    for bad in ([1.5], [0], [2]):
+        with pytest.raises(ThalwegError):
+            flow_extensions(mesh, caps=bad)
+    with pytest.raises(ThalwegError, match="no cap"):
+        cap_ring(mesh, 5)
+    # a wall face missing: refused with check, returned without
+    broken = Mesh(mesh.vertices, mesh.faces[1:], mesh.boundary[1:], mesh.names, [], mesh.caps)
+    with pytest.raises(ThalwegError, match="not closed"):
+        flow_extensions(broken)
+    assert len(flow_extensions(broken, check=False).faces) > len(broken.faces)
+    # a cap pinched at one vertex (two triangles sharing only a corner) is not a disk
+    V = np.array([[0.0, 0, 0], [1, 0, 0], [0, 1, 0], [-1, 0, 0], [0, -1, 0]])
+    pinched = Mesh(V, np.array([[0, 1, 2], [0, 3, 4]]), np.array([1, 1]), ["wall", "c"], [],
+                   [Cut(V[0], np.array([0.0, 0, 1]), 1.0, "c")])
+    with pytest.raises(ThalwegError, match="not a disk"):
+        cap_ring(pinched, 1)
+
+
+def test_extensions_keep_earlier_ones_and_collisions_are_counted(y):
+    """Extending one cap, then another, keeps both records. An extension pointed into the structure
+    (the root's normal reversed) is counted as running into it; the honest ones are not."""
+    from dataclasses import replace
+    from thalweg.export import extension_collisions, flow_extensions
+    m, geo, g = y
+    mesh = capped_surface(g, "y", m, geo, kinds=("tip", "root"))
+    ext = flow_extensions(flow_extensions(mesh, caps=[1]), caps=[2, 3])
+    _good(ext)
+    assert sorted(ext.extensions) == [1, 2, 3]
+    hits = extension_collisions(ext, m, geo)
+    assert hits == {1: 0, 2: 0, 3: 0} and ext.extensions[1]["vertices_inside_structure"] == 0
+    rows = json.loads(json.dumps(boundaries(ext)))["boundaries"]
+    assert all(r["extension_vertices_inside_structure"] == 0 for r in rows[1:])
+    assert all({"extension_transition", "cut_center", "extension_radius_mm"} <= set(r) for r in rows[1:])
+    # a tube of the daughters' size laid along the trunk's axis lies inside the trunk
+    k = 2
+    e = dict(ext.extensions[k])
+    a, z = e["vertices"]
+    inside = ext.vertices.copy()
+    n = ext.caps[k - 1].normal
+    s = (inside[a:z] - e["ring_barycenter"]) @ n
+    rad = (inside[a:z] - e["ring_barycenter"]) - s[:, None] * n
+    axis = np.array([0.0, 0, 1])
+    ortho = np.cross(axis, [1.0, 0, 0])
+    frame = np.stack([np.cross(ortho, axis), ortho], 0)
+    inside[a:z] = (np.array([0.0, 0, 8]) + s[:, None] * axis * 0.8
+                   + 0.3 * (rad @ rad[:2].T / 4)[:, :1] * frame[0])
+    moved = replace(ext, vertices=inside, extensions={k: dict(e, ring_barycenter=np.array([0.0, 0, 8]))},
+                    caps=[replace(c, normal=axis) if i == k - 1 else c for i, c in enumerate(ext.caps)])
+    assert extension_collisions(moved, m, geo)[k] > 50

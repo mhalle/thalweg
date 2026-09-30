@@ -253,7 +253,8 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
   - `--flow-extensions RATIO [--extension-transition T]` replaces every cap by a straight tube
     RATIO × the ring's mean radius long that morphs the ring into a circle over the first T
     (default 0.25) of its length and ends in a flat cap with the cap's id and name. The tube's
-    faces are wall (`BoundaryId` 0).
+    faces are wall (`BoundaryId` 0). The extension is straight: the command prints how many run
+    back into the structure.
   - The surface is closed, consistently wound with normals pointing out of the structure, and
     manifold, or it is not written.
   - A flat cap is cut at every end of the requested kinds (default `tip` and `truncated`). A
@@ -270,9 +271,17 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
         `"inscribed_radius_mm"` (the centerline's radius at the cut), `"area_mm2"`,
         `"centroid"` (the cap's area centroid, on the plane), `"ring_barycenter"` and
         `"ring_mean_radius_mm"` (vmtk's boundary reference system: the cap's rim averaged along
-        its length, and its mean distance from that point), and with a flow extension
-        `"extension_length_mm"`, `"extension_radius_mm"` (the circle it ends in) and
-        `"extension_start_barycenter"` (the ring it grew from)`}`;
+        its length, and its mean distance from that point)`}`.
+      - With a flow extension the cap is the extension's END: `center`, `centroid`, `area_mm2`,
+        `ring_barycenter` and `ring_mean_radius_mm` describe that end (a polygon inscribed in
+        the circle, so its mean radius reads under `extension_radius_mm`: by 1 % for a ring of
+        20 vertices, by several percent for the five or six of a very small cap), while
+        `node`, `edge` and `inscribed_radius_mm` still describe the cut. The cap also has
+        `"cut_center"` (where the centerline crossed the cut), `"extension_start_barycenter"`
+        (the cut ring's barycenter, which the extension's axis starts from),
+        `"extension_length_mm"`, `"extension_radius_mm"`, `"extension_transition"`, and
+        `"extension_vertices_inside_structure"` (tube vertices that lie inside the structure
+        past the stub the extension grew from: above 0, it has run into a branch);
     - `skipped`: `[{"name", "cap_kind", "node", "reason"}]`, every requested end that got no cap, and
       why. The reasons are:
       - the edge is too short to clear the junction;

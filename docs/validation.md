@@ -481,19 +481,37 @@ The C3N-00704 subtree, opened at the nine cuts vmtk was given (an inlet and eigh
 - **Rings.** vmtk's boundary barycenter and radius are averages over the ring's vertices. Computed
   that way (`vmtk_vertex_mean=True`) ours equal vmtk's on eight of the nine rings (to 1e-4 mm) and
   differ by 0.016 mm and 0.012 mm on the ninth: the exact plane clip makes the same ring as VTK's
-  clipper. The default averages along the ring's length instead, which does not depend on where
-  the mesh happens to put vertices: it moves the barycenter by 0.05–0.26 mm and the radius by
-  0.01–0.05 mm on these rings.
-- **Extensions** (ratio 5, transition 0.25, as vmtk was run): 13,517 of vmtk's extension vertices
-  lie in the straight part; their distance from our cylinder's axis differs from our radius by a
-  median 0.03 mm (90th percentile 0.09 mm), which is the ring difference above. The transition is
-  a smoothstep blend here and a thin-plate spline in vmtk; they are not compared point by point.
+  clipper. The default averages along the ring's length instead (the polygon's perimeter centroid,
+  and the mean distance from it integrated along every edge), which does not depend on where the
+  mesh happens to put vertices: it moves the barycenter by 0.05–0.26 mm and the radius by
+  0.01–0.04 mm on these rings. On a ring with 40 of its 42 vertices on one side the vertex average
+  is 0.8 mm off; the default is exact.
+- **Extensions** (ratio 5, transition 0.25, as vmtk was run). In the straight part, 13,639 of
+  vmtk's extension vertices: their distance from our cylinder's axis differs from our radius by a
+  median 0.02 mm (90th percentile 0.09 mm), which is the ring difference above. In the transition
+  (a smoothstep blend here, a thin-plate spline in vmtk), vmtk's 4,053 vertices lie within a
+  median 0.03 mm of our surface (90th percentile 0.05 mm, at most 0.2 mm; the surface sampled
+  densely, so these are upper bounds).
+- **A ring of any shape.** Each ring vertex goes to the circle point at its own fraction of the
+  ring's length. Sending vertices out radially from the barycenter, as the first version did,
+  folded the tube on rings that are not star-shaped (an L- or C-shaped section: a third to a half
+  of the tube's faces inward, and the manifold check passed it); one of the 436 artery caps was
+  such a ring. The circle's vertices are spaced as the ring's, so a ring with a very short edge
+  carries a strip of thin triangles along its tube.
 - **The mesh stays closed and manifold**, and its volume grows by the tubes' (π R² L per cap,
-  within 3 % on the Y phantom). An extension is straight and knows nothing of its surroundings:
-  one from a small branch can run into a neighbor, which the manifold check does not see.
-- **Whole trees** (`thalweg export --mesh --flow-extensions 5`, all end kinds): C3N-00704 airways,
-  109 caps, extensions a median 3.8 mm long, 2.8 s; arteries, 436 caps, a median 6.2 mm, 9.9 s and
-  1.04 million faces.
+  within 3 % on the Y phantom).
+- **Collisions.** An extension is straight and knows nothing of its surroundings.
+  `export.extension_collisions` counts, per extension, the tube vertices that lie inside the
+  structure more than one radius past the point where the extension's axis leaves it; the CLI
+  prints how many extensions have any, and the sidecar carries the count
+  (`extension_vertices_inside_structure`). It samples the field at vertices; it does not test
+  triangles against each other, and it does not see two extensions crossing in the open.
+- **Whole trees** (`thalweg export --mesh --flow-extensions 5`, all end kinds), C3N-00704:
+
+  | Tree | Caps | Median extension length | Extensions running back into the structure | Faces | Time |
+  |---|---|---|---|---|---|
+  | airways | 109 | 3.8 mm | 12 | 0.24 million | 2.7 s |
+  | arteries | 436 | 6.1 mm | 7 | 1.03 million | 9.7 s |
 
 ## 6. Not yet validated
 
