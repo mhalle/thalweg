@@ -56,34 +56,42 @@ def group_tubes(cl: Centerlines, radius: str = RADIUS, group_ids: str = GROUP_ID
     return LabeledTubes(seg, group[seg.cell].astype(np.int64))
 
 
-def _reduce(point: np.ndarray, value: np.ndarray, label: np.ndarray, n: int):
-    """Per point: the lowest value among its pairs and that pair's label (ties: the lowest label)."""
+def _reduce(point: np.ndarray, value: np.ndarray, label: np.ndarray, n: int, segment: np.ndarray):
+    """Per point: the lowest value among its pairs, that pair's label and segment (ties: the lowest
+    label, then the lowest segment index)."""
     out_label = np.full(n, -1, np.int64)
     out_value = np.full(n, VTK_VMTK_LARGE_DOUBLE)
+    out_segment = np.full(n, -1, np.int64)
     ok = np.isfinite(value)
-    point, value, label = point[ok], value[ok], label[ok]
+    point, value, label, segment = point[ok], value[ok], label[ok], segment[ok]
     if len(point):
-        o = np.lexsort((label, value, point))
-        point, value, label = point[o], value[o], label[o]
+        o = np.lexsort((segment, label, value, point))
+        point, value, label, segment = point[o], value[o], label[o], segment[o]
         first = np.concatenate([[True], point[1:] != point[:-1]])
         out_label[point[first]] = label[first]
         out_value[point[first]] = value[first]
-    return out_label, out_value
+        out_segment[point[first]] = segment[first]
+    return out_label, out_value, out_segment
 
 
-def lowest_label(x, tubes: LabeledTubes, pairs: tuple[np.ndarray, np.ndarray] | None = None):
+def lowest_label(x, tubes: LabeledTubes, pairs: tuple[np.ndarray, np.ndarray] | None = None,
+                 return_segment: bool = False):
     """``(label, value)`` per query point: the label of the segment whose tube value is lowest, and
-    the value (negative inside that tube). -1 and vmtk's large double where no segment is usable."""
+    the value (negative inside that tube). -1 and vmtk's large double where no segment is usable.
+    ``return_segment``: also the winning segment's index (-1 where none)."""
     x = np.asarray(x, dtype=np.float64).reshape(-1, 3)
     n, s = len(x), len(tubes)
     if n == 0 or s == 0:
-        return np.full(n, -1, np.int64), np.full(n, VTK_VMTK_LARGE_DOUBLE)
+        out = np.full(n, -1, np.int64), np.full(n, VTK_VMTK_LARGE_DOUBLE), np.full(n, -1, np.int64)
+        return out if return_segment else out[:2]
     if pairs is not None:
         pi, si = (np.asarray(a, np.int64) for a in pairs)
         val = segment_values(x[pi], tubes.segments.take(si), pairwise=True)
-        return _reduce(pi, val, tubes.label[si], n)
+        out = _reduce(pi, val, tubes.label[si], n, si)
+        return out if return_segment else out[:2]
     out_label = np.full(n, -1, np.int64)
     out_value = np.full(n, VTK_VMTK_LARGE_DOUBLE)
+    out_segment = np.full(n, -1, np.int64)
     order = np.argsort(tubes.label, kind="stable")           # ties then fall to the lowest label
     seg, lab = tubes.segments.take(order), tubes.label[order]
     step = max(1, DENSE_CHUNK // s)
@@ -95,4 +103,32 @@ def lowest_label(x, tubes: LabeledTubes, pairs: tuple[np.ndarray, np.ndarray] | 
         ok = np.isfinite(best)
         out_label[a:a + step][ok] = lab[k[ok]]
         out_value[a:a + step][ok] = best[ok]
-    return out_label, out_value
+        out_segment[a:a + step][ok] = order[k[ok]]
+    return (out_label, out_value, out_segment) if return_segment else (out_label, out_value)
+
+
+def distance_to_centerlines(x, cl: Centerlines, use_radius: bool = False, radius: str = RADIUS,
+                            pairs: tuple[np.ndarray, np.ndarray] | None = None,
+                            segments: TubeSegments | None = None):
+    """vtkvmtkPolyDataDistanceToCenterlines (``vmtkdistancetocenterlines``, defaults): per point,
+    the distance to the nearest centerline point - the polyball search over every cell, with
+    ``UseRadiusInformation`` off by default (plain Euclidean) - and that point's interpolated
+    radius. With ``use_radius`` the search is the tube function's (the nearest point in the
+    Minkowski sense). Returns ``(distance, center, center_radius)``. ``pairs``: evaluate only those
+    (point, segment) pairs (see :func:`lowest_label`); ``segments``: the segment table, if already
+    built (``tube_segments(cl, radius if use_radius else None)``)."""
+    seg = segments if segments is not None else tube_segments(cl, radius if use_radius else None)
+    tubes = LabeledTubes(seg, np.arange(len(seg), dtype=np.int64))    # first minimum = the C++'s scan
+    x = np.asarray(x, dtype=np.float64).reshape(-1, 3)
+    _, _, k = lowest_label(x, tubes, pairs, return_segment=True)
+    ok = k >= 0
+    center = np.full((len(x), 3), np.nan)
+    rad = np.full(len(x), np.nan)
+    if ok.any():
+        _, (c0, c1, c2, c3, t) = segment_values(x[ok], seg.take(k[ok]), return_center=True, pairwise=True)
+        center[ok] = np.stack([c0, c1, c2], 1)
+        r_all = np.asarray(cl.point_data[radius], float).reshape(-1)
+        ids0 = np.array([cl.cells[c][s] for c, s in zip(seg.cell[k[ok]], seg.sub[k[ok]])])
+        ids1 = np.array([cl.cells[c][s + 1] for c, s in zip(seg.cell[k[ok]], seg.sub[k[ok]])])
+        rad[ok] = (1 - t) * r_all[ids0] + t * r_all[ids1] if not use_radius else c3
+    return np.linalg.norm(x - center, axis=1), center, rad

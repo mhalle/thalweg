@@ -252,6 +252,10 @@ def _cap_kinds(ctx, param, value):
 @click.option("--swc", type=click.Path(dir_okay=False), default=None, help="The tree as SWC.")
 @click.option("--markups", type=click.Path(dir_okay=False), default=None,
               help="One 3D Slicer curve per branch (.mrk.json).")
+@click.option("--curvature", is_flag=True,
+              help="With --mesh: the wall's mean curvature from the field, point array MeanCurvature (1/mm).")
+@click.option("--distance-to-centerlines", "with_distance", is_flag=True,
+              help="With --mesh: point arrays DistanceToCenterlines and CenterlineRadius (mm), vmtk's.")
 @click.option("--flow-extensions", "extension_ratio", type=click.FloatRange(min=0, min_open=True),
               default=None,
               help="With --mesh: replace each cap by a flow extension this many ring radii long "
@@ -266,13 +270,14 @@ def _cap_kinds(ctx, param, value):
               help="Wall maps r(arc length, angle) of every edge, ray-cast from the field (.npz).")
 @click.option("--wall-map-step", type=click.FloatRange(min=0, min_open=True), default=0.5, show_default=True,
               help="Station spacing of the wall maps, mm.")
-def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, swc, markups, extension_ratio,
+def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, swc, markups, curvature,
+           with_distance, extension_ratio,
            extension_transition, sections_out, distance_spheres, wall_maps_out, wall_map_step):
     """Export one structure: a capped surface for CFD, vmtk-compatible centerlines, SWC, Slicer
     markups and/or wall maps (give at least one output)."""
     from .graph import TubeGraph
-    if extension_ratio is not None and not mesh:
-        raise click.UsageError("--flow-extensions needs --mesh")
+    if (extension_ratio is not None or curvature or with_distance) and not mesh:
+        raise click.UsageError("--flow-extensions, --curvature and --distance-to-centerlines need --mesh")
     if extension_ratio is None and extension_transition != 0.25:
         raise click.UsageError("--extension-transition needs --flow-extensions")
     if not (mesh or vmtk_out or swc or markups or wall_maps_out or sections_out):
@@ -319,6 +324,20 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
             from .export import extension_collisions, flow_extensions
             msh = flow_extensions(msh, ratio=extension_ratio, transition=extension_transition)
             hits = extension_collisions(msh, m, geo)
+        import numpy as np
+        tube = np.zeros(len(msh.vertices), bool)                  # vertices of the flow extensions
+        for e in msh.extensions.values():
+            tube[e["vertices"][0]:e["vertices"][1]] = True
+        if curvature:
+            from .kernel.curvature import mean_curvature
+            h = np.full(len(msh.vertices), np.nan)
+            h[~tube] = mean_curvature(m, geo, msh.vertices[~tube])
+            msh.point_data["MeanCurvature"] = h                 # the extensions are not the field's surface
+        if with_distance:
+            from .partition import distance_to_centerlines
+            dist, rad = distance_to_centerlines(msh.vertices, g, name)
+            msh.point_data["DistanceToCenterlines"] = dist
+            msh.point_data["CenterlineRadius"] = rad
         write_vtp_mesh(msh, mesh)
         n_ends = len(msh.caps) + len(msh.skipped)
         more = f", {len(msh.skipped)} not (see below)" if msh.skipped else ""

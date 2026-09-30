@@ -135,8 +135,19 @@ def test_the_other_verbs_run_end_to_end(vessels_data, tmp_path):
         assert c["extension_transition"] == 0.5 and c["extension_vertices_inside_structure"] >= 0
         assert 0.8 * c["extension_radius_mm"] < c["ring_mean_radius_mm"] <= c["extension_radius_mm"] + 1e-6
     r = run.invoke(main, ["export", str(graph), str(vessels_data / STORE), "-s", "lung_airways",
+                          "--mesh", str(tmp_path / "b.vtp"), "--curvature", "--distance-to-centerlines",
+                          "--flow-extensions", "2"])
+    assert r.exit_code == 0, r.output + str(r.exception)
+    import xml.etree.ElementTree as ET
+    arrays = ET.parse(tmp_path / "b.vtp").getroot().find("PolyData/Piece/PointData").iter("DataArray")
+    pdata = {a.get("Name"): np.array(a.text.split(), float) for a in arrays}
+    assert set(pdata) == {"MeanCurvature", "DistanceToCenterlines", "CenterlineRadius"}
+    h = pdata["MeanCurvature"]
+    assert 0.5 < np.isfinite(h).mean() < 1.0 and 0.1 < np.nanmedian(h) < 0.5      # NaN on the extensions
+    assert np.isfinite(pdata["DistanceToCenterlines"]).all()
+    r = run.invoke(main, ["export", str(graph), str(vessels_data / STORE), "-s", "lung_airways",
                           "--swc", str(tmp_path / "a.swc"), "--flow-extensions", "3"])
-    assert r.exit_code != 0 and "needs --mesh" in r.output
+    assert r.exit_code != 0 and "need --mesh" in r.output
     r = run.invoke(main, ["export", str(graph), str(vessels_data / STORE), "-s", "lung_airways",
                           "--mesh", str(mesh), "--extension-transition", "0.5"])
     assert r.exit_code != 0 and "needs --flow-extensions" in r.output

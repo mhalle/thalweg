@@ -96,20 +96,54 @@ def _candidates(x: np.ndarray, tubes: LabeledTubes) -> tuple[np.ndarray, np.ndar
     return np.concatenate(ps), np.concatenate(ss)
 
 
-def label_points(x, tubes: LabeledTubes, exhaustive: bool = False) -> tuple[np.ndarray, np.ndarray]:
+def label_points(x, tubes: LabeledTubes, exhaustive: bool = False, return_segment: bool = False):
     """``(label, value)`` for world points ``x``: the tube with the lowest value at each, and that
-    value (negative inside the tube). ``exhaustive=True`` evaluates every (point, segment) pair -
-    the same answer, for checking."""
+    value (negative inside the tube; the tube function). ``exhaustive=True`` evaluates every
+    (point, segment) pair - the same answer, for checking. ``return_segment``: also the index of
+    the winning segment."""
     x = np.asarray(x, dtype=np.float64).reshape(-1, 3)
     if exhaustive or len(x) == 0 or len(tubes) == 0:
-        return _vp.lowest_label(x, tubes)
-    label = np.empty(len(x), np.int64)
-    value = np.empty(len(x))
+        return _vp.lowest_label(x, tubes, return_segment=return_segment)
+    out = [np.empty(len(x), np.int64), np.empty(len(x)), np.empty(len(x), np.int64)]
     for a in range(0, len(x), POINT_CHUNK):
         xx = x[a:a + POINT_CHUNK]
-        label[a:a + POINT_CHUNK], value[a:a + POINT_CHUNK] = _vp.lowest_label(
-            xx, tubes, pairs=_candidates(xx, tubes))
-    return label, value
+        got = _vp.lowest_label(xx, tubes, pairs=_candidates(xx, tubes), return_segment=True)
+        for o, g in zip(out, got):
+            o[a:a + POINT_CHUNK] = g
+    return tuple(out) if return_segment else tuple(out[:2])
+
+
+def tube_function(tubes: LabeledTubes, geometry, shape) -> np.ndarray:
+    """The tube function sampled on a lattice (``vmtkcenterlinemodeller``: the polyball-line
+    function as an image): float32, |x - c|^2 - r^2 in mm^2 at each lattice point of ``geometry``
+    with ``shape``, negative inside the tubes. Its zero set is the tubes' surface; unlike the
+    model's margin it is the surface the centerlines and their radii describe."""
+    idx = np.stack(np.meshgrid(*[np.arange(n) for n in shape], indexing="ij"), -1).reshape(-1, 3)
+    world = np.asarray(geometry.origin, float) + idx @ np.asarray(geometry.directions, float)
+    return label_points(world, tubes)[1].reshape(shape).astype(np.float32)
+
+
+def distance_to_centerlines(x, graph: TubeGraph, structure: str, use_radius: bool = False):
+    """``vmtkdistancetocenterlines`` against the graph's own centerlines: per world point, the
+    distance to the nearest centerline point (with ``use_radius``: the tube function's nearest
+    point) and the traced radius there. Returns ``(distance, radius)``. Exact, with the spatial
+    pruning of :func:`label_points`."""
+    tubes = edge_tubes(graph, structure)
+    seg = tubes.segments
+    if not use_radius:
+        seg = TubeSegments(seg.p0, seg.p1, np.zeros(len(seg)), np.zeros(len(seg)), seg.cell, seg.sub)
+    by_index = LabeledTubes(seg, np.arange(len(seg), dtype=np.int64))
+    x = np.asarray(x, dtype=np.float64).reshape(-1, 3)
+    _, _, k = label_points(x, by_index, return_segment=True)
+    ok = k >= 0
+    dist = np.full(len(x), np.nan)
+    rad = np.full(len(x), np.nan)
+    if ok.any():
+        _, (c0, c1, c2, c3, t) = segment_values(x[ok], seg.take(k[ok]), return_center=True, pairwise=True)
+        dist[ok] = np.linalg.norm(x[ok] - np.stack([c0, c1, c2], 1), axis=1)
+        kk = k[ok]
+        rad[ok] = (1 - t) * tubes.segments.r0[kk] + t * tubes.segments.r1[kk]
+    return dist, rad
 
 
 def traced_mask(m: np.ndarray, geometry, points: np.ndarray) -> np.ndarray:

@@ -541,6 +541,24 @@ from a field that thalweg's test rebuilds exactly (a union of spheres along the 
   closed, 18 s; arteries 1,302 sections, 1,172 closed, 70 s (mostly vmtk's branch extraction on
   the whole tree). Median shape (MinSize / MaxSize) of the closed ones: 0.82 and 0.88.
 
+## 5j. Curvature, distance to centerlines, tube function, straightened view
+
+- **Mean curvature** (`kernel.curvature`, a weighted quadric fit to the unclipped margin samples
+  within 2.8 mm): on tubes of radius 0.75, 1.5 and 3 mm and spheres of 2 and 4 mm, oblique to an
+  anisotropic 0.62–0.7 mm grid, the median over the zero set's vertices is 1.02–1.04 × the truth,
+  with the 10th–90th percentiles within 0.99–1.05. A cavity reads negative. On the C3N-00704
+  meshes (`thalweg export --mesh --curvature`) every vertex gets a value; the median is 0.26
+  (airways) and 0.24 (arteries) 1/mm, a tube of about 2 mm radius.
+- **Distance to centerlines** (`vmtkdistancetocenterlines`, its defaults: the Euclidean distance to
+  the nearest centerline point): at 5,690 of the 28,449 surface points vmtk mapped on the
+  C3N-00704 subtree, from the centerlines vmtk used, ours equals vmtk's to 1e-9 mm (1e-14 in
+  practice). On the whole-tree meshes the wall lies a median 0.13 mm (airways) and 0.09 mm
+  (arteries) beyond the traced radius. With the partition's pruning this runs on the arteries'
+  232,000 vertices in the 25 s the whole export takes.
+- **Tube function**: on a straight tube it is d² − r² at distance d from the axis, exactly.
+- **Straightened view**: a tube of radius 2 mm bent through a quarter circle straightens to
+  centered disks of area π r² within 3 %, with arc length 10π mm and no twist between sections.
+
 ## 6. Not yet validated
 
 - **Thin-caliber ground truth.** The ~1 mm radius floor belongs to the model; checking the

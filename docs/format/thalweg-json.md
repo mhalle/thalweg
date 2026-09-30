@@ -260,6 +260,10 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
 - **Surface:** `thalweg export … --mesh M.vtp [--cap-kinds tip,truncated,root] [--refine N]`
   writes the structure's zero set: marching cubes at level 1e-5 on the margin's trilinear
   interpolant, N times finer.
+  - `--curvature` adds point data `MeanCurvature` (1/mm, positive where the wall is convex;
+    NaN on flow extensions, which are not the field's surface); `--distance-to-centerlines`
+    adds `DistanceToCenterlines` (mm, to the nearest centerline point, vmtk's default) and
+    `CenterlineRadius` (the traced radius there).
   - `--flow-extensions RATIO [--extension-transition T]` replaces every cap by a straight tube
     RATIO × the ring's mean radius long that morphs the ring into a circle over the first T
     (default 0.25) of its length and ends in a flat cap with the cap's id and name. The tube's

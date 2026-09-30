@@ -159,6 +159,7 @@ class Mesh:
     skipped: list[Skipped] = field(default_factory=list)  # ends with no cap, and why
     caps: list[Cut] = field(default_factory=list)         # caps[k - 1]: the cut behind BoundaryId k
     extensions: dict[int, dict] = field(default_factory=dict)  # BoundaryId -> its flow extension
+    point_data: dict[str, np.ndarray] = field(default_factory=dict)  # named per-vertex arrays for the .vtp
 
 
 def wall_slope(margin: np.ndarray, geometry) -> float:
@@ -875,10 +876,14 @@ def boundaries(mesh: Mesh) -> dict:
 
 
 def write_vtp_mesh(mesh: Mesh, path) -> Path:
-    """The mesh as .vtp (cell data ``BoundaryId``, Int32) plus ``<path>.boundaries.json``
-    (:func:`boundaries`)."""
+    """The mesh as .vtp (cell data ``BoundaryId``, Int32; point data ``Mesh.point_data``) plus
+    ``<path>.boundaries.json`` (:func:`boundaries`)."""
     path = Path(path)
+    for name, a in mesh.point_data.items():
+        if len(a) != len(mesh.vertices):
+            raise ThalwegError(f"point array {name!r} has {len(a)} values for {len(mesh.vertices)} vertices")
     path.write_text(_polydata_xml(mesh.vertices, polys=np.asarray(mesh.faces, np.int64),
+                                  point_data=dict(mesh.point_data) or None,
                                   cell_data={"BoundaryId": np.asarray(mesh.boundary, np.int64)}))
     Path(str(path) + ".boundaries.json").write_text(json.dumps(boundaries(mesh), indent=1) + "\n")
     return path

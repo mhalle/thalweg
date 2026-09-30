@@ -144,3 +144,115 @@ def test_labels_are_vmtk_branch_clippers(vessels_data, which):
             gaps.append(row[tubes.label == theirs[i]].min() - row[tubes.label == lab[i]].min())
     gaps = np.array(gaps)
     assert gaps.min() >= 0 and np.median(gaps) < 1e-3 and gaps.max() < 0.7      # mm^2: on the tie
+
+
+def test_a_segment_without_a_usable_radius_makes_no_tube_either_way():
+    """A NaN radius: that segment is skipped, in the dense and the pruned search alike."""
+    rng = np.random.default_rng(2)
+    tubes = _random_tubes(rng, n_lines=5)
+    tubes.segments.r0[3] = np.nan
+    x = rng.uniform(0, 60, (500, 3))
+    dense, pruned = lowest_label(x, tubes), label_points(x, tubes)
+    assert (dense[0] >= 0).all() and (dense[0] == pruned[0]).all() and np.array_equal(dense[1], pruned[1])
+
+
+def test_chunks_do_not_change_the_labels(monkeypatch):
+    import thalweg.partition as P
+    rng = np.random.default_rng(3)
+    tubes = _random_tubes(rng)
+    x = rng.uniform(0, 60, (100, 3))
+    full = label_points(x, tubes, exhaustive=True)
+    monkeypatch.setattr(P, "POINT_CHUNK", 7)
+    got = label_points(x, tubes)
+    assert (got[0] == full[0]).all() and np.array_equal(got[1], full[1])
+
+
+def test_edge_tubes_take_radius_zero_where_a_sample_has_none():
+    m, geo, g = _y_graph()
+    rad = list(g.points.radius)
+    rad[1] = -1.0
+    g = g.model_copy(update={"points": g.points.model_copy(update={"radius": rad})})
+    seg = edge_tubes(g, "y").segments
+    assert seg.r0.min() == 0.0 and seg.r1.min() == 0.0 and np.isfinite(seg.r0).all()
+
+
+def test_the_label_volume_on_an_oblique_anisotropic_grid():
+    """A tube along world z on a grid whose axes are permuted, flipped and unequal: each lattice
+    point inside takes the label of the half (z below or above 20) it lies in."""
+    from rankfield.geometry import Geometry
+    from phantoms import capsule_distance
+    shape = (30, 60, 25)
+    d = np.array([[0.0, -0.8, 0.0], [0.0, 0.0, 0.7], [0.5, 0.0, 0.0]])       # axis 0 -> -y, 1 -> z, 2 -> x
+    origin = np.array([-6.0, 12.0, -1.0])
+    geo = Geometry(shape=shape, directions=tuple(map(tuple, d)), origin=tuple(origin))
+    idx = np.stack(np.meshgrid(*[np.arange(n) for n in shape], indexing="ij"), -1).reshape(-1, 3)
+    world = origin + idx @ d
+    a, b = np.array([0.0, 0, 3]), np.array([0.0, 0, 37])
+    m = np.clip(10 * capsule_distance(world, a, b, 3.0, 3.0), -8, 8).astype(np.float32).reshape(shape)
+    mid = np.array([0.0, 0, 20])
+    seg = TubeSegments(np.array([a, mid]), np.array([mid, b]), np.full(2, 3.0), np.full(2, 3.0),
+                       np.array([0, 1]), np.zeros(2, np.int64))
+    labels = label_field(m, geo, LabeledTubes(seg, np.array([10, 20])))
+    inside = labels.reshape(-1) >= 0
+    assert inside.sum() > 1000 and (inside == (m.reshape(-1) > 0)).all()
+    z = world[inside, 2]
+    got = labels.reshape(-1)[inside]
+    clear = np.abs(z - 20) > 1e-6
+    assert (got[clear] == np.where(z[clear] < 20, 10, 20)).all()
+    vol = label_volumes(labels, geo)
+    assert abs(vol[10] / vol[20] - 1.0) < 0.06 and abs(sum(vol.values()) - inside.sum() * 0.28) < 1e-6
+
+
+def test_a_fragment_touching_only_at_a_corner_is_not_the_traced_piece():
+    """Pieces are the field's own: a voxel whose only contact with the structure is a corner
+    (26-connected, but the interpolant dips below zero between them) stays unlabeled."""
+    from rankfield.geometry import Geometry
+    from thalweg.partition import traced_mask
+    m = np.full((12, 12, 12), -8.0, np.float32)
+    m[2:6, 2:6, 2:6] = 8.0
+    m[6, 6, 6] = 8.0                                                  # a corner neighbor of (5, 5, 5)
+    geo = Geometry(shape=m.shape, directions=((1.0, 0, 0), (0, 1.0, 0), (0, 0, 1.0)), origin=(0.0, 0, 0))
+    mask = traced_mask(m, geo, np.array([[3.0, 3, 3], [3.4, 3.4, 3.4], [50.0, 0, 0]]))
+    assert mask.sum() == 64 and not mask[6, 6, 6]
+
+
+def test_tube_function_and_distance_to_centerlines_of_a_straight_tube():
+    """Along a straight tube of radius 2: the tube function is d^2 - r^2 at distance d from the
+    axis, the distance to the centerline is d, and its radius there is 2."""
+    from rankfield.geometry import Geometry
+    from thalweg.partition import distance_to_centerlines, tube_function
+    from thalweg.graph import Edge, Node, Provenance, Structure
+    z = np.linspace(0, 30, 31)
+    pos = [(0.0, 0.0, float(v)) for v in z]
+    g = TubeGraph(structures=[Structure(name="t", roots=[0], method="test")],
+                  nodes=[Node(id=0, kind="root", position=pos[0], structure="t"),
+                         Node(id=1, kind="tip", position=pos[-1], structure="t")],
+                  edges=[Edge(id=0, structure="t", start_node=0, end_node=1, point_range=(0, 31),
+                              length_mm=30.0, provenance=Provenance(method="field"))],
+                  points=Points(position=pos, radius=[2.0] * 31))
+    geo = Geometry(shape=(9, 9, 5), directions=((1.0, 0, 0), (0, 1.0, 0), (0, 0, 5.0)),
+                   origin=(-4.0, -4.0, 5.0))
+    f = tube_function(edge_tubes(g, "t"), geo, (9, 9, 5))
+    i, j = np.meshgrid(np.arange(9) - 4.0, np.arange(9) - 4.0, indexing="ij")
+    assert np.allclose(f, (i ** 2 + j ** 2 - 4.0)[..., None], atol=1e-5)
+    x = np.array([[3.0, 0, 12.3], [0, 0.5, 7.0], [1.0, 1.0, 40.0]])
+    d, r = distance_to_centerlines(x, g, "t")
+    assert np.allclose(d, [3.0, 0.5, np.sqrt(2 + 100)]) and np.allclose(r, 2.0)
+    d, r = distance_to_centerlines(x, g, "t", use_radius=True)
+    assert np.allclose(d[:2], [3.0, 0.5])
+
+
+@pytest.mark.data
+def test_distance_to_centerlines_is_vmtks(vessels_data):
+    """vmtkDistanceToCenterlines (its defaults) at the 28,449 mapped surface points of the C3N-00704
+    subtree, from the centerlines vmtk used: the same distances to rounding."""
+    from thalweg.vmtk.partition import distance_to_centerlines
+    f = vessels_data / "C3N-00704_ctpa0625_vmtk_mapping.npz"
+    if not f.exists():
+        pytest.skip(f"{f.name} is not there (research/vessels/vmtk_mapping.py)")
+    M = np.load(f)
+    cells = np.split(M["cell_ids"], np.cumsum(M["cell_len"])[:-1])
+    cl = Centerlines(M["cl_points"], cells, {"MaximumInscribedSphereRadius": M["cl_radius"]}, {})
+    some = slice(None, None, 5)
+    d, c, r = distance_to_centerlines(M["surf_points"][some], cl)
+    assert np.abs(d - M["surf_dist"][some]).max() < 1e-9 and (r > 0).all()

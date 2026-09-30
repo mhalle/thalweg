@@ -72,7 +72,7 @@ tiers, ported after phase 5.
 | `vmtkbranchgeometry` | Per-branch length, curvature, torsion, tortuosity (`vmtk.branch_geometry`); thalweg's per-branch table in `measure` | ported | 2 |
 | `vmtkcenterlinesections`, `vmtkbranchsections` | Normal-plane sections sampled from the field, sub-voxel contours, area ± the model's interval, Feret widths, aspect ratio (`kernel.sections`, `measure`; pixel areas equal `straighten.py`'s). No vmtk oracle (vmtk's needs the clipped surface) | done | 2 |
 | `vmtksurfacethickness` | Wall area, WA%, thickness and Pi10 between the labeled lumen and wall (`measure`, `case`; airways) | done | 2 |
-| `vmtksurfacecurvature` | Level-set mean curvature by a quadric fit (`curvature.py`): 1.02–1.04 × truth on phantoms, 6× vmtk's repeatability | native | T3 |
+| `vmtksurfacecurvature` | Level-set mean curvature by a weighted quadric fit to the unclipped margin samples (`kernel.curvature`): 1.02–1.04 × truth on oblique tube and sphere phantoms; `thalweg export --mesh M.vtp --curvature` writes it as point data | done | T3 |
 
 ### Mapping and modeling
 
@@ -81,8 +81,8 @@ tiers, ported after phase 5.
 | `vmtkbranchmetrics` | AbscissaMetric and AngularMetric as point-wise formulas at any labeled points (`vmtk.metrics`). vmtk's values to rounding (3e-14 mm, 5e-13 rad) at the 21,221 surface vertices with its end-point defect switched on; interpolating correctly is the default | ported | T2 |
 | `vmtkbranchmapping` | Wall maps r(s, θ) by ray casting in the field (`kernel.rays`, `wallmap`): per graph edge in thalweg's frame (`thalweg export --wall-maps`), or per vmtk group in vmtk's coordinates, a median 0.025 mm from vmtk's DistanceToCenterlines. vmtk's StretchedMapping (the longitudinal re-stretch across bifurcations) is not ported | done | T2 |
 | `vmtkbranchpatching` | The wall map is already the raster (`wallmap.WallMap`, written as `.npz`); any wall quantity maps by sampling it at `WallMap.wall_points()`. vmtk's own patching run saved nothing to compare with (`patch_*` arrays empty) | done | T2 |
-| `vmtkdistancetocenterlines` | Distance to the tube function | prototype | 2 |
-| `vmtkpolyballmodeller`, `vmtkcenterlinemodeller` | The tube function as one more signed field | native | T3 |
+| `vmtkdistancetocenterlines` | Distance from any points to the centerlines, vmtk's defaults or with radius information (`vmtk.partition.distance_to_centerlines`: vmtk's values to 1e-14 mm at the 28,449 mapped surface points; `partition.distance_to_centerlines` on the graph, pruned); `thalweg export --mesh M.vtp --distance-to-centerlines` | done | 2 |
+| `vmtkpolyballmodeller`, `vmtkcenterlinemodeller` | The tube function sampled on a lattice (`partition.tube_function`), from graph edges or vmtk groups | done | T3 |
 | `vmtksurfacemodeller` | The field is already the signed function | replaced | — |
 
 ### CFD
@@ -99,7 +99,7 @@ tiers, ported after phase 5.
 | vmtk | thalweg | Status | Phase |
 |---|---|---|---|
 | `vmtkimageviewer`, `vmtksurfaceviewer` | sdfview renders the field | out | — |
-| `vmtkimagecurvedmpr` | Straightened field along any path (`straighten.py`, `explorations/rendering/`) | native | T3 |
+| `vmtkimagecurvedmpr` | Straightened view of any volume along any path, parallel-transport frames (`straighten.straighten`, `straighten.path_to`) | done | T3 |
 | `vmtk*reader`, `vmtk*writer` | In: a ranked store via rankfield (`store`; a plain labelmap or SDF in degraded mode is todo). Out: `.thalweg.json`, Parquet tables, VTP mesh and centerlines, SWC, Slicer markups (`graph`, `measure`, `export`); a 0-D/1-D solver input is todo | done (in part) | 1 in, 4 out |
 
 ## What thalweg adds that vmtk lacks
@@ -264,7 +264,7 @@ thalweg table arteries.thalweg.json.gz STORE -o branches.parquet [--stations sta
 thalweg run STORE -o OUT/ [-s NAME ...] [--step MM] [--no-stations] [--branch-volumes]
             [--ridge-passes N] [--prune ...] [--root ...]
                                                # graph, branches, stations, summary.json, qc.json
-thalweg export arteries.thalweg.json.gz STORE -s lung_arteries [--mesh M.vtp [--cap-kinds ...] [--refine N] [--flow-extensions RATIO [--extension-transition T]]] [--vmtk-centerlines C.vtp [--vmtk-exact]] [--swc T.swc] [--markups M.mrk.json] [--wall-maps W.npz [--wall-map-step MM]] [--bifurcation-sections S.parquet [--distance-spheres N]]
+thalweg export arteries.thalweg.json.gz STORE -s lung_arteries [--mesh M.vtp [--cap-kinds ...] [--refine N] [--curvature] [--distance-to-centerlines] [--flow-extensions RATIO [--extension-transition T]]] [--vmtk-centerlines C.vtp [--vmtk-exact]] [--swc T.swc] [--markups M.mrk.json] [--wall-maps W.npz [--wall-map-step MM]] [--bifurcation-sections S.parquet [--distance-spheres N]]
 thalweg summary arteries.thalweg.json.gz
 thalweg schema [-o FILE]
 ```
