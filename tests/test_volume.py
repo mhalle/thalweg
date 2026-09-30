@@ -214,3 +214,58 @@ def test_a_real_idc_seg():
     assert centroid("Spleen")[0] > 30 > -30 > centroid("Liver")[0]
     g = centerline_graph(st, "Aorta")
     assert sum(e.length_mm for e in g.edges) > 300 and sum(n.kind == "tip" for n in g.nodes) == 1
+
+
+def test_signed_distance_is_exact_across_a_coarse_axis():
+    """A wall across the 2 mm axis of a 2 x 0.5 x 0.5 mm grid: the voxel centers lie 1, 3, 5, 7 mm
+    from it inside and outside, not half the finest spacing off."""
+    from rankfield.geometry import Geometry
+    geo = Geometry(shape=(10, 6, 6), directions=((2.0, 0, 0), (0, 0.5, 0), (0, 0, 0.5)),
+                   origin=(0.0, 0, 0))
+    mask = np.zeros((10, 6, 6), bool)
+    mask[:4] = True
+    assert np.allclose(signed_distance(mask, geo)[:, 3, 3], [7, 5, 3, 1, -1, -3, -5, -7, -9, -11])
+    side = np.zeros((10, 6, 6), bool)
+    side[:, :, :3] = True                                              # a wall across a 0.5 mm axis
+    assert np.allclose(signed_distance(side, geo)[5, 3, :], [1.25, 0.75, 0.25, -0.25, -0.75, -1.25])
+
+
+def test_the_bounding_box_margin_is_the_full_one():
+    """Random masks on anisotropic grids, some touching the grid's edge: the margin computed on the
+    mask's grown bounding box equals the one computed on the whole grid."""
+    from rankfield.geometry import Geometry
+    from thalweg.volume import CLIP, SLOPE, _mask_margin
+    rng = np.random.default_rng(5)
+    for k in range(6):
+        sp = rng.uniform(0.3, 1.5, 3)
+        geo = Geometry(shape=(30, 26, 22), directions=tuple(tuple(r) for r in np.diag(sp)),
+                       origin=(0.0, 0, 0))
+        from scipy import ndimage
+        mask = ndimage.gaussian_filter(rng.normal(size=(30, 26, 22)), 2.0) > 0.08
+        if k % 2:
+            mask[:, :, :2] |= mask[:, :, 2:4]                           # reach the edge
+        full = np.clip(SLOPE * signed_distance(mask, geo), -CLIP, CLIP)
+        assert np.array_equal(_mask_margin(mask, geo), full.astype(np.float32))
+
+
+def test_open_store_says_what_it_cannot_read(tmp_path):
+    from dicom_seg import ct_series
+    pytest.importorskip("pydicom")
+    series = tmp_path / "ct"
+    series.mkdir()
+    for k, ds in enumerate(ct_series((2, 8, 8), (1, 1, 1), (0, 0, 0), (1, 0, 0), (0, 1, 0))):
+        ds.save_as(str(series / f"{k}.dcm"))
+    with pytest.raises(ThalwegError, match="directory of DICOM files"):
+        open_store(series)
+    (tmp_path / "notes.txt").write_text("hello")
+    with pytest.raises(ThalwegError, match="not a ranked store"):
+        open_store(tmp_path / "notes.txt")
+    path, _, _ = _y_labelmap(tmp_path)
+    import os as _os
+    old = _os.environ.get("HOME")
+    _os.environ["HOME"] = str(tmp_path)                                  # "~" is the test's directory
+    try:
+        assert open_store("~/" + path.name).names == ["label_3"]
+    finally:
+        if old is not None:
+            _os.environ["HOME"] = old

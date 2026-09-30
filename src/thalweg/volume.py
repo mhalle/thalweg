@@ -54,7 +54,7 @@ SEG_PAD = 3
 
 def is_dicom(path) -> bool:
     """A file with the DICOM preamble ("DICM" at byte 128)."""
-    p = Path(path)
+    p = Path(path).expanduser()
     try:
         with open(p, "rb") as f:
             head = f.read(132)
@@ -64,8 +64,16 @@ def is_dicom(path) -> bool:
 
 
 def is_volume(path) -> bool:
-    name = Path(path).name.lower()
+    name = Path(path).expanduser().name.lower()
     return any(name.endswith(s) for s in SUFFIXES) or is_dicom(path)
+
+
+def dicom_directory(path) -> bool:
+    """A directory holding DICOM files (an image series, which thalweg does not read)."""
+    p = Path(path).expanduser()
+    if not p.is_dir():
+        return False
+    return any(is_dicom(f) for f in list(p.iterdir())[:20] if f.is_file())
 
 
 @dataclass
@@ -85,17 +93,30 @@ def _geometry(img):
                     origin=tuple(map(float, img.GetOrigin())))
 
 
+def _to_other_cell(mask: np.ndarray, sp: np.ndarray) -> np.ndarray:
+    """For each voxel where ``mask`` is true: the distance (mm) from its center to the CELL (the
+    voxel's box) of the nearest voxel where it is false - along the line to that voxel's center,
+    where the line enters its box: |v| (1 - min_k s_k / (2 |v_k|)) for the offset v between the
+    centers. On a straight wall that is exactly the distance to the wall, on any spacing."""
+    d, idx = ndimage.distance_transform_edt(mask, sampling=sp, return_indices=True)
+    here = np.indices(mask.shape)
+    v = (idx - here).astype(float) * sp[:, None, None, None]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        frac = np.min(np.where(v != 0, sp[:, None, None, None] / (2 * np.abs(v)), np.inf), axis=0)
+    return np.where(mask, d * (1.0 - np.minimum(frac, 1.0)), 0.0)
+
+
 def signed_distance(mask: np.ndarray, geometry) -> np.ndarray:
-    """Signed distance (mm, positive inside) of a boolean mask on ``geometry``'s grid, the boundary
-    half a voxel beyond the mask's last voxel: each voxel center's distance to the nearest voxel
-    center of the other kind, less half the grid's smallest spacing."""
+    """Signed distance (mm, positive inside) of a boolean mask on ``geometry``'s grid to its
+    staircase surface - the boundary of the union of the inside voxels' boxes: from each voxel
+    center, the distance to the box of the nearest voxel of the other kind (exact on a straight
+    wall along any grid axis, whatever the spacing)."""
     sp = np.linalg.norm(np.asarray(geometry.directions, float), axis=1)
     if not mask.any():
         return np.full(mask.shape, -np.inf, np.float32)
-    inside = ndimage.distance_transform_edt(mask, sampling=sp)
-    outside = ndimage.distance_transform_edt(~mask, sampling=sp)
-    half = 0.5 * float(sp.min())
-    return np.where(mask, inside - half, -(outside - half)).astype(np.float32)
+    if mask.all():
+        return np.full(mask.shape, np.inf, np.float32)
+    return (_to_other_cell(mask, sp) - _to_other_cell(~mask, sp)).astype(np.float32)
 
 
 def _mask_margin(mask: np.ndarray, geometry) -> np.ndarray:

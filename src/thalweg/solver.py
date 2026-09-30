@@ -5,7 +5,8 @@ conditions. :func:`zero_d_model` writes one from a structure's graph:
 
 - **vessels**: one per graph edge, a ``BloodVessel`` with Poiseuille resistance
   ``R = 8 mu / pi * integral ds / r^4`` and inductance ``L = rho / pi * integral ds / r^2``, both
-  integrated along the edge's samples (trapezoid rule, its traced radii), capacitance 0 (a rigid
+  integrated along the edge, its traced radius taken as linear between samples (the integrals
+  are then exact; a trapezoid rule over 1/r^4 reads a steep taper 6 % high), capacitance 0 (a rigid
   wall; give ``wall_stiffness`` = E h, the wall's Young's modulus times its thickness, for a
   thin-wall compliance ``C = 3 pi / (2 E h) * integral r^3 ds``), no stenosis term;
 - **junctions**: one per branching node (and per node joining two edges), inlet the edge arriving,
@@ -33,17 +34,21 @@ RHO = 1.06           # g / cm^3
 
 
 def _integrals(graph: TubeGraph, edge) -> tuple[float, float, float, float]:
-    """(length, integral ds/r^4, integral ds/r^2, integral r^3 ds) of an edge, in cm."""
+    """(length, integral ds/r^4, integral ds/r^2, integral r^3 ds) of an edge, in cm, exact for the
+    radius varying linearly along each segment between samples."""
     p = graph.edge_points(edge) / 10.0
     r = graph.edge_radius(edge) / 10.0
     if not (r > 0).any():
         raise ThalwegError(f"edge {edge.id} has no traced radius")
     r = np.where(r > 0, r, r[r > 0].min())
     ds = np.linalg.norm(np.diff(p, axis=0), axis=1)
-
-    def trap(f):
-        return float((0.5 * (f[1:] + f[:-1]) * ds).sum())
-    return float(ds.sum()), trap(r ** -4.0), trap(r ** -2.0), trap(r ** 3.0)
+    a, b = r[:-1], r[1:]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        same = np.isclose(a, b, rtol=1e-9)
+        inv4 = np.where(same, ds / a ** 4, ds * (a ** -3 - b ** -3) / (3.0 * (b - a)))
+        inv2 = ds / (a * b)
+    cube = ds * (a ** 3 + a ** 2 * b + a * b ** 2 + b ** 3) / 4.0
+    return float(ds.sum()), float(inv4.sum()), float(inv2.sum()), float(cube.sum())
 
 
 def zero_d_model(graph: TubeGraph, structure: str, inflow: float = 1.0,

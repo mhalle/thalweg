@@ -387,8 +387,13 @@ def _loops(edges):
 
 
 def _ear_clip(xy: np.ndarray) -> list[tuple[int, int, int]]:
-    """Triangulate a simple counterclockwise polygon (k, 2); returns index triples."""
+    """Triangulate a simple polygon (k, 2); returns index triples, counterclockwise. A clockwise
+    polygon is triangulated reversed and its triples mapped back."""
     xy = np.asarray(xy, float)
+    area2 = float((xy[:, 0] * np.roll(xy[:, 1], -1) - np.roll(xy[:, 0], -1) * xy[:, 1]).sum())
+    if area2 < 0:
+        k = len(xy)
+        return [(k - 1 - a, k - 1 - b, k - 1 - c) for a, b, c in _ear_clip(xy[::-1])]
     idx = list(range(len(xy)))
     tris = []
 
@@ -790,9 +795,10 @@ def flow_extensions(mesh: Mesh, ratio: float = 5.0, transition: float = 0.25, ca
         rel = plane - b
         xy = np.stack([rel @ e1, rel @ e2], axis=2)
         shape = "circle"
-        if not all(_simple(q) for q, wj in zip(xy, w) if 0.0 < wj < 1.0):
-            # the blend passes through itself (a C- or hook-shaped ring, its barycenter outside it):
-            # extrude the ring unchanged instead - a straight prism of the cap's own section
+        ring_xy = np.stack([(P - b) @ e1, (P - b) @ e2], axis=1)
+        if not _inside(ring_xy, np.zeros(2)) or not _strips_simple(np.concatenate([ring_xy[None], xy]), w):
+            # the blend would pass through itself (a C- or hook-shaped ring, its barycenter outside
+            # it): extrude the ring unchanged instead - a straight prism of the cap's own section
             plane, shape = np.broadcast_to(P, (n_layers,) + P.shape), "ring"
         layers = plane + s[:, None, None] * n
         first = nv
@@ -832,9 +838,14 @@ def flow_extensions(mesh: Mesh, ratio: float = 5.0, transition: float = 0.25, ca
 
 def _simple(xy: np.ndarray) -> bool:
     """Whether a closed polygon (k, 2) is simple: no two edges that do not share a vertex cross or
-    touch."""
-    a, b = xy, np.roll(xy, -1, axis=0)
+    touch (collinear edges touch only where they overlap). Zero-length edges are skipped."""
+    xy = np.asarray(xy, float)
+    keep = np.linalg.norm(np.roll(xy, -1, axis=0) - xy, axis=1) > 1e-12
+    xy = xy[keep]
     k = len(xy)
+    if k < 3:
+        return False
+    a, b = xy, np.roll(xy, -1, axis=0)
     i, j = np.triu_indices(k, 2)
     keep = ~((i == 0) & (j == k - 1))                             # the closing edge meets the first
     i, j = i[keep], j[keep]
@@ -843,7 +854,48 @@ def _simple(xy: np.ndarray) -> bool:
         return np.sign((q[:, 0] - p[:, 0]) * (r[:, 1] - p[:, 1]) - (q[:, 1] - p[:, 1]) * (r[:, 0] - p[:, 0]))
     p1, p2, q1, q2 = a[i], b[i], a[j], b[j]
     o1, o2, o3, o4 = orient(p1, p2, q1), orient(p1, p2, q2), orient(q1, q2, p1), orient(q1, q2, p2)
-    return not ((o1 * o2 <= 0) & (o3 * o4 <= 0)).any()
+    hit = (o1 * o2 <= 0) & (o3 * o4 <= 0)
+    colinear = (o1 == 0) & (o2 == 0)
+    if colinear.any():                                            # collinear pairs: do their spans overlap?
+        d = p2[colinear] - p1[colinear]
+        u = lambda x: ((x - p1[colinear]) * d).sum(1) / (d * d).sum(1)   # noqa: E731
+        lo = np.minimum(u(q1[colinear]), u(q2[colinear]))
+        hi = np.maximum(u(q1[colinear]), u(q2[colinear]))
+        hit[colinear] = (hi >= 0) & (lo <= 1)
+    return not hit.any()
+
+
+def _inside(xy: np.ndarray, p) -> bool:
+    """Whether point p lies inside the polygon (k, 2) (even-odd rule)."""
+    x, y = xy[:, 0], xy[:, 1]
+    x2, y2 = np.roll(x, -1), np.roll(y, -1)
+    cross = (y > p[1]) != (y2 > p[1])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        xs = x + (p[1] - y) * (x2 - x) / (y2 - y)
+    return bool(np.count_nonzero(cross & (p[0] < xs)) % 2)
+
+
+STRIP_SAMPLES = 7
+
+
+def _strips_simple(layers_xy: np.ndarray, w: np.ndarray) -> bool:
+    """Whether the flow extension's strips between consecutive layers (ring first) stay simple
+    where the shape changes: every layer, and sections through each strip's triangles at
+    ``STRIP_SAMPLES`` heights. A quad a_i a_i+1 c_i+1 c_i is split along a_i c_i+1, so the section at
+    fraction t runs through (1 - t) a_i + t c_i, then (1 - t) a_i + t c_i+1, for each i."""
+    changing = np.r_[True, w[:-1] < 1.0]                          # strip j joins layer j and j + 1
+    t = np.linspace(0.0, 1.0, STRIP_SAMPLES + 2)[1:-1]
+    for j in np.nonzero(changing)[0]:
+        a, c = layers_xy[j], layers_xy[j + 1]
+        if not _simple(c):
+            return False
+        c2 = np.roll(c, -1, axis=0)
+        for tau in t:
+            v = (1 - tau) * a + tau * c
+            d = (1 - tau) * a + tau * c2
+            if not _simple(np.stack([v, d], axis=1).reshape(-1, 2)):
+                return False
+    return True
 
 
 def extension_collisions(mesh: Mesh, margin: np.ndarray, geometry) -> dict[int, int]:

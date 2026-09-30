@@ -50,7 +50,9 @@ passes) on two grids:
     30° Y's junction 5.7 mm upstream of the true branch point (the daughters' tubes overlap for
     that long), and the deflection measured from there reads 7.4° and 7.7° for 15°. On the
     lattice the junction lands 0.8 mm off and the angles read right. For shallow bifurcations
-    of overlapping tubes the junction's position, and so the angle, is not well determined.
+    of overlapping tubes the junction's position, and so the angle, is not well determined. The
+  table's rotation is the worst of four tried: three others read 15.3–15.9° or no reliable
+  angle (the round-8 review).
 - **Flattened lumens break the spur rule.**
   - The tracer keeps a terminal branch longer than 2 × (radius at its junction) + 1 mm. In a flat
     lumen that radius is half the *depth*, so side lobes across the *width* survive as branches:
@@ -539,9 +541,14 @@ The C3N-00704 subtree, opened at the nine cuts vmtk was given (an inlet and eigh
   every intermediate layer a simple polygon: for a ring whose barycenter lies outside it (a thin C,
   a hook) some layers cross themselves - 27 and 38 of 100 blend steps on the round-7 review's
   test rings - with every triangle still facing out, so the manifold check does not see it.
-  Every layer is now tested; where one is not simple, the cap is extruded unchanged (a straight
-  prism of its own section, `extension_end_shape` `ring`). None of the 545 caps of the C3N-00704
-  airways and arteries needed it.
+  Testing the layers alone was not enough: the round-8 review found C rings (outer radius 3 mm,
+  gaps 30–120°) whose layers were each simple while the triangle strips between them crossed
+  (12–58 crossing face pairs), and a short transition can morph the whole ring inside the first
+  strip. Now a cap is extruded unchanged (a straight prism of its own section,
+  `extension_end_shape` `ring`) when its ring does not contain its barycenter, or when a layer or
+  a section through the strips between layers (7 per strip) is not simple. A plus-shaped ring (not
+  convex, barycenter inside) still morphs, and its strips sampled 60 times each stay simple. None
+  of the 545 caps of the C3N-00704 airways and arteries needed the fallback.
 - **The mesh stays closed and manifold**, and its volume grows by the tubes' (π R² L per cap,
   within 3 % on the Y phantom).
 - **Collisions.** An extension is straight and knows nothing of its surroundings.
@@ -607,14 +614,21 @@ from a field that thalweg's test rebuilds exactly (a union of spheres along the 
 extra) and gives each structure a field like the model's margin: the mask's signed distance in
 mm (the wall half a voxel out), times 10 logits/mm, clipped at ±8. Every verb runs on it.
 
-- **Geometry**: on an oblique, anisotropic grid every voxel's world point equals SimpleITK's.
-- **The Y phantom as a labelmap** (0.7 mm voxels): three branches, radii 0.15–0.3 mm below the
-  true 1.8, 2.2 and 3.0 mm - the inscribed ball of a staircase touches its inner corners. The
-  field of the same phantom reads 1.79, 2.20 and 3.01.
+- **Geometry**: on an oblique, anisotropic grid every voxel's world point equals SimpleITK's (the
+  round-8 review: NIfTI, NRRD and MHA, both handednesses, spacing 0.7 × 1.3 × 2.9 mm, one-slice
+  images and signed label types, all to 1e-14 mm).
+- **Distance to the staircase**, exact across any grid axis: each voxel center's distance to the
+  box of the nearest voxel of the other kind. The first version subtracted half the finest
+  spacing everywhere, which put centers across a 2 mm axis of a 2 × 0.5 × 0.5 mm grid 0.75 mm too
+  far from the wall (the zero set was right; the wall slope and the ±2 logit levels were not).
+- **The Y phantom as a labelmap**: three branches, radii below the true 1.8, 2.2 and 3.0 mm by
+  0.11–0.13 mm at 0.35 mm voxels and 0.13–0.27 mm at 0.7 mm - up to half a voxel, the inscribed
+  ball of a staircase touching its inner corners, not an offset. The field of the same phantom
+  reads 1.79, 2.20 and 3.01.
 - **C3N-00704, the store's own labelmap** (the argmax of its logits) against its ranked field:
-  airways 274 edges and 3,425 mm against 265 and 3,392 mm; arteries 1,066 and 10,466 mm against
-  1,064 and 10,360 mm. The centerlines lie a median 0.2 mm apart (90th percentile 0.6 mm), and the
-  labelmap's radius is a median 0.05 mm smaller. So a labelmap gives nearly the same tree, a
+  airways 270 edges and 3,417 mm against 265 and 3,392 mm; arteries 1,067 and 10,531 mm against
+  1,064 and 10,360 mm (on its 0.7 × 0.7 × 1.0 mm grid). The centerlines lie a median 0.2 mm apart
+  (90th percentile 0.6 mm), and the labelmap's radius is a median 0.05–0.06 mm smaller. So a labelmap gives nearly the same tree, a
   little rougher.
 - **DICOM SEG** (read with highdicom, the `dicom` extra): a two-segment SEG (overlapping
   segments; binary and fractional) of synthetic oblique, anisotropic CT slices. Every segmented
@@ -634,6 +648,11 @@ mm (the wall half a voxel out), times 10 logits/mm, clipped at ±8. Every verb r
   - left is left: the spleen and the left lung lobes lie at +x (LPS), the liver and the right
     lobes at −x.
 
+  The round-8 review found the SEG lattice lands on whole CT voxels (no fractional offset; the
+  SEG's rows run opposite to the CT's, which the geometry carries), and found the synthetic edge
+  cases exact: an empty segment or middle slice, missing source slices, sparse frames,
+  fractional values up to 100, a label-map SEG, reversed source order.
+
   `thalweg centerlines` traces the aorta (one tube, 39.5 cm), the pulmonary artery (8 tips) and
   the trachea (12 tips) from the SEG in 14 s. The distance transform runs on each mask's
   bounding box only (the field is flat beyond 0.8 mm of the wall), which took a segment of this
@@ -649,12 +668,14 @@ one `BloodVessel` per edge with R = 8μ/π ∫ds/r⁴ and L = ρ/π ∫ds/r² al
 blood μ 0.04 P, ρ 1.06 g/cm³; a rigid wall unless E·h is given), a junction per branching node,
 a steady inflow at the root and one resistance per outlet as placeholders.
 
-- A straight tube gives exactly the Poiseuille resistance and inductance; a tapering one (1 to 3
-  mm) the integral, within 3 % of the closed form.
+- A straight tube gives exactly the Poiseuille resistance and inductance; a tapering one the
+  closed-form integral exactly (the radius is taken as linear between samples; a trapezoid rule,
+  as first written, read a 3 → 0.5 mm taper 6 % high).
 - Solving the network for steady flow (`solver.steady_pressures`, resistances only): flows add up
   at every junction and at the outlets (50 mL/s in, 50.000 out on the C3N-00704 arteries: 1,064
   vessels, 528 junctions, 536 outlets), and every vessel's pressure drop is its flow times its
-  resistance.
+  resistance. The round-8 review matched it against an independent nodal solve to 1.5e-13 on
+  20 random trees.
 - **Not run through svZeroDSolver itself**: it is not installed here. The file follows its
   documented schema (`simulation_parameters`, `boundary_conditions`, `junctions`, `vessels`) and
   carries a `thalweg` block the solver ignores.

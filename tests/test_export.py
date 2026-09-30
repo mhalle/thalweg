@@ -581,20 +581,44 @@ def cap_ring_of(mesh, k=1):
     [(0, 0), (6, 0), (6, 2), (2, 2), (2, 6), (0, 6)],                                   # an L
     [(0, 0), (6, 0), (6, 2), (2, 2), (2, 4), (6, 4), (6, 6), (0, 6)],                    # a C
 ])
-def test_a_ring_that_is_not_star_shaped_does_not_fold(corners):
-    """Rings whose barycenter does not see every vertex: the tube's faces all face away from its
-    axis once it is round, the end cap faces out, and the circle's vertices go round once in order."""
+def test_a_ring_whose_barycenter_is_outside_it_is_extruded_unchanged(corners):
+    """An L and a C: the barycenter lies outside the ring, where no blend toward a circle about it is
+    safe (the round-8 review found such blends crossing themselves between layers that each were
+    simple), so the extension is a prism of the ring."""
     from thalweg.export import flow_extensions
     mesh = _prism(_outline(corners, 5))
     ext = flow_extensions(mesh, ratio=6.0)
     _good(ext)
+    assert ext.extensions[1]["end_shape"] == "ring"
+    assert (_normals(ext, 1)[:, 2] > 0).all()
+
+
+def test_a_star_shaped_ring_that_is_not_convex_morphs_without_crossing():
+    """A plus sign: not convex, but its barycenter sees every vertex. It morphs into the circle, and
+    the strips between its layers, sampled far more densely than the check does, stay simple; once
+    round, every tube face faces away from the axis."""
+    from thalweg.export import _strips_simple, flow_extensions
+    import thalweg.export as X
+    plus = [(1, -3), (1, -1), (3, -1), (3, 1), (1, 1), (1, 3), (-1, 3), (-1, 1), (-3, 1), (-3, -1),
+            (-1, -1), (-1, -3)]
+    mesh = _prism(_outline(plus, 4))
+    ext = flow_extensions(mesh, ratio=6.0)
+    _good(ext)
     e = ext.extensions[1]
+    assert e["end_shape"] == "circle"
     a, z = e["vertices"]
     m = len(cap_ring_of(mesh))
-    last = ext.vertices[z - 1 - m:z - 1] - ext.vertices[z - 1]
-    turn = np.cross(last, np.roll(last, -1, axis=0))[:, 2]
-    assert (turn > 0).all()
-    assert np.arctan2(turn, (last * np.roll(last, -1, 0)).sum(1)).sum() == pytest.approx(2 * np.pi)
+    layers = ext.vertices[a:z - 1].reshape(-1, m, 3)[..., :2]
+    ring = mesh.vertices[cap_ring_of(mesh)][:, :2]
+    s = layers[:, 0, 0] * 0 + np.arange(1, len(layers) + 1)
+    w = np.clip(s / max(1, np.argmax(np.all(np.isclose(np.linalg.norm(layers, axis=2),
+                                                        e["radius_mm"]), axis=1)) + 1), 0, 1)
+    old = X.STRIP_SAMPLES
+    try:
+        X.STRIP_SAMPLES = 60
+        assert _strips_simple(np.concatenate([ring[None], layers]), np.minimum(w, 0.999))
+    finally:
+        X.STRIP_SAMPLES = old
     f = ext.faces[(ext.boundary == 0) & (ext.faces >= a).all(1)]
     tri = ext.vertices[f]
     mid = tri.mean(1)
@@ -602,10 +626,34 @@ def test_a_ring_that_is_not_star_shaped_does_not_fold(corners):
     normal = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
     out = ((mid - e["ring_barycenter"])[:, :2] * normal[:, :2]).sum(1)
     assert round_part.sum() > 100 and (out[round_part] > 0).all()
-    assert (_normals(ext, 1)[:, 2] > 0).all()
-    added = mesh_defects(ext.vertices, ext.faces)["signed_volume_mm3"] - mesh_defects(
-        mesh.vertices, mesh.faces)["signed_volume_mm3"]
-    assert 0.8 < added / (np.pi * e["radius_mm"] ** 2 * e["length_mm"]) < 1.3
+
+
+@pytest.mark.parametrize("gap,inner,transition", [(30, 0.5, 0.25), (120, 2.4, 0.25), (90, 1.5, 0.05)])
+def test_the_review_c_rings_fall_back(gap, inner, transition):
+    """The round-8 review's C rings whose blends crossed themselves between layers (outer radius 3):
+    each is now extruded unchanged."""
+    from thalweg.export import flow_extensions
+    mesh = _prism(_c_ring(outer=3.0, inner=inner, gap_deg=gap, n=40), center=(-(3.0 + inner) / 2, 0.0))
+    ext = flow_extensions(mesh, transition=transition)
+    _good(ext)
+    assert ext.extensions[1]["end_shape"] == "ring"
+
+
+def test_polygon_helpers():
+    from thalweg.export import _ear_clip, _inside, _simple
+    rect = np.array([[0.0, 0], [1.5, 0], [3, 0], [3, 1], [1.5, 1], [0, 1]])      # collinear midpoints
+    assert _simple(rect) and _simple(np.concatenate([rect[:2], rect[1:2], rect[2:]]))   # a repeated vertex
+    spike = np.array([[0.0, 0], [2, 0], [2, 1], [3, 1], [2, 1], [0, 1]])          # folds back on itself
+    assert not _simple(spike)
+    assert _inside(rect, (1.0, 0.5)) and not _inside(rect, (4.0, 0.5))
+    c = _c_ring()
+    for poly in (c, c[::-1]):                                                    # either orientation
+        tris = np.asarray(_ear_clip(poly))
+        p = poly[tris]
+        area = 0.5 * ((p[:, 1, 0] - p[:, 0, 0]) * (p[:, 2, 1] - p[:, 0, 1])
+                      - (p[:, 1, 1] - p[:, 0, 1]) * (p[:, 2, 0] - p[:, 0, 0]))
+        true = 0.5 * abs((c[:, 0] * np.roll(c[:, 1], -1) - np.roll(c[:, 0], -1) * c[:, 1]).sum())
+        assert (area > 0).all() and area.sum() == pytest.approx(true)
 
 
 def test_extension_bookkeeping_and_refusals():

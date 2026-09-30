@@ -172,9 +172,16 @@ class FieldStore:
 def open_store(path):
     """A ranked store (:class:`FieldStore`), or - for a NIfTI, NRRD or MetaImage file - a labelmap
     or signed distance image read in degraded mode (:class:`thalweg.volume.VolumeStore`)."""
-    from .volume import VolumeStore, is_volume
+    from .volume import VolumeStore, dicom_directory, is_volume
     if hasattr(path, "margin") and hasattr(path, "structures"):     # already open
         return path
+    path = Path(path).expanduser()
     if is_volume(path):
         return VolumeStore(path)
+    if dicom_directory(path):
+        raise ThalwegError(f"{path} is a directory of DICOM files: thalweg reads a DICOM SEG file, a "
+                           "labelmap or distance image (NIfTI, NRRD, MetaImage), or a ranked store")
+    if path.is_file() and not path.name.lower().endswith(".zip"):
+        raise ThalwegError(f"{path.name} is not a ranked store, a NIfTI, NRRD or MetaImage image, "
+                           "or a DICOM file")
     return FieldStore(path)

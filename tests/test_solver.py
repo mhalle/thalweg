@@ -49,7 +49,10 @@ def test_a_tapering_tube_integrates_along_its_length():
     g = _tree([(0, 1, "tip", (0, 0, 40))], lambda k, t: 1.0 + 2.0 * t)          # 1 mm to 3 mm
     R = zero_d_model(g, "t")["vessels"][0]["zero_d_element_values"]["R_poiseuille"]
     exact = 8 * MU / np.pi * (4.0 / (3 * 0.2)) * (0.1 ** -3 - 0.3 ** -3)       # r = 0.1 + 0.05 z (cm)
-    assert R == pytest.approx(exact, rel=0.03)
+    assert R == pytest.approx(exact, rel=1e-9)                   # linear radius: the integral is exact
+    steep = _tree([(0, 1, "tip", (0, 0, 10))], lambda k, t: 3.0 - 2.5 * t)          # 3 mm to 0.5 mm
+    R = zero_d_model(steep, "t")["vessels"][0]["zero_d_element_values"]["R_poiseuille"]
+    assert R == pytest.approx(8 * MU / np.pi * (1.0 / (3 * 0.25)) * (0.05 ** -3 - 0.3 ** -3), rel=1e-9)
 
 
 def test_a_bifurcation_network_and_its_steady_flow(tmp_path):
