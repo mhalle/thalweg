@@ -283,6 +283,26 @@ vessels' ~1 mm radius floor. Pi10 here (4.2–4.3 mm) is above the ~3.6–3.8 mm
 healthy lungs on CT for the same reason. Compare these across cases on one model and grid, not
 against the literature.
 
+## 5c. Bronchoarterial pairing
+
+Each airway centerline sample is paired with the nearest artery sample within 8 mm that runs
+parallel (|cos| ≥ 0.7). Each airway branch then gets its companion artery and the median
+bronchus-to-artery diameter ratio (`thalweg.pairing`; a synthetic parallel pair gives exactly
+the radius ratio, and a crossing artery nearer than the partner does not pair).
+
+| Case | Airway samples paired | Paired branches | Ratio median | Paired branches above 1 | Ratio by Strahler 1 / 2 / 3 |
+|---|---|---|---|---|---|
+| C3N-00704 0.625 | 84 % | 235 | 0.58 | 4 % | 0.53 / 0.62 / 0.62 |
+| MSB-02664 0.625 | 66 % | 118 | 0.51 | 7 % | 0.48 / 0.50 / 0.64 |
+
+The medians sit below the ~0.65–0.7 usually reported for healthy lungs on CT. Two causes are
+plausible, and neither has been separated from the other:
+- the airway lumen class at the model's resolution;
+- pairing to the nearest parallel artery, which can be a wider parent rather than the bronchus's
+  own companion.
+
+As with the walls, compare across cases on one model and grid.
+
 ## 6. Not yet validated
 
 - **Thin-caliber ground truth.** The ~1 mm radius floor belongs to the model; checking the

@@ -129,6 +129,9 @@ bifurcations correspond.
 - Airway walls (not in the graph; `thalweg run` and `thalweg table`): branch-table columns
   `wall_area_mm2`, `wall_area_percent`, `wall_thickness_mm`, `internal_perimeter_mm`,
   `wall_station_count`, and Pi10 under `summary.json` `lung_airways.wall`.
+- Bronchoarterial pairing (`thalweg run` with both airways and arteries): airway branch-table
+  columns `paired_artery_edge`, `paired_fraction`, `bronchus_to_artery_ratio`, and a summary
+  under `summary.json` `lung_airways.bronchoarterial`.
 
 ## The tube requirements (docs/port-plan.md), as of 0.1
 

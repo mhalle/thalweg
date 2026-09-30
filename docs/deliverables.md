@@ -3,7 +3,8 @@
 *2026-09-24, a proposal written at the close of the incubation thread; the formats and the cut
 between tiers are the user's to decide. Update 2026-09-30: tier 1 is partly built (`thalweg run`:
 graph, branch table, stations, summary, QC), with trees rooted at their inlet, lobes per
-branch and airway wall thickness (with Pi10); artery/vein plausibility is not, nor are a per-point radius interval, lobe and Strahler order in the
+branch, airway wall thickness (with Pi10) and the bronchoarterial ratio; artery/vein plausibility
+is not, nor are a per-point radius interval, lobe and Strahler order in the
 graph, 0.3 mm polylines, Horton ratios / BV5 / orientation entropy / artery-to-bronchus ratio,
 contrast, or the preview image.*
 

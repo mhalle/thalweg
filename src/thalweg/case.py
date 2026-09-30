@@ -40,10 +40,12 @@ from .graph import TubeGraph
 from .kernel.field import sample
 from .kernel.topology import surface_loops
 from .measure import branch_table, pi10, strahler
+from .pairing import airway_rows
 from .store import FieldStore, open_store
 
 COARSE_MM = 3.0
 WALL_OF = {"lung_airways": "lung_airways_wall"}       # a lumen and the class the model labels its wall
+PAIRS = {"lung_airways": "lung_arteries"}             # an airway tree and the artery tree beside it
 
 
 def outside_length(graph: TubeGraph, structure: str, margin: np.ndarray, geometry,
@@ -215,6 +217,12 @@ class Case:
         for s in g.structures:
             if s.name in edge_lobe:
                 lobes_mod.lobe_rows([r for r in rows if r["structure"] == s.name], edge_lobe[s.name])
+        names_here = {s.name for s in g.structures}
+        pairing = {}
+        for airway, artery in PAIRS.items():
+            if airway in names_here and artery in names_here:
+                mine = [r for r in rows if r["structure"] == airway]
+                pairing[airway] = airway_rows(g, airway, artery, mine)
         parts = sorted({st.source.part for st in g.structures if st.source.part is not None})
         acquisition = {str(p): self.acquisition(p) for p in parts}
         summary = {}
@@ -224,6 +232,8 @@ class Case:
             sm["coarse_slices"] = coarse
             if s.name in self.pi10:
                 sm["wall"] = self.pi10[s.name]
+            if s.name in pairing:
+                sm["bronchoarterial"] = pairing[s.name]
             if s.name in edge_lobe:
                 sm["lobes"] = lobes_mod.lobe_summary(g, s.name, edge_lobe[s.name],
                                                      lobes_mod.lobe_volumes(lobes))
