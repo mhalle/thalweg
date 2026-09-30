@@ -1,0 +1,310 @@
+"""The ``thalweg`` command line: verbs over the Python API.
+
+    thalweg structures STORE                              what a store names
+    thalweg centerlines STORE -s NAME [-s NAME ...] -o OUT.thalweg.json[.gz]
+    thalweg table GRAPH STORE -o BRANCHES.parquet [--stations STATIONS.parquet]
+    thalweg run STORE -o DIR [-s NAME ...]                the batch product: graph, tables, summary, QC
+    thalweg export GRAPH STORE -s NAME [--mesh M.vtp] [--vmtk-centerlines C.vtp] [--swc T.swc]
+                   [--markups M.mrk.json]              at least one output
+    thalweg summary GRAPH                                 structures, counts, lengths
+    thalweg schema [-o FILE]                              the .thalweg.json JSON Schema
+"""
+from __future__ import annotations
+
+import json
+import sys
+import time
+
+import click
+
+from . import __version__
+from .errors import ThalwegError
+
+
+class _Group(click.Group):
+    """Every verb: a ThalwegError (a request thalweg cannot satisfy) is a one-line error, not a trace."""
+
+    def invoke(self, ctx):
+        try:
+            return super().invoke(ctx)
+        except ThalwegError as e:
+            raise click.ClickException(str(e)) from None
+
+
+def _method_options(f):
+    f = click.option("--ridge-passes", type=click.IntRange(min=1), default=4, show_default=True,
+                     help="Coarse-to-fine ridge refinement passes. 4 (the default) removes the one-pass "
+                          "refinement's radius deficit (0.03-0.07 mm) and matches vmtk; 1 is the research "
+                          "reference, ~1.9x faster to trace. docs/validation.md.")(f)
+    f = click.option("--prune", type=click.Choice(["length", "wall"]), default="length", show_default=True,
+                     help="Spur rule: 'length' (the reference) or 'wall' (also drops terminal branches that "
+                          "do not protrude beyond the parent's wall: flat-lumen lobes, and 9-26 % of vessel "
+                          "tips).")(f)
+    return f
+
+
+@click.group(cls=_Group, context_settings={"help_option_names": ["-h", "--help"]})
+@click.version_option(__version__, prog_name="thalweg")
+def main():
+    """Centerlines, branches and wall geometry of tubular structures, read from a model's field."""
+
+
+@main.command()
+@click.argument("store", type=click.Path(exists=True))
+def structures(store):
+    """List the structures a ranked store names, with the part each lives in."""
+    from .store import open_store
+    st = open_store(store)
+    click.echo(f"{st.path.name}: labeling scheme {st.labeling_scheme}, parts {st.part_indices}")
+    for s in sorted(st.structures, key=lambda s: (s.part, s.label_value)):
+        click.echo(f"  part {s.part}  value {s.label_value:4d}  {s.name}")
+
+
+@main.command()
+@click.argument("store", type=click.Path(exists=True))
+@click.option("-s", "--structure", "names", multiple=True, required=True,
+              help="Structure to trace (repeatable), e.g. lung_arteries.")
+@click.option("-o", "--output", required=True, type=click.Path(dir_okay=False),
+              help="Output graph, .thalweg.json or .thalweg.json.gz.")
+@click.option("--part", type=int, default=None,
+              help="Part to read (default: the finest holding the structure).")
+@click.option("--graph", type=click.Choice(["field", "voxel"]), default="field", show_default=True,
+              help="Connectivity: decided by the field, or the 26-connected labelmap (comparison only).")
+@click.option("-q", "--quiet", is_flag=True, help="No progress messages.")
+@_method_options
+def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune):
+    """Trace seed-free centerline trees of STORE's structures into one graph file.
+
+    Only the largest connected piece of each structure is traced; the others are listed in the
+    structure's statistics (component_sizes)."""
+    from .centerlines import centerline_graph, combine
+    from .store import open_store
+    t0 = time.time()
+
+    def log(msg):
+        if not quiet:
+            click.echo(f"[{time.time() - t0:6.1f}s] {msg}", err=True)
+
+    if len(set(names)) != len(names):
+        raise click.UsageError(f"a structure is named twice: {', '.join(names)}")
+    try:
+        st = open_store(store)
+        graphs = []
+        for n in names:
+            log(f"{n}: decoding and tracing")
+            graphs.append(centerline_graph(st, n, part=part, graph=graph, ridge_passes=ridge_passes,
+                                           prune=prune, log=lambda m, n=n: log(f"{n}: {m}")))
+        g = graphs[0] if len(graphs) == 1 else combine(graphs)
+        g.write(output)
+    except ThalwegError as e:
+        raise click.ClickException(str(e))
+    for s in g.structures:
+        st_ = s.statistics
+        log(f"{s.name}: {st_['edges']} edges, {st_['tips']} tips, {st_['truncated_ends']} truncated ends, "
+            f"{st_['junctions']} junctions, {st_['length_mm'] / 10:.1f} cm")
+    log(f"wrote {output}")
+
+
+@main.command()
+@click.argument("graph", type=click.Path(exists=True))
+@click.argument("store", type=click.Path(exists=True))
+@click.option("-o", "--output", required=True, type=click.Path(dir_okay=False),
+              help="Branch table, .parquet.")
+@click.option("-s", "--structure", "names", multiple=True,
+              help="Structures to measure (default: all in GRAPH).")
+@click.option("--stations", type=click.Path(dir_okay=False), default=None,
+              help="Also write the per-station section profile here (.parquet).")
+@click.option("--step", type=click.FloatRange(min=0, min_open=True), default=1.0, show_default=True,
+              help="Section spacing along each branch, mm.")
+def table(graph, store, output, names, stations, step):
+    """Measure every branch of GRAPH's structures in STORE's field: one row per branch (Parquet;
+    needs pyarrow, the `tables` extra). Column definitions: thalweg.measure."""
+    from .centerlines import check_source
+    from .graph import TubeGraph
+    from .measure import branch_table, write_table
+    from .store import open_store
+    g = TubeGraph.read(graph)
+    missing = [n for n in names if n not in {s.name for s in g.structures}]
+    if missing:
+        raise ThalwegError(f"{graph} has no structure {', '.join(missing)}; it has "
+                           f"{', '.join(s.name for s in g.structures)}")
+    st = open_store(store)
+    rows, prof = [], [] if stations else None
+    try:
+        for s in g.structures:
+            if names and s.name not in names:
+                continue
+            m, geo, ref = st.margin(s.name, s.source.part)
+            check_source(s, geo, ref)
+            rows.extend(branch_table(g, s.name, m, geo, step=step, stations_out=prof))
+    except ThalwegError as e:
+        raise click.ClickException(str(e))
+    write_table(rows, output)
+    click.echo(f"{len(rows)} branches -> {output}", err=True)
+    if stations:
+        write_table(prof, stations)
+        click.echo(f"{len(prof)} stations -> {stations}", err=True)
+
+
+@main.command()
+@click.argument("store", type=click.Path(exists=True))
+@click.option("-o", "--output", required=True, type=click.Path(file_okay=False), help="Output directory.")
+@click.option("-s", "--structure", "names", multiple=True,
+              help="Structure to process (repeatable). Default: lung_arteries, lung_veins, lung_airways.")
+@click.option("--step", type=click.FloatRange(min=0, min_open=True), default=1.0, show_default=True,
+              help="Section spacing along each branch, mm.")
+@click.option("--no-stations", is_flag=True, help="Skip the per-station profile table.")
+@click.option("-q", "--quiet", is_flag=True, help="No progress messages.")
+@_method_options
+def run(store, output, names, step, no_stations, quiet, ridge_passes, prune):
+    """The batch product for one case: graph.thalweg.json.gz, branches.parquet, stations.parquet,
+    summary.json and qc.json in OUTPUT."""
+    from pathlib import Path
+    from .case import Case
+    from .measure import write_table
+    t0 = time.time()
+
+    def log(msg):
+        if not quiet:
+            click.echo(f"[{time.time() - t0:6.1f}s] {msg}", err=True)
+
+    names = names or ("lung_arteries", "lung_veins", "lung_airways")
+    if len(set(names)) != len(names):
+        raise click.UsageError(f"a structure is named twice: {', '.join(names)}")
+    out = Path(output)
+    try:
+        case = Case.open(store)
+        for n in names:
+            case.store.ref(n)                                  # every structure exists, before any output
+        res = case.run(names, step=step, stations=not no_stations, log=log, ridge_passes=ridge_passes,
+                       prune=prune)
+    except ThalwegError as e:
+        raise click.ClickException(str(e))
+    out.mkdir(parents=True, exist_ok=True)
+    res["graph"].write(out / "graph.thalweg.json.gz")
+    write_table(res["rows"], out / "branches.parquet")
+    if res["stations"] is not None:
+        write_table(res["stations"], out / "stations.parquet")
+    (out / "summary.json").write_text(json.dumps(res["summary"], indent=1) + "\n")
+    (out / "qc.json").write_text(json.dumps(res["qc"], indent=1) + "\n")
+    for n, q in res["qc"]["structures"].items():
+        log(f"{n}: {res['summary'][n]['edges']} branches, {q['length_mm'] / 10:.1f} cm, "
+            f"{q['truncated_ends']} truncated ends, {q['dropped_components']['count']} pieces dropped, "
+            f"{q['outside_mm']:.1f} mm outside")
+    log(f"wrote {out}")
+
+
+def _cap_kinds(ctx, param, value):
+    from .export import END_KINDS
+    kinds = tuple(k.strip() for k in value.split(",") if k.strip())
+    bad = [k for k in kinds if k not in END_KINDS]
+    if bad or not kinds:
+        raise click.BadParameter(f"{value!r}: give a comma-separated list of {', '.join(END_KINDS)}")
+    return kinds
+
+
+@main.command()
+@click.argument("graph", type=click.Path(exists=True))
+@click.argument("store", type=click.Path(exists=True))
+@click.option("-s", "--structure", "name", required=True, help="The structure to export.")
+@click.option("--mesh", type=click.Path(dir_okay=False), default=None,
+              help="Closed surface with a flat, named cap at the ends of --cap-kinds (.vtp, cell data "
+                   "BoundaryId: 0 the wall, k the k-th cap), plus <mesh>.boundaries.json: each cap's name, "
+                   "end node, plane center, outward normal, inscribed radius, area and centroid, and every "
+                   "end that got no cap with the reason.")
+@click.option("--cap-kinds", default="tip,truncated", show_default=True, callback=_cap_kinds,
+              help="Which ends get a cap: tip (a free end), truncated (cut off by the grid's edge; a root "
+                   "on the grid's edge counts), root (a degree-1 root: the inlet).")
+@click.option("--refine", type=click.IntRange(min=1), default=1, show_default=True,
+              help="Mesh the field's trilinear interpolant this many times finer.")
+@click.option("--vmtk-centerlines", "vmtk_out", type=click.Path(dir_okay=False), default=None,
+              help="Source-to-tip centerlines in vmtk's convention, split into vmtk's groups (.vtp: vmtk's "
+                   "centerline attributes + branch extractor), with vmtk's defects corrected unless "
+                   "--vmtk-exact.")
+@click.option("--vmtk-exact", is_flag=True,
+              help="Reproduce vmtk's own numbers, defects included (every vmtk_* flag of the two stages).")
+@click.option("--swc", type=click.Path(dir_okay=False), default=None, help="The tree as SWC.")
+@click.option("--markups", type=click.Path(dir_okay=False), default=None,
+              help="One 3D Slicer curve per branch (.mrk.json).")
+def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, swc, markups):
+    """Export one structure: a capped surface for CFD, vmtk-compatible centerlines, SWC and/or
+    Slicer markups (give at least one output)."""
+    from .graph import TubeGraph
+    if not (mesh or vmtk_out or swc or markups):
+        raise click.UsageError("nothing to export: give --mesh, --vmtk-centerlines, --swc and/or --markups")
+    g = TubeGraph.read(graph)
+    s = g.structure(name)
+    if mesh:
+        from .centerlines import check_source
+        from .export import capped_surface, write_vtp_mesh
+        from .store import open_store
+        m, geo, ref = open_store(store).margin(name, s.source.part)
+        check_source(s, geo, ref)
+        msh = capped_surface(g, name, m, geo, kinds=cap_kinds, refine=refine)
+        write_vtp_mesh(msh, mesh)
+        n_ends = len(msh.caps) + len(msh.skipped)
+        more = f", {len(msh.skipped)} not (see below)" if msh.skipped else ""
+        click.echo(f"{mesh}: {len(msh.faces)} faces, {n_ends} ends ({'/'.join(cap_kinds)}): "
+                   f"{len(msh.caps)} capped{more}", err=True)
+        for sk in msh.skipped:
+            click.echo(f"  not capped: {sk}", err=True)
+    if vmtk_out:
+        from .adapters import to_vmtk
+        from .export import write_vtp_centerlines
+        from .vmtk import VMTK_FLAGS, centerline_attributes, extract_branches
+        paths = to_vmtk(g, name)                   # a tree with edges, or ThalwegError
+        if paths.centerlines.n_cells == 0:
+            raise ThalwegError(f"{name}: no source-to-tip path is long enough for vmtk's centerlines")
+        try:
+            cl = centerline_attributes(paths.centerlines,
+                                       **{f: vmtk_exact for f in VMTK_FLAGS["centerline_attributes"]})
+            split = extract_branches(cl, **{f: vmtk_exact for f in VMTK_FLAGS["extract_branches"]})
+        except ThalwegError:
+            raise
+        except ValueError as e:                    # the vmtk ports speak ValueError
+            raise ThalwegError(f"{name}: vmtk's branch extraction failed: {e}") from e
+        write_vtp_centerlines(split, vmtk_out)
+        click.echo(f"{vmtk_out}: {split.n_cells} cells in vmtk's groups", err=True)
+    if swc:
+        from .export import write_swc
+        write_swc(g, name, swc)
+        click.echo(f"{swc}: SWC", err=True)
+    if markups:
+        from .export import write_slicer_markups
+        write_slicer_markups(g, name, markups)
+        click.echo(f"{markups}: Slicer markups", err=True)
+
+
+@main.command()
+@click.argument("graph", type=click.Path(exists=True))
+def summary(graph):
+    """Structures, node and edge counts, and total length of a .thalweg.json file."""
+    from .graph import TubeGraph
+    g = TubeGraph.read(graph)
+    click.echo(f"{graph}: format {g.format} {g.version}, {len(g.nodes)} nodes, {len(g.edges)} edges, "
+               f"{len(g.points.position)} points")
+    for s in g.structures:
+        kinds = {}
+        for nd in g.nodes:
+            if nd.structure == s.name:
+                kinds[nd.kind] = kinds.get(nd.kind, 0) + 1
+        length = sum(e.length_mm for e in g.edges if e.structure == s.name)
+        click.echo(f"  {s.name}: {sum(e.structure == s.name for e in g.edges)} edges, "
+                   + ", ".join(f"{v} {k}" for k, v in sorted(kinds.items())) + f", {length / 10:.1f} cm")
+
+
+@main.command()
+@click.option("-o", "--output", type=click.Path(dir_okay=False), default=None,
+              help="Write here instead of stdout.")
+def schema(output):
+    """Print the JSON Schema of the .thalweg.json format."""
+    from .graph import json_schema
+    text = json.dumps(json_schema(), indent=1) + "\n"
+    if output:
+        open(output, "w").write(text)
+    else:
+        sys.stdout.write(text)
+
+
+if __name__ == "__main__":
+    main()

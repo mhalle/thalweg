@@ -1,0 +1,170 @@
+"""The branch table on the analytic Y phantom: orders, areas, angles against the truth."""
+import numpy as np
+import pytest
+
+from thalweg.centerlines import graph_from_tree
+from thalweg.graph import Points, Source, TubeGraph
+from thalweg.kernel import medial
+from thalweg.measure import branch_table, strahler, write_table
+from phantoms import tube_field, y_tree
+
+TRUE_R = {"trunk": 3.0, "left": 2.2, "right": 1.8}
+
+
+@pytest.fixture(scope="module")
+def y():
+    lines, radii = y_tree()
+    m, geo = tube_field(lines, radii)
+    T = medial.trace(m, geo)
+    nodes, edges, pos, rad, s = graph_from_tree(T, "y", m, geo, Source(), {"graph": "field"})
+    g = TubeGraph(structures=[s], nodes=nodes, edges=edges, points=Points(position=pos, radius=rad))
+    stations = []
+    rows = branch_table(g, "y", m, geo, step=1.0, stations_out=stations)
+    return lines, g, rows, stations
+
+
+def which(g, e, lines):
+    """trunk / left / right, by where the edge's middle lies."""
+    mid = g.edge_points(e)[len(g.edge_points(e)) // 2]
+    return "trunk" if mid[2] < lines[0][1][2] else ("left" if mid[0] < 0 else "right")
+
+
+def test_strahler_of_a_y(y):
+    lines, g, rows, _ = y
+    order = strahler(g, "y")
+    kinds = {which(g, e, lines): order[e.id] for e in g.edges}
+    assert kinds == {"trunk": 2, "left": 1, "right": 1}
+
+
+def test_areas_match_the_tubes(y):
+    lines, g, rows, _ = y
+    for r in rows:
+        name = which(g, g.edges[r["edge"]], lines)
+        true = np.pi * TRUE_R[name] ** 2
+        assert abs(r["area_mm2"] - true) / true < 0.03, (name, r["area_mm2"], true)
+        # the model's interval brackets the boundary area: +2 logits smaller, -2 larger
+        assert r["area_low_mm2"] < r["area_mm2"] < r["area_high_mm2"]
+        assert r["aspect_ratio"] > 0.97
+
+
+def deg(a, b):
+    return np.degrees(np.arccos(np.clip(a @ b, -1, 1)))
+
+
+def test_angles_match_the_geometry(y):
+    lines, g, rows, _ = y
+    trunk = lines[0][1] - lines[0][0]
+    trunk /= np.linalg.norm(trunk)
+    d = {k: (L[1] - L[0]) / np.linalg.norm(L[1] - L[0]) for k, L in (("left", lines[1]), ("right", lines[2]))}
+    for r in rows:
+        name = which(g, g.edges[r["edge"]], lines)
+        if name == "trunk":
+            assert r["deflection_deg"] is None and r["sibling_angle_deg"] is None
+            continue
+        assert abs(r["deflection_deg"] - deg(d[name], trunk)) < 2.0, (name, r["deflection_deg"])
+        assert abs(r["sibling_angle_deg"] - deg(d["left"], d["right"])) < 6.0
+
+
+def test_stations_profile_and_parquet(y, tmp_path):
+    pq = pytest.importorskip("pyarrow.parquet")
+    _, g, rows, stations = y
+    assert sum(r["station_count"] for r in rows) == len(stations)
+    write_table(rows, tmp_path / "b.parquet")
+    back = pq.read_table(tmp_path / "b.parquet").to_pylist()
+    assert back == rows
+
+
+def _graph_of(lines, radii, name="t", **kw):
+    m, geo = tube_field(lines, radii)
+    T = medial.trace(m, geo, **kw)
+    nodes, edges, pos, rad, s = graph_from_tree(T, name, m, geo, Source(), {"connectivity": "field"})
+    return m, geo, TubeGraph(structures=[s], nodes=nodes, edges=edges,
+                             points=Points(position=pos, radius=rad))
+
+
+@pytest.mark.parametrize("half,expect_sibling", [(45.0, 90.0), (70.0, 140.0)])
+def test_wide_angles_are_not_biased_low(half, expect_sibling):
+    """Chords start outside the junction's ball: a 70-degree half-angle reads ~70, not ~59."""
+    h = np.radians(half)
+    top = np.array([0.0, 0, 30])
+    lines = [np.array([[0, 0, 0.0], top]), np.array([top, top + 25 * np.array([np.sin(h), 0, np.cos(h)])]),
+             np.array([top, top + 25 * np.array([-np.sin(h), 0, np.cos(h)])])]
+    radii = [np.array([2.5, 2.5]), np.array([1.6, 1.6]), np.array([1.6, 1.6])]
+    m, geo, g = _graph_of(lines, radii)
+    rows = [r for r in branch_table(g, "t", m, geo) if r["deflection_deg"] is not None]
+    assert len(rows) == 2
+    for r in rows:
+        assert abs(r["deflection_deg"] - half) < 3.0, r["deflection_deg"]
+        assert abs(r["sibling_angle_deg"] - expect_sibling) < 5.0, r["sibling_angle_deg"]
+        assert r["angle_reliable"]
+
+
+def test_t_junction():
+    top = np.array([0.0, 0, 30])
+    lines = [np.array([[0, 0, 0.0], top]), np.array([top, top + [0, 0, 25.0]]),
+             np.array([top, top + [25.0, 0, 0]])]
+    radii = [np.array([2.5, 2.5]), np.array([2.4, 2.4]), np.array([1.5, 1.5])]
+    m, geo, g = _graph_of(lines, radii)
+    side = [r for r in branch_table(g, "t", m, geo)
+            if r["deflection_deg"] is not None and r["deflection_deg"] > 45]
+    assert len(side) == 1 and abs(side[0]["deflection_deg"] - 90.0) < 4.0, side
+
+
+def _near_coincident_junctions():
+    """A trunk whose two branchings are 0.5 mm apart: the tracer leaves a stub parent between them."""
+    top = np.array([0.0, 0, 30])
+    lines = [np.array([[0, 0, 0.0], top]),
+             np.array([top, top + 22 * np.array([np.sin(np.radians(59)), 0, np.cos(np.radians(59))])]),
+             np.array([top + [0, 0, 0.5], top + [0, 0, 0.5] + 22 * np.array([0, np.sin(np.radians(56)),
+                                                                               np.cos(np.radians(56))])]),
+             np.array([top, top + 22 * np.array([-np.sin(np.radians(51)), 0, np.cos(np.radians(51))])])]
+    radii = [np.array([2.5, 2.5])] + [np.array([1.4, 1.4])] * 3
+    return lines, radii
+
+
+def test_short_edges_report_no_shape_and_no_sections():
+    """Edges shorter than max(4 r, 3 mm) have no shape statistics; the checked set is not empty."""
+    lines, radii = _near_coincident_junctions()
+    m, geo, g = _graph_of(lines, radii)
+    rows = branch_table(g, "t", m, geo)
+    short = [r for r in rows if r["length_mm"] < max(4 * (r["radius_mean_mm"] or 0.5), 3.0)]
+    assert short, "the phantom must produce a short edge"
+    for r in short:
+        assert not r["shape_reliable"] and r["curvature_max_per_mm"] is None and r["distance_metric"] is None
+    for r in rows:
+        if r["station_count"] == 0:
+            assert r["area_mm2"] is None and r["aspect_ratio"] is None
+
+
+def test_angles_walk_past_stub_parents():
+    """Each daughter's deflection is measured against the trunk, not the 0.5 mm stub between the
+    two junctions: 59, 56 and 51 degrees, within 3."""
+    lines, radii = _near_coincident_junctions()
+    m, geo, g = _graph_of(lines, radii)
+    rows = [r for r in branch_table(g, "t", m, geo)
+            if r["deflection_deg"] is not None and r["length_mm"] > 10]
+    got = sorted(r["deflection_deg"] for r in rows)
+    assert len(got) == 3 and np.allclose(got, [51, 56, 59], atol=3.0), got
+
+
+def test_undefined_angles_are_none_not_ninety():
+    lines, radii = _near_coincident_junctions()
+    m, geo, g = _graph_of(lines, radii)
+    for r in branch_table(g, "t", m, geo):
+        for k in ("deflection_deg", "sibling_angle_deg"):
+            assert r[k] is None or abs(r[k] - 90.0) > 1e-9
+
+
+def test_strahler_ignores_truncated_ends():
+    """A tree whose one daughter runs off the field: that edge has no order and does not count."""
+    import json as _json
+    lines, radii = y_tree()
+    m, geo, g = _graph_of(lines, radii, "y")
+    doc = _json.loads(g.dumps())
+    tip = next(n for n in doc["nodes"] if n["kind"] == "tip")
+    tip["kind"] = "truncated"
+    h = TubeGraph.model_validate(doc)
+    order = strahler(h, "y")
+    into = next(e for e in h.edges if e.end_node == tip["id"])
+    assert order[into.id] is None
+    assert max(o for o in order.values() if o is not None) == 1          # the trunk no longer reaches 2

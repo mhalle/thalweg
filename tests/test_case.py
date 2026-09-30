@@ -1,0 +1,53 @@
+"""The batch product (phase 3): one case decoded once, traced, measured, summarized, checked (data)."""
+import json
+
+import pytest
+from click.testing import CliRunner
+
+from thalweg.cli import main
+
+STORE = "runs/C3N-00704_ctpa0625.lung_vessels.duckn.zip"
+
+
+@pytest.fixture(scope="module")
+def airways(vessels_data):
+    from thalweg.case import Case
+    case = Case.open(vessels_data / STORE)
+    return case, case.run(["lung_airways"], step=2.0)
+
+
+@pytest.mark.data
+@pytest.mark.slow
+def test_run_is_consistent(airways):
+    case, res = airways
+    g, rows, summary, qc = res["graph"], res["rows"], res["summary"], res["qc"]
+    assert len(rows) == len(g.edges) == summary["lung_airways"]["edges"]
+    assert {r["edge"] for r in rows} == {e.id for e in g.edges}
+    sm = summary["lung_airways"]
+    assert sum(v["edges"] for v in sm["strahler_order"].values()) + sm["unordered"]["edges"] == len(g.edges)
+    q = qc["structures"]["lung_airways"]
+    assert q["unrefined_points"] == 0 and q["field_loops"] >= 0 and q["outside_mm"] < 0.01 * q["length_mm"]
+    assert qc["acquisition"]["1"]["coarse_slices"] is False
+    assert qc["acquisition"]["1"]["source_spacing_mm"][0] == pytest.approx(0.625)
+    # one decode per structure across trace, measure and qc
+    assert case.decodes == 1
+    assert res["summary"]["lung_airways"]["coarse_slices"] is False
+
+
+@pytest.mark.data
+@pytest.mark.slow
+def test_run_verb_writes_the_package(vessels_data, tmp_path):
+    r = CliRunner().invoke(main, ["run", str(vessels_data / STORE), "-o", str(tmp_path), "-s", "lung_airways",
+                                  "--step", "2", "-q"])
+    assert r.exit_code == 0, r.output
+    names = {p.name for p in tmp_path.iterdir()}
+    assert names == {"graph.thalweg.json.gz", "branches.parquet", "stations.parquet", "summary.json",
+                     "qc.json"}
+    qc = json.loads((tmp_path / "qc.json").read_text())
+    assert "lung_airways" in qc["structures"]
+
+
+def test_missing_store_is_a_clear_error(tmp_path):
+    r = CliRunner().invoke(main, ["centerlines", str(tmp_path), "-s", "x",
+                                  "-o", str(tmp_path / "o.thalweg.json")])
+    assert r.exit_code != 0 and "no store" in r.output.lower()

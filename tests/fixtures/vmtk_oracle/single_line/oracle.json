@@ -1,0 +1,43 @@
+{
+ "source": "single_line",
+ "vtk": "9.6.2",
+ "radius_array": "MaximumInscribedSphereRadius",
+ "root_group": null,
+ "skipped": [
+  "offset",
+  "merge_resampled_unblanked",
+  "resampling",
+  "smoothing",
+  "geometry",
+  "geometry_smoothed"
+ ],
+ "lines": 1,
+ "points": 34,
+ "seconds": {
+  "attributes": 0.001,
+  "extract": 0.001,
+  "frames": 0.0,
+  "offset": 0.0,
+  "merge": 0.001,
+  "resampling": 0.0,
+  "smoothing": 0.0,
+  "geometry": 0.0,
+  "branch_geometry": 0.003,
+  "bifurcation_vectors": 0.0
+ },
+ "stages": {
+  "attributes": "defaults",
+  "extract": "on attributes output, RadiusArrayName=MaximumInscribedSphereRadius",
+  "frames": "defaults",
+  "offset": "ReferenceGroupId=-1 (vmtk default: first frame's group = root_group), ReplaceAttributes=1",
+  "offset_keep": "ReferenceGroupId=root_group, ReplaceAttributes=0",
+  "merge": "Length=0, MergeBlanked=1",
+  "merge_resampled_unblanked": "Length=0.5, MergeBlanked=0",
+  "resampling": "Length=0.5 (on input)",
+  "smoothing": "100 iterations, factor 0.1 (on input)",
+  "geometry": "LineSmoothing=0 (on input)",
+  "geometry_smoothed": "LineSmoothing=1, 100 iterations, factor 0.1, OutputSmoothedLines=0 (on input)",
+  "branch_geometry": "LineSmoothing=0 (on extract)",
+  "bifurcation_vectors": "Normalize=0 (on extract + frames)"
+ }
+}

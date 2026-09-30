@@ -9,7 +9,36 @@ The *thalweg* is the line joining the deepest points of a river channel: a cente
 a field. Here the field is a model's per-class margin, decoded from a
 [rankfield](https://github.com/mhalle/rankfield) store (e.g. one written by haversack).
 
-**Status: incubated, not yet ported.** `src/thalweg/` is empty. What exists:
+**Status: port in progress** (branch `port`; plan and per-module status in `docs/port-plan.md`).
+`src/thalweg/` holds:
+
+- `thalweg.kernel` - numpy/scipy only, no files or names: field sampling and sub-voxel zero
+  crossings, field connectivity and topology, the seed-free centerline tracer, cross-sections
+  with the model's interval and non-round shape measures, spline curve geometry;
+- `thalweg.vmtk` - numpy ports of vmtk's centerline-only filters (attributes, resampling, branch
+  extractor, bifurcation frames and vectors, offsets, merge, smoothing, centerline and branch
+  geometry), checked against vmtk 1.5.2's own output. By default they fix the vmtk/VTK defects
+  found on the way; `vmtk_*=True` flags reproduce vmtk exactly;
+- the pipeline - `store` (read a ranked store), `centerlines` (a structure's centerlines as a
+  graph), `graph` (the `.thalweg.json` format, `docs/format/thalweg-json.md`), `adapters` and
+  `branching` (vmtk's grouping on the graph), `measure` (the branch table), `case` (one case,
+  decoded once: the batch product), `export` (a capped surface, VTP, SWC, Slicer markups), `cli`.
+
+Install and test (from the repo):
+
+    uv sync --extra test --extra tables
+    uv run pytest                      # ~70 s with the case data in ~/tmp/data/vessels, ~12 s without
+    uv run pytest -m "not slow"        # the quick loop, ~16 s
+
+Use:
+
+    uv run thalweg structures STORE
+    uv run thalweg run STORE -o OUT/                    # graph, branch table, stations, summary, QC
+    uv run thalweg centerlines STORE -s lung_arteries -o arteries.thalweg.json.gz
+    uv run thalweg table arteries.thalweg.json.gz STORE -o branches.parquet --stations stations.parquet
+    uv run thalweg export arteries.thalweg.json.gz STORE -s lung_arteries --mesh arteries.vtp
+
+Also here:
 
 - `docs/vmtk-successor.md` - the design note and every measurement so far (§12: field
   connectivity and topology, seed-free centerlines, caliber and the model's resolution floor,
@@ -28,11 +57,9 @@ a field. Here the field is a model's per-class margin, decoded from a
 
 ## Plan
 
-Port in layers, each checked against the research scripts' outputs: the field kernel (sampling,
-sub-voxel crossings, connectivity, topology), the centerline graph and radius, native centerline
-processing (frames, grouping, bifurcation frames, replacing vmtk's), partition, wall
-coordinates and maps, curvature, sections, flow extensions and export; then one pipeline that
-decodes once and scales to whole trees. vmtk stays as the test oracle, never a dependency.
+`docs/port-plan.md`: the vmtk features, module by module, with their status; the tube (not only
+vessel) requirements on the data model; the phase order. `docs/validation.md`: how the port
+behaves beyond the case it was built on. vmtk stays the test oracle, never a dependency.
 
 ## License
 

@@ -1,0 +1,524 @@
+{
+ "$defs": {
+  "Edge": {
+   "additionalProperties": false,
+   "properties": {
+    "id": {
+     "title": "Id",
+     "type": "integer"
+    },
+    "structure": {
+     "title": "Structure",
+     "type": "string"
+    },
+    "start_node": {
+     "title": "Start Node",
+     "type": "integer"
+    },
+    "end_node": {
+     "title": "End Node",
+     "type": "integer"
+    },
+    "point_range": {
+     "description": "[start, stop) rows of the point table",
+     "maxItems": 2,
+     "minItems": 2,
+     "prefixItems": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "integer"
+      }
+     ],
+     "title": "Point Range",
+     "type": "array"
+    },
+    "length_mm": {
+     "minimum": 0,
+     "title": "Length Mm",
+     "type": "number"
+    },
+    "provenance": {
+     "$ref": "#/$defs/Provenance"
+    },
+    "branch": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "the tracer's branch this edge belongs to",
+     "title": "Branch"
+    },
+    "generation": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "the tracer's attachment depth: how many branches its branch hangs from (not the number of bifurcations between it and the root)",
+     "title": "Generation"
+    },
+    "attributes": {
+     "additionalProperties": true,
+     "title": "Attributes",
+     "type": "object"
+    }
+   },
+   "required": [
+    "id",
+    "structure",
+    "start_node",
+    "end_node",
+    "point_range",
+    "length_mm",
+    "provenance"
+   ],
+   "title": "Edge",
+   "type": "object"
+  },
+  "Grid": {
+   "additionalProperties": false,
+   "description": "Where the source field's samples sit: ``world = origin + index @ directions`` (array order).",
+   "properties": {
+    "shape": {
+     "maxItems": 3,
+     "minItems": 3,
+     "prefixItems": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "integer"
+      },
+      {
+       "type": "integer"
+      }
+     ],
+     "title": "Shape",
+     "type": "array"
+    },
+    "directions": {
+     "maxItems": 3,
+     "minItems": 3,
+     "prefixItems": [
+      {
+       "maxItems": 3,
+       "minItems": 3,
+       "prefixItems": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "number"
+        },
+        {
+         "type": "number"
+        }
+       ],
+       "type": "array"
+      },
+      {
+       "maxItems": 3,
+       "minItems": 3,
+       "prefixItems": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "number"
+        },
+        {
+         "type": "number"
+        }
+       ],
+       "type": "array"
+      },
+      {
+       "maxItems": 3,
+       "minItems": 3,
+       "prefixItems": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "number"
+        },
+        {
+         "type": "number"
+        }
+       ],
+       "type": "array"
+      }
+     ],
+     "title": "Directions",
+     "type": "array"
+    },
+    "origin": {
+     "maxItems": 3,
+     "minItems": 3,
+     "prefixItems": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "number"
+      },
+      {
+       "type": "number"
+      }
+     ],
+     "title": "Origin",
+     "type": "array"
+    }
+   },
+   "required": [
+    "shape",
+    "directions",
+    "origin"
+   ],
+   "title": "Grid",
+   "type": "object"
+  },
+  "Node": {
+   "additionalProperties": false,
+   "properties": {
+    "id": {
+     "title": "Id",
+     "type": "integer"
+    },
+    "kind": {
+     "enum": [
+      "root",
+      "junction",
+      "tip",
+      "truncated",
+      "joint"
+     ],
+     "title": "Kind",
+     "type": "string"
+    },
+    "position": {
+     "maxItems": 3,
+     "minItems": 3,
+     "prefixItems": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "number"
+      },
+      {
+       "type": "number"
+      }
+     ],
+     "title": "Position",
+     "type": "array"
+    },
+    "structure": {
+     "title": "Structure",
+     "type": "string"
+    },
+    "attributes": {
+     "additionalProperties": true,
+     "title": "Attributes",
+     "type": "object"
+    }
+   },
+   "required": [
+    "id",
+    "kind",
+    "position",
+    "structure"
+   ],
+   "title": "Node",
+   "type": "object"
+  },
+  "Points": {
+   "additionalProperties": false,
+   "properties": {
+    "position": {
+     "items": {
+      "maxItems": 3,
+      "minItems": 3,
+      "prefixItems": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "number"
+       },
+       {
+        "type": "number"
+       }
+      ],
+      "type": "array"
+     },
+     "title": "Position",
+     "type": "array"
+    },
+    "radius": {
+     "description": "inscribed-ball radius, mm (-1 where no inside point was found)",
+     "items": {
+      "type": "number"
+     },
+     "title": "Radius",
+     "type": "array"
+    },
+    "columns": {
+     "additionalProperties": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "type": "array"
+     },
+     "title": "Columns",
+     "type": "object"
+    }
+   },
+   "required": [
+    "position",
+    "radius"
+   ],
+   "title": "Points",
+   "type": "object"
+  },
+  "Provenance": {
+   "additionalProperties": false,
+   "properties": {
+    "method": {
+     "enum": [
+      "field",
+      "voxel",
+      "bridged"
+     ],
+     "title": "Method",
+     "type": "string"
+    },
+    "gap_mm": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "bridged only: the length of the closed gap",
+     "title": "Gap Mm"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "description": "bridged only: why the gap was closed",
+     "title": "Reason"
+    }
+   },
+   "required": [
+    "method"
+   ],
+   "title": "Provenance",
+   "type": "object"
+  },
+  "Source": {
+   "additionalProperties": false,
+   "properties": {
+    "store": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Store"
+    },
+    "labeling_scheme": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Labeling Scheme"
+    },
+    "part": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Part"
+    },
+    "label_value": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Label Value"
+    },
+    "grid": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/Grid"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    }
+   },
+   "title": "Source",
+   "type": "object"
+  },
+  "Structure": {
+   "additionalProperties": false,
+   "properties": {
+    "name": {
+     "title": "Name",
+     "type": "string"
+    },
+    "source": {
+     "$ref": "#/$defs/Source"
+    },
+    "roots": {
+     "items": {
+      "type": "integer"
+     },
+     "title": "Roots",
+     "type": "array"
+    },
+    "method": {
+     "description": "how the centerlines were made, e.g. 'thalweg.trace'",
+     "title": "Method",
+     "type": "string"
+    },
+    "parameters": {
+     "additionalProperties": true,
+     "title": "Parameters",
+     "type": "object"
+    },
+    "statistics": {
+     "additionalProperties": true,
+     "title": "Statistics",
+     "type": "object"
+    }
+   },
+   "required": [
+    "name",
+    "method"
+   ],
+   "title": "Structure",
+   "type": "object"
+  }
+ },
+ "additionalProperties": false,
+ "description": "A ``.thalweg.json`` document.",
+ "properties": {
+  "format": {
+   "const": "thalweg",
+   "default": "thalweg",
+   "title": "Format",
+   "type": "string"
+  },
+  "version": {
+   "default": "0.1",
+   "pattern": "^\\d+\\.\\d+$",
+   "title": "Version",
+   "type": "string"
+  },
+  "units": {
+   "const": "mm",
+   "default": "mm",
+   "title": "Units",
+   "type": "string"
+  },
+  "space": {
+   "const": "LPS",
+   "default": "LPS",
+   "title": "Space",
+   "type": "string"
+  },
+  "created_by": {
+   "anyOf": [
+    {
+     "type": "string"
+    },
+    {
+     "type": "null"
+    }
+   ],
+   "default": null,
+   "title": "Created By"
+  },
+  "structures": {
+   "items": {
+    "$ref": "#/$defs/Structure"
+   },
+   "title": "Structures",
+   "type": "array"
+  },
+  "nodes": {
+   "items": {
+    "$ref": "#/$defs/Node"
+   },
+   "title": "Nodes",
+   "type": "array"
+  },
+  "edges": {
+   "items": {
+    "$ref": "#/$defs/Edge"
+   },
+   "title": "Edges",
+   "type": "array"
+  },
+  "points": {
+   "$ref": "#/$defs/Points"
+  }
+ },
+ "title": "thalweg tube graph, format 0.1",
+ "type": "object",
+ "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

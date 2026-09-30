@@ -4,9 +4,12 @@ Centerlines, branches and wall geometry of tubular structures read from a segmen
 model's continuous field (rankfield margins), never from a triangulated surface except at
 export. A successor to vmtk. Private, Apache-2.0. Incubated in medseg (2026-09-23/24).
 
-**Status:** `src/thalweg/` is empty; the port has not started. Everything measured so far is
-in `docs/vmtk-successor.md` §12–13 (read §6 for the package design and §12 for the evidence
-before changing anything). `docs/vmtk-vs-field-method.md` is the short version.
+**Status (2026-09-30):** the port is under way on branch `port` (worktree
+`.worktrees/port`, excluded locally). `docs/port-plan.md` has the per-module status and the phase
+order, `docs/validation.md` the behavior beyond the build case, `docs/format/thalweg-json.md`
+the graph format. The research evidence is in `docs/vmtk-successor.md` §12–13 (read §6 for the
+package design). `research/vessels/` stays the frozen reference: kernel ports reproduce it
+exactly (tests marked `data`).
 
 ## Layout
 
@@ -19,10 +22,19 @@ before changing anything). `docs/vmtk-vs-field-method.md` is the short version.
   3D rendering (`explorations/rendering/render_straight.py`, path shim to `research/vessels/`).
 - `docs/` — the design note, the vmtk comparison, the SlicerHeart write-up, and
   `deliverables.md` (proposed batch product: a 2–5 MB core package per case, opt-in extras, on-demand queries).
-- `src/thalweg/` — the package, empty.
+- `src/thalweg/` — `kernel/` (numpy/scipy, no files or names), `vmtk/` (vmtk ports, numpy
+  only), and the pipeline modules (store, centerlines, graph, adapters, branching, measure, case,
+  export, cli). `tests/test_layering.py` enforces the split.
+- `tests/` — `fixtures/vmtk_oracle/phantom/` (frozen vmtk output on a synthetic tree, in git);
+  `oracle/vmtk_centerline_oracle.py` regenerates it and the case oracle
+  (`$VESSELS_DATA/oracle/C3N-00704_ctpa0625/`) in the isolated vmtk env.
+- `validation/` — phase 5 scripts: `phantom_suite.py` (analytic phantoms) and `vmtk_phantom.py`
+  (vmtk vs thalweg vs the truth).
 
 ## Environments
 
+- thalweg itself: `uv sync --extra test --extra tables` in the repo (its own `.venv`, Python
+  3.12); `uv run pytest` (data tests skip without `~/tmp/data/vessels`), `uv run thalweg ...`.
 - Research scripts: **haversack's venv**, from `research/vessels/`:
   `../../../haversack/.venv/bin/python script.py [RUN]`. Never a bare `python3` (Homebrew's).
   It has rankfield, duckn, torch (MPS), scipy, skimage, SimpleITK.
@@ -41,8 +53,11 @@ mode); DICOM in `$VESSELS_DICOM` = `~/tmp/data/idc_vessels` (`manifest.csv`, `CI
 `derived/*_slab2mm.nii.gz`). Cases (`cases.py` LADDERS): **C3N-00704** (cptac_luad; CTPA 0.625,
 LUNG 1.25, 2 mm slab average, 3.75) and **MSB-02664** (cmb_brca; CTA-PE 0.625, 1.25, 2 mm slab,
 5.0 DLIR), CC BY 4.0, from IDC; plus the idc-torso1 demo store
-(`haversack/data/duckn_demo/idc-torso1/lung_vessels.duckn`). The vmtk comparisons all use the
-C3N-00704 0.625 left-lung subtree (51 tips). `.gitignore` refuses data extensions. Downloads
+(`haversack/data/duckn_demo/idc-torso1/lung_vessels.duckn`). The vmtk comparisons use the
+C3N-00704 0.625 left-lung subtree (51 tips), the MSB-02664 0.625 subtree (57 tips) and analytic
+phantoms (`validation/vmtk_phantom.py`). `vmtk_prep.py` keeps the surface only within our radius +
+1.5 mm of our centerline, so vmtk sees a cut wall on wide vessels: exclude points whose sphere
+touches the cut (docs/validation.md §4). `.gitignore` refuses data extensions. Downloads
 need the user's permission.
 
 ## Established facts — don't relitigate
@@ -57,19 +72,38 @@ need the user's permission.
   One mode (the field) everywhere; the voxel mode is kept only for comparison (`GRAPH=voxel`).
 - Field radius is ~2× as repeatable as voxel EDT across reconstructions (r ≥ 1.25 mm). Use mean
   |Δ| / RMS, never MAD (EDT is quantized).
-- vs vmtk (same subtree): centerlines 0.086 mm, radius +0.029 mm, 50/51 routes; branch clipper
+- vs vmtk (same subtree): centerlines 0.086 mm, radius +0.029 mm, 50/51 routes (with 1 ridge pass;
+  4 passes give 0.060 mm and -0.006 mm - the +0.029 was the refinement's quantization, docs/validation.md §4); branch clipper
   reproduced at 100 % of original vertices (2 s vs 185–228 s); wall coordinates bit-exact;
   wall maps 0.02–0.03 mm; curvature 6× more repeatable; flow extensions 0.02–0.03 mm. Whole
   subtree analysis ~5.5 s vs ~240 s (95 % of vmtk's is the clipper).
 - **vmtk defect:** `vtkvmtkCenterlineUtilities::InterpolateTuple` calls `GetTuple()` twice into
   one buffer, so every "interpolated" radius/abscissa/normal is the segment's END value
-  (abscissa +0.114 mm median, angle up to 1.9°). Correct interpolation is the default;
+  (wall-map abscissa +0.114 mm median, angle up to 1.9°; in the offset filter, abscissas up to
+  0.29 mm and normals up to 12.4°). Correct interpolation is the default;
   `vmtk_interp=True` reproduces vmtk only for comparison. Not reported upstream (user's call).
 - Curvature: the margin is ~10.6 logit/mm, clipped at ±8, so finite-difference stencils hit the
   plateau and read ~12 % low. Use the Gaussian-weighted quadric fit to unclipped samples (2.8 mm).
-- vmtk's centerlines are NOT used by our pipeline (only in comparisons). What is still borrowed:
-  vmtk's centerline-only processing (attributes, branch extractor, bifurcation frames, offsets),
-  run on OUR centerlines for group-for-group comparability. Replacing it is the first port item.
+- vmtk's centerlines are NOT used by our pipeline (only in comparisons). vmtk's centerline-only
+  processing is now ported to numpy (`thalweg.vmtk`, 2026-09-30), so vmtk runs only in the oracle
+  script. Our field -> graph -> vmtk convention -> ported extractor reproduces vmtk's own groups
+  exactly on the C3N-00704 subtree (`tests/test_branching.py`).
+- **Tracer defaults (decided 2026-09-30):** `ridge_passes=4` (coarse-to-fine radius refinement:
+  removes a 0.03-0.07 mm radius deficit, matches vmtk, 1.85x trace time), `prune="length"` (the
+  reference; `wall` is an option for flat lumens). `ridge_passes=1` is the research reference and
+  what the reproduction tests pin. docs/validation.md §5.
+- **The vmtk port's flag convention:** every public `thalweg.vmtk` function defaults to the
+  correct behavior; `vmtk_<name>=True` reproduces a vmtk or VTK defect (`vmtk_float32`,
+  `vmtk_steps`, `vmtk_merge`, `vmtk_last_tract`, `vmtk_interp`, `vmtk_fallback`, `vmtk_cell_data`,
+  `vmtk_discard_smoothing`, `vmtk_two_point_cells`), each documented with its measured effect in
+  its module docstring. Small vmtk fixtures (`tests/fixtures/vmtk_oracle/<name>/`, ~0.4 MB,
+  `vmtk_centerline_oracle.py small`) protect the grouping rules without case data. `thalweg.vmtk.VMTK_FLAGS`
+  lists them; `branching.vmtk_branching(vmtk_compatible=True)` turns them all on. Oracle tests
+  pass every flag of their stage. The residual 1e-14 differences are FMA contraction in vmtk's
+  arm64 build (replayed bit for bit with `fma`).
+- The research mapping run of 09-24 (`vmtk_mapping.py`) passed the first cell's group (a
+  branch) as vmtk's offset reference group; vmtk rejects that and returns its input, so that
+  run's "offset" stage was a no-op. The oracle script uses vmtk's default (-1) instead.
 
 ## Pitfalls already paid for
 
@@ -93,7 +127,11 @@ need the user's permission.
   numbers are fine (don't rerun vmtk rounds for precision).
 - Defect reports upstream state the component's wrong behavior, project-neutral.
 
-## Next (agreed 2026-09-24)
+## Next (agreed 2026-09-24; progress in docs/port-plan.md)
+
+Done on `port` (2026-09-30): (1) as a library (`thalweg.vmtk`, `branching`; no CLI verb runs the
+grouping yet), (2) (`kernel.geometry`, `kernel.sections`, `measure`), (3) and (4) as first versions
+(`case`, `export`); (5) started (`docs/validation.md`).
 
 Must: (1) native centerline processing (arc length + parallel-transport frames, branch grouping,
 bifurcation frames), checked bit for bit against saved vmtk outputs; (2) centerline geometry

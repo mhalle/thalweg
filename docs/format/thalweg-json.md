@@ -1,0 +1,177 @@
+# `.thalweg.json`: the tube graph format (version 0.1)
+
+thalweg's own file for the centerlines of tubular structures: vessels, airways, bowel, ducts.
+It is a single JSON document, gzipped when the name ends in `.gz` (`.thalweg.json.gz`). The
+machine-readable definition is [`thalweg-0.1.schema.json`](thalweg-0.1.schema.json), generated
+from the pydantic models in `src/thalweg/graph.py` by `thalweg schema -o …`; a test keeps the
+two identical. The models also enforce the invariants below, which a JSON Schema cannot express.
+
+It is standalone on purpose: it does not depend on duckn or on the store it was read from. It
+carries enough source information to find that store again. Version 0.x may change without
+migration; 1.0 will be the first stable version.
+
+## Shape
+
+```json
+{
+  "format": "thalweg", "version": "0.1", "units": "mm", "space": "LPS",
+  "created_by": "thalweg 0.0.1",
+  "structures": [ { "name": "lung_arteries", "source": {…}, "roots": [0],
+                    "method": "thalweg.trace", "parameters": {…}, "statistics": {…} } ],
+  "nodes":  [ { "id": 0, "kind": "root", "position": [x, y, z], "structure": "lung_arteries",
+                "attributes": {} }, … ],
+  "edges":  [ { "id": 0, "structure": "lung_arteries", "start_node": 0, "end_node": 1,
+                "point_range": [0, 57], "length_mm": 17.2,
+                "provenance": { "method": "field" },
+                "branch": 0, "generation": 0, "attributes": {} }, … ],
+  "points": { "position": [[x, y, z], …], "radius": [r, …],
+              "columns": { "branch_group": [3, 3, …], … } }
+}
+```
+
+- **Coordinates** are LPS millimeters (DICOM's patient space), in the world of the source store.
+- **Structures.** A file holds one or more structures, each with its own nodes and edges. Every
+  node and edge names its structure.
+  - `source` records where the structure came from: `store` (path), `labeling_scheme` (the scheme
+    that names this class, e.g. `ts.v2:lung_vessels`), `part` (the store's `parts/<part>`),
+    `label_value`, and `grid` (`shape`, `directions`, `origin` of the field).
+  - `parameters` records the tracer's settings: `connectivity` (`field` or `voxel`),
+    `cover_scale`, `cover_constant_mm`, `cost_epsilon_mm`, `ridge_passes` (default 4; 1 is the
+    research reference) and `prune` (default `length`).
+  - `statistics` records counts from the tracer and the graph (below).
+- **Nodes** have one of these kinds:
+  - `root`: where the tracer started, the deepest point of the structure (not necessarily an
+    end: the arteries' root lies inside the main pulmonary artery);
+  - `junction`: degree 3 or more;
+  - `tip`: a free end, degree 1;
+  - `truncated`: an end where the structure runs off the edge of the source field, degree 1.
+    It is not a real tip, and Strahler order ignores it;
+  - `joint`: degree 2, where an edge was split for another reason.
+
+  A root that sits on the grid edge carries `attributes.on_grid_boundary: true`.
+- **Edges** are polylines between two nodes. `point_range: [start, stop)` is the edge's slice of
+  the shared point table.
+  - `provenance.method` says how the edge was made:
+    - `field`: connected in the model's field;
+    - `voxel`: the 26-connected labelmap graph, kept for comparison;
+    - `bridged`: a gap was closed, and the edge then carries `gap_mm` and `reason`.
+  - `branch` is the tracer's branch id.
+  - `generation` is the tracer's attachment depth: how many traced branches the edge's branch
+    hangs from. It is **not** the number of bifurcations to the root; the branch table's
+    `bifurcation_depth` is.
+- **Points** are stored one column per quantity.
+  - `position` and `radius` are always present. `radius` is the inscribed-ball radius in mm, and
+    -1 where no inside point was found.
+  - Further columns live under `columns`, each exactly as long as the table, with `null` where a
+    value is undefined. Values are scalars.
+- **Cycles are allowed.** Nothing in the format requires a tree: `roots` may be empty, or list
+  one node per component.
+  - Consumers that need a tree (Strahler order, the branch table's angles, the vmtk adapter,
+    SWC) check with `TubeGraph.tree()` and refuse anything else with a clear error.
+  - The tracer produces trees, so a loop in the field (an anastomosis, two branches of one class
+    in contact) is dropped from the graph. The QC's `field_loops` counts such loops.
+
+## Invariants (enforced when a document is read or built)
+
+- Ids are positions: `nodes[i].id == i`, `edges[i].id == i`. Structure names are unique.
+- An edge's first and last samples sit on its start and end nodes, within 1e-6 mm.
+- Both end nodes belong to the edge's structure, and so do the structure's roots.
+- Point ranges are at least two samples long and do not overlap.
+- Kinds agree with degree:
+  - `tip` and `truncated` have degree 1;
+  - `joint` has degree 2;
+  - `junction` has degree 3 or more;
+  - `root` may have any degree.
+- `bridged` carries `gap_mm` and `reason`; `field` and `voxel` carry neither.
+- Numbers are finite (no NaN or infinity), `length_mm` ≥ 0, and a radius is ≥ 0 or exactly -1.
+- `version` has the form `major.minor`; a reader accepts its own major version.
+- **Orientation (checked by `tree()`):** in a structure that is a tree with one root, every edge
+  points away from the root.
+
+## Keys written by thalweg 0.0.1
+
+**`statistics`, from the tracer:**
+- `traced_lattice_points`, `lattice_points` (of the whole structure);
+- `components`, `component_sizes` (only the largest piece is traced; the rest are listed here);
+- `zero_crossings`, `cell_interior_joins`;
+- `branches_before_pruning`, `branches`, `pruned_by_wall` (with `prune: "wall"`);
+- `max_distance_mm`.
+
+**`statistics`, from the graph:**
+- `edges`, `tips`, `truncated_ends`, `junctions`, `joints`, `length_mm`;
+- `edges_joined_to_their_start_node`: a child branch starts at its own refined point near the
+  junction, and the junction's position is prepended to close the gap.
+
+**`statistics.vmtk_bifurcations`** (from `thalweg.branching.annotate`): how junctions and vmtk's
+bifurcations correspond.
+
+**Attributes** (all from `thalweg.branching.annotate`, which no CLI verb runs yet):
+- on a node, `bifurcation_frames`: a list of `{group, origin, normal, up_normal}`, vmtk's
+  bifurcation reference systems at that junction;
+- on an edge:
+  - `branch_groups`, vmtk's group ids along it;
+  - `bifurcation_vector`, `{bifurcation_group, in_plane_angle_rad, out_of_plane_angle_rad}`.
+    The angles are vmtk's; their definitions are in `thalweg.vmtk.vectors`.
+
+**Point columns:** `branch_group` (vmtk group id) and `bifurcation_region` (1 inside vmtk's
+bifurcation region, else 0), both from `annotate`.
+
+## The tube requirements (docs/port-plan.md), as of 0.1
+
+- **Sections that are not round.** Per-station section descriptors live in the station table
+  (`--stations`): area, the ±2-logit areas, perimeter, Feret widths, aspect ratio and centroid
+  offset. Contours and the station frames are not stored yet. Per-point section columns are
+  possible (scalar columns) but none are written.
+- **Graphs that are not trees.** Allowed by the format, as are single tubes and `truncated`
+  ends. The tracer produces trees only.
+- **Nested layers** (lumen plus wall, true plus false lumen). Each layer can be its own
+  structure. There is no formal link between layers yet; it will need a field on `Structure` (a
+  format change).
+- **Bridged gaps**: edges with `provenance.method: "bridged"`, a length and a reason. The tracer
+  does not bridge yet.
+- **Self-contact.** Connectivity is always decided by the field, so two branches that touch are
+  connected only where the field connects them. Where it does (walls overlapping within one
+  class), the graph cannot tell that from a real junction; QC reports `field_loops`.
+- **Missing, and likely to force a change:**
+  - a radius interval per point: the model's ±2-logit interval is in the tables, not the graph;
+  - vector-valued columns (frames, tangents);
+  - units and descriptions per column.
+
+## Beside it
+
+- **Branch table** (`thalweg table … -o branches.parquet`, or `thalweg run`): one row per edge,
+  defined in `src/thalweg/measure.py`.
+- **Station profile** (`--stations stations.parquet`): one row per cross-section.
+- **vmtk-compatible export:** `thalweg export … --vmtk-centerlines C.vtp [--vmtk-exact]` writes
+  the source-to-tip paths after vmtk's centerline attributes and branch extractor (not the later
+  bifurcation stages). The integer arrays (`GroupIds`, `Blanking`, `CenterlineIds`, `TractIds`)
+  are Int32, as vmtk's filters require.
+- **Surface:** `thalweg export … --mesh M.vtp [--cap-kinds tip,truncated,root] [--refine N]`
+  writes the structure's zero set: marching cubes at level 1e-5 on the margin's trilinear
+  interpolant, N times finer.
+  - The surface is closed, consistently wound with normals pointing out of the structure, and
+    manifold, or it is not written.
+  - A flat cap is cut at every end of the requested kinds (default `tip` and `truncated`). A
+    degree-1 root on the grid's edge counts as truncated; any other degree-1 root is `root`, the
+    inlet.
+  - Cell data `BoundaryId` (Int32): 0 the wall, 1..K the caps.
+  - The sidecar `M.vtp.boundaries.json` holds `space` (`"LPS"`), `units` (`"mm"`) and:
+    - `boundaries`, one object per BoundaryId in order:
+      - the wall: `{"id": 0, "name": "wall", "area_mm2"}`;
+      - each cap: `{"id", "name"` (e.g. `"lung_arteries tip 812"`), `"end"` (tip, truncated or
+        root), `"node"` (graph node id), `"edge"` (the graph edge cut), `"center"` (where the
+        centerline crosses the cap's plane), `"normal"` (unit, pointing out of the structure),
+        `"inscribed_radius_mm"` (the centerline's radius at the cut), `"area_mm2"`,
+        `"centroid"` (the cap's area centroid, on the plane)`}`;
+    - `skipped`: `[{"name", "end", "node", "reason"}]`, every requested end that got no cap, and
+      why. The reasons are:
+      - the edge is too short to clear the junction;
+      - its radius is below the minimum;
+      - the centerline leaves the structure at the cut;
+      - the section reaches another cap or branch;
+      - the plane leaves an open boundary;
+      - the far side stays attached (a double wall);
+      - the section lies on a detached piece.
+
+    Every end of the requested kinds appears exactly once, either in `boundaries` or in `skipped`.
+- **SWC and Slicer markups:** `--swc`, `--markups`.

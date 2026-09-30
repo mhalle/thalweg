@@ -1,12 +1,16 @@
 # What one batch run should produce
 
-*2026-09-24, a proposal written at the close of the incubation thread. Nothing here is built;
-the formats and the cut between tiers are the user's to decide.*
+*2026-09-24, a proposal written at the close of the incubation thread; the formats and the cut
+between tiers are the user's to decide. Update 2026-09-30: tier 1 is partly built (`thalweg run`:
+graph, branch table, stations, summary, QC); lobes, airway wall thickness and artery/vein
+plausibility are not, nor are a per-point radius interval, lobe and Strahler order in the
+graph, 0.3 mm polylines, Horton ratios / BV5 / orientation entropy / artery-to-bronchus ratio,
+contrast, or the preview image.*
 
 ## The principle
 
 The expensive part is the models (GPU minutes) and, after them, decoding and building the
-whole-tree graph (~5 s + ~9 s per tree on an M2). Everything downstream measured so far takes
+whole-tree graph (~0.5 s decode + 2–6 s trace per tree (measured 2026-09-30) on an M2). Everything downstream measured so far takes
 seconds per subtree once those exist (`vmtk-successor.md` §12.7). So:
 
 - **Batch what is global, small and reusable:** results that need the whole tree, fit in a few
@@ -90,5 +94,5 @@ the user's outlets and flow extensions, meshes of a chosen subtree.
 
 Tier 1 needs the port's "must" items: native centerline processing, the whole-tree pipeline with
 a spatial index, geometry and angles, export, plus airway graphs (the same code on another
-class). Estimated batch cost after the models: ~40–60 s per case on an M2, dominated by the
+class). Estimated batch cost after the models: ~21–39 s per case for three trees (47–52 s with 4 ridge passes; measured 2026-09-30) on an M2, dominated by the
 three graphs, and much less on CUDA.

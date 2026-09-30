@@ -8,14 +8,49 @@ version = "0.0.1"
 license = "Apache-2.0"
 description = "thalweg: centerlines, branches and wall geometry of tubular structures, read from a segmentation model's field"
 requires-python = ">=3.12"
-dependencies = ["numpy>=1.24", "scipy>=1.11"]
+# rankfield reads the ranked store (its `store` extra brings zarr) and decodes margins; its
+# geometry vocabulary (origin + one direction row per array axis, LPS mm) is the one thalweg
+# speaks. pydantic models the .thalweg.json format (and generates its JSON Schema); click is the
+# command line, as in haversack. scikit-image is used for the zero set (marching cubes) only.
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.11",
+    "rankfield[store] @ git+https://github.com/mhalle/rankfield.git@v0.3.10",
+    "pydantic>=2.6",
+    "click>=8.1",
+    "scikit-image>=0.22",
+]
 
 [project.optional-dependencies]
 torch = ["torch>=2.7"]
+tables = ["pyarrow>=15"]
 test = ["pytest>=8"]
+
+[project.scripts]
+thalweg = "thalweg.cli:main"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/thalweg"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    # skimage's marching_cubes sets an array's shape (deprecated in numpy 2.5); not ours to fix
+    "ignore:Setting the shape on a NumPy array has been deprecated:DeprecationWarning",
+]
+markers = [
+    "data: needs the case data in $VESSELS_DATA (default ~/tmp/data/vessels); skipped when absent",
+    "slow: takes more than a few seconds",
+]
+
 [tool.ruff]
 line-length = 110
+# research/ is the frozen reference (never refactored in place) and the oracle script keeps its
+# style, run in the isolated vmtk env
+extend-exclude = ["research", "explorations", "tests/oracle"]
+
+[tool.ruff.lint]
+extend-select = ["E501"]
