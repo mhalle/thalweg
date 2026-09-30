@@ -63,7 +63,7 @@ def test_frames_follow_groups_on_the_case(vessels_data):
                 bad += 1
     assert bad == 0
     stats = h.structure("lung_arteries").statistics["vmtk_bifurcations"]
-    assert stats["junctions_with_one"] > 0
+    assert stats["junction_count_with_one_bifurcation"] > 0
 
 
 def test_a_tube_without_a_bifurcation():

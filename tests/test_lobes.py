@@ -48,7 +48,7 @@ def test_edges_take_the_lobe_of_most_of_their_length():
             assert lobes[e.id] == (1 if mid[0] < 0 else 5)
     rows = [dict(edge=e.id) for e in h.edges]
     lobe_rows(rows, el["y"])
-    assert {r["lobe"] for r in rows} <= {None, LOBES[1], LOBES[5]}
+    assert {r["lobe_name"] for r in rows} <= {None, LOBES[1], LOBES[5]}
     s = lobe_summary(h, "y", el["y"], lobe_volumes(F))
     assert s["lung_upper_lobe_right"]["edge_count"] == 0 and s[LOBES[1]]["lobe_volume_ml"] > 0
     assert sum(v["edge_count"] for v in s.values()) == len(h.edges)

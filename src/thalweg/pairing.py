@@ -19,7 +19,7 @@ Per airway edge (:func:`airway_rows`):
   summary gives the ratio's median over them too. (Pairing constrained to follow the trees was
   tried and is not used: it halves the paired share, makes the sharing of artery edges worse and
   does not move the ratio; docs/validation.md §5c);
-- ``paired_fraction``: the share of its samples that found a partner, and
+- ``paired_sample_fraction``: the share of its samples that found a partner, and
   ``paired_sample_count``, how many did (a ratio resting on a handful is weak);
 - ``bronchus_to_artery_ratio``: the median over paired samples of the airway's lumen diameter over
   the partner artery's diameter (both the traced, ridge-refined inscribed diameters). This is the
@@ -142,10 +142,11 @@ def airway_rows(graph: TubeGraph, airway: str, artery: str, rows: list[dict], **
             ids, counts = np.unique(partner[both], return_counts=True)
             ratio = float(np.median(ra[both] / rv[both]))
             by_edge[r["edge"]] = ratio
-            r.update(paired_artery_edge=int(ids[np.argmax(counts)]), paired_fraction=float(both.sum() / n),
-                     paired_sample_count=int(both.sum()), bronchus_to_artery_ratio=ratio)
+            r.update(paired_artery_edge=int(ids[np.argmax(counts)]),
+                     paired_sample_fraction=float(both.sum() / n), paired_sample_count=int(both.sum()),
+                     bronchus_to_artery_ratio=ratio)
         else:
-            r.update(paired_artery_edge=None, paired_fraction=0.0 if n else None,
+            r.update(paired_artery_edge=None, paired_sample_fraction=0.0 if n else None,
                      paired_sample_count=0, bronchus_to_artery_ratio=None)
     fits = consistency(graph, airway, artery, {r["edge"]: r["paired_artery_edge"] for r in rows})
     for r in rows:
@@ -153,8 +154,9 @@ def airway_rows(graph: TubeGraph, airway: str, artery: str, rows: list[dict], **
     ratios = np.array(list(by_edge.values()))
     good = np.array([v for k, v in by_edge.items() if fits.get(k)])
     return dict(paired_sample_share=float(ok.mean()) if len(ok) else 0.0,
-                paired_branches=len(ratios), consistent_paired_branches=len(good),
+                paired_branch_count=len(ratios), consistent_paired_branch_count=len(good),
                 bronchus_to_artery_ratio_median=float(np.median(ratios)) if len(ratios) else None,
                 consistent_bronchus_to_artery_ratio_median=float(np.median(good)) if len(good) else None,
-                share_of_paired_branches_above_1=float((ratios > 1).mean()) if len(ratios) else None,
+                share_of_paired_branches_with_ratio_above_1=(float((ratios > 1).mean()) if len(ratios)
+                                                             else None),
                 reach_mm=kw.get("reach", REACH_MM), parallel_cosine=kw.get("parallel", PARALLEL))

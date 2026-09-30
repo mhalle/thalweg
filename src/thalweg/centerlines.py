@@ -45,6 +45,17 @@ def _on_boundary(m: np.ndarray, geometry, point, radius: float) -> bool:
     return False
 
 
+# the tracer's statistics (kernel names, kept as the research reference wrote them) -> the names
+# a document carries
+TRACER_STATISTICS = {
+    "traced_lattice_points": "traced_lattice_point_count", "lattice_points": "lattice_point_count",
+    "components": "component_count", "component_sizes": "component_lattice_point_counts",
+    "zero_crossings": "zero_crossing_count", "cell_interior_joins": "cell_interior_join_count",
+    "branches_before_pruning": "branch_count_before_pruning", "branches": "branch_count",
+    "pruned_by_wall": "branch_count_pruned_by_wall",
+    "max_distance_mm": "deepest_point_wall_distance_mm"}
+
+
 def graph_from_tree(tree: medial.MedialTree, name: str, m: np.ndarray, geometry, source: Source,
                     parameters: dict, node_offset: int = 0, edge_offset: int = 0,
                     point_offset: int = 0) -> tuple[list[Node], list[Edge], list, list, Structure]:
@@ -101,12 +112,12 @@ def graph_from_tree(tree: medial.MedialTree, name: str, m: np.ndarray, geometry,
         rad.extend(rr)
         at += n
     roots = [nd.id for nd in nodes if nd.kind == "root"]
-    stats = dict(tree.stats)
-    stats.update(edges=len(edges), tips=sum(nd.kind == "tip" for nd in nodes),
-                 truncated_ends=sum(nd.kind == "truncated" for nd in nodes),
-                 junctions=sum(nd.kind == "junction" for nd in nodes),
-                 joints=sum(nd.kind == "joint" for nd in nodes),
-                 edges_joined_to_their_start_node=connected,
+    stats = {TRACER_STATISTICS.get(k, k): v for k, v in tree.stats.items()}
+    stats.update(edge_count=len(edges), tip_count=sum(nd.kind == "tip" for nd in nodes),
+                 truncated_end_count=sum(nd.kind == "truncated" for nd in nodes),
+                 junction_count=sum(nd.kind == "junction" for nd in nodes),
+                 joint_count=sum(nd.kind == "joint" for nd in nodes),
+                 edge_count_joined_to_start_node=connected,
                  deepest_point=[float(v) for v in nodes[roots[0] - node_offset].position] if roots else None,
                  length_mm=round(float(sum(e.length_mm for e in edges)), 3))
     structure = Structure(name=name, source=source, roots=roots, method="thalweg.trace",
@@ -299,10 +310,10 @@ def reroot(graph: TubeGraph, structure: str, node: int) -> TubeGraph:
     for s in graph.structures:
         if s.name == structure:
             mine = [nd for nd in nodes if nd.structure == structure]
-            stats = dict(s.statistics, tips=sum(nd.kind == "tip" for nd in mine),
-                         truncated_ends=sum(nd.kind == "truncated" for nd in mine),
-                         junctions=sum(nd.kind == "junction" for nd in mine),
-                         joints=sum(nd.kind == "joint" for nd in mine))
+            stats = dict(s.statistics, tip_count=sum(nd.kind == "tip" for nd in mine),
+                         truncated_end_count=sum(nd.kind == "truncated" for nd in mine),
+                         junction_count=sum(nd.kind == "junction" for nd in mine),
+                         joint_count=sum(nd.kind == "joint" for nd in mine))
             s = s.model_copy(update={"roots": [node], "statistics": stats})
         structures.append(s)
     return graph.model_copy(update={"nodes": nodes, "edges": edges, "structures": structures,

@@ -80,9 +80,9 @@ def horton(graph: TubeGraph, structure: str) -> dict:
         mine = [s for s in st if s["order"] == k]
         length.append(float(np.mean([s["length_mm"] for s in mine])))
         diameter.append(float(np.mean([s["diameter_mm"] for s in mine])))
-        table[str(k)] = dict(streams=len(mine), mean_length_mm=round(length[-1], 3),
+        table[str(k)] = dict(stream_count=len(mine), mean_length_mm=round(length[-1], 3),
                              mean_diameter_mm=round(diameter[-1], 3))
-    n = [table[str(k)]["streams"] for k in orders]
+    n = [table[str(k)]["stream_count"] for k in orders]
     return dict(bifurcation_ratio=_ratio(orders, n, increasing=False),
                 length_ratio=_ratio(orders, length, increasing=True),
                 diameter_ratio=_ratio(orders, diameter, increasing=True), orders=table)

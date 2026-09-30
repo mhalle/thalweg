@@ -206,7 +206,7 @@ def test_wall_measures_on_a_lumen_in_its_wall():
     assert abs(main["wall_thickness_mm"] - 1.0) < 0.05
     from thalweg.measure import pi10
     p = pi10(stations)
-    assert p["stations"] > 10
+    assert p["wall_station_count"] > 10
     # the phantom's own constant wall: sqrt(pi t (10 / pi + t)) with t = 1 mm
     assert abs(p["constant_wall_pi10_mm"] - np.sqrt(np.pi * (10 / np.pi + 1))) < 0.1
     inner = [s_["internal_perimeter_mm"] for s_ in stations if s_["wall_area_mm2"] is not None]
@@ -218,7 +218,7 @@ def test_pi10_is_the_fitted_line_at_a_perimeter_of_10():
     st = [dict(internal_perimeter_mm=float(x), wall_area_mm2=float((1.0 + 0.3 * x) ** 2),
                wall_thickness_mm=1.2) for x in np.linspace(5, 30, 40)]
     p = pi10(st)
-    assert abs(p["pi10_mm"] - 4.0) < 1e-9 and abs(p["slope"] - 0.3) < 1e-9 and p["stations"] == 40
+    assert abs(p["pi10_mm"] - 4.0) < 1e-9 and abs(p["slope"] - 0.3) < 1e-9 and p["wall_station_count"] == 40
     assert p["internal_perimeter_range_mm"] == [5.0, 30.0]
     assert abs(p["constant_wall_pi10_mm"] - np.sqrt(np.pi * 1.2 * (10 / np.pi + 1.2))) < 1e-9
     assert pi10(st[:5])["pi10_mm"] is None                             # too few stations
@@ -305,8 +305,8 @@ def test_summary_keys():
     g = TubeGraph(structures=[s], nodes=nodes, edges=edges, points=Points(position=pos, radius=rad))
     sm = summarize(g, "y", [dict(area_mm2=1.0), dict(area_mm2=None)])
     assert set(sm) == {"edge_count", "node_count_by_kind", "length_mm", "radius_percentiles_mm",
-                       "strahler_order", "unordered", "sectioned_branches"}
-    assert sm["edge_count"] == len(g.edges) and sm["sectioned_branches"] == 1
+                       "strahler_order", "unordered", "sectioned_branch_count"}
+    assert sm["edge_count"] == len(g.edges) and sm["sectioned_branch_count"] == 1
     assert sm["node_count_by_kind"] == {"root": 1, "junction": 1, "tip": 2} or sum(
         sm["node_count_by_kind"].values()) == len(g.nodes)
     assert all(set(v) == {"edge_count", "length_mm"} for v in sm["strahler_order"].values())

@@ -14,7 +14,7 @@ nodes) :func:`branch_table` reports:
   model's own interval (``area_low_mm2`` at margin +2 logits, ``area_high_mm2`` at -2), the
   equivalent diameter, the minimum and maximum caliper widths and the aspect ratio: medians over
   the stations whose center lies inside the structure (``station_count``; stations whose center
-  falls outside are counted apart and left out of every median);
+  falls outside are counted in ``outside_station_count`` and left out of every median);
 - **shape**, from thalweg's spline (:mod:`thalweg.kernel.geometry`): distance metric,
   sum-of-angles metric, inflection count metric, curvature (mean, max), mean absolute torsion,
   over the edge's interior - one radius clear of each end, where the traced path hooks into the
@@ -229,7 +229,7 @@ def _wall(img_outer, g, lumen: dict) -> dict:
 
 def _sections(path, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels, outer, stations_out) -> dict:
     keys = SECTION_KEYS + (WALL_KEYS if outer is not None else ())
-    empty = {k: None for k in keys} | {"station_count": 0, "stations_center_outside": 0}
+    empty = {k: None for k in keys} | {"station_count": 0, "outside_station_count": 0}
     if path is None:
         return empty
     st = path.stations(step)
@@ -272,7 +272,7 @@ def _sections(path, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels,
         out["wall_station_count"] = len(vals["wall_area_mm2"])
         if out["wall_station_count"] < MIN_WALL_STATIONS:
             out.update({k: None for k in WALL_KEYS})
-    out["stations_center_outside"] = outside
+    out["outside_station_count"] = outside
     return out
 
 
@@ -288,7 +288,7 @@ def pi10(stations: list[dict]) -> dict:
     Pi10 here restates that thickness and is not a measure of the airways (docs/validation.md §5b).
     None when fewer than 10 stations have a wall, or all have one perimeter."""
     ok = [s_ for s_ in stations if s_.get("wall_area_mm2") is not None and s_.get("internal_perimeter_mm")]
-    none = dict(pi10_mm=None, slope=None, stations=len(ok), internal_perimeter_range_mm=None,
+    none = dict(pi10_mm=None, slope=None, wall_station_count=len(ok), internal_perimeter_range_mm=None,
                 constant_wall_pi10_mm=None)
     if len(ok) < 10:
         return none
@@ -298,7 +298,7 @@ def pi10(stations: list[dict]) -> dict:
         return none
     b, a = np.polyfit(x, y, 1)
     t = float(np.median([s_["wall_thickness_mm"] for s_ in ok]))
-    return dict(pi10_mm=float(a + 10.0 * b), slope=float(b), stations=len(ok),
+    return dict(pi10_mm=float(a + 10.0 * b), slope=float(b), wall_station_count=len(ok),
                 internal_perimeter_range_mm=[float(x.min()), float(x.max())],
                 constant_wall_pi10_mm=float(np.sqrt(np.pi * t * (10.0 / np.pi + t))))
 

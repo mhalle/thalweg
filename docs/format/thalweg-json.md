@@ -78,7 +78,7 @@ migration; 1.0 will be the first stable version.
   - Consumers that need a tree (Strahler order, the branch table's angles, the vmtk adapter,
     SWC) check with `TubeGraph.tree()` and refuse anything else with a clear error.
   - The tracer produces trees, so a loop in the field (an anastomosis, two branches of one class
-    in contact) is dropped from the graph. The QC's `field_loops` counts such loops.
+    in contact) is dropped from the graph. The QC's `field_loop_count` counts such loops.
 
 ## Invariants (enforced when a document is read or built)
 
@@ -101,20 +101,26 @@ migration; 1.0 will be the first stable version.
 ## Keys written by thalweg 0.0.1
 
 **`statistics`, from the tracer:**
-- `traced_lattice_points`, `lattice_points` (of the whole structure);
-- `components`, `component_sizes` (only the largest piece is traced; the rest are listed here);
-- `zero_crossings`, `cell_interior_joins`;
-- `branches_before_pruning`, `branches`, `pruned_by_wall` (with `prune: "wall"`);
-- `max_distance_mm`, `deepest_point` (where the tracer started);
+- `traced_lattice_point_count`, `lattice_point_count` (of the whole structure);
+- `component_count`, `component_lattice_point_counts` (largest first; only the largest piece is
+  traced, the rest are listed here);
+- `zero_crossing_count`, `cell_interior_join_count`;
+- `branch_count_before_pruning`, `branch_count`, `branch_count_pruned_by_wall` (with
+  `prune: "wall"`);
+- `deepest_point` (where the tracer started) and `deepest_point_wall_distance_mm` (how far
+  that point is from the wall);
 - `inlet_end_width_mm`, `widest_end_width_mm` (with `root: "inlet"`).
 
 **`statistics`, from the graph:**
-- `edges`, `tips`, `truncated_ends`, `junctions`, `joints`, `length_mm`;
-- `edges_joined_to_their_start_node`: a child branch starts at its own refined point near the
+- `edge_count`, `tip_count`, `truncated_end_count`, `junction_count`, `joint_count`,
+  `length_mm`;
+- `edge_count_joined_to_start_node`: a child branch starts at its own refined point near the
   junction, and the junction's position is prepended to close the gap.
 
 **`statistics.vmtk_bifurcations`** (from `thalweg.branching.annotate`): how junctions and vmtk's
-bifurcations correspond.
+bifurcations correspond: `junction_count_with_no_bifurcation`,
+`junction_count_with_one_bifurcation`, `junction_count_with_several_bifurcations`,
+`bifurcation_count_shared_by_several_junctions`, `bifurcation_count_on_no_junction`.
 
 **Attributes.** From the tracer, on a root node: `end_kind` and `on_grid_boundary` (see Nodes). From
 `thalweg.branching.annotate`, which no CLI verb runs yet:
@@ -130,7 +136,7 @@ bifurcations correspond.
   else 0), both from `thalweg.branching.annotate`;
 - `lobe_number` (written by `thalweg run` for lung stores): 1 left upper, 2 left lower, 3 right upper,
   4 right middle, 5 right lower, 0 outside every lobe (the hilum). Lobes come from the store's own
-  crop stage (`thalweg.lobes`). The branch table gets `lobe` (the lobe holding most of the edge's
+  crop stage (`thalweg.lobes`). The branch table gets `lobe_name` (the lobe holding most of the edge's
   length, by name; null when most of it lies outside every lobe) and `lobe_length_fraction`.
 - `radius_lower_mm`, `radius_upper_mm` (written by `thalweg run`): the model's own interval on
   each sample's radius, the distance to the surfaces where the margin is +2 and -2 logits (a
@@ -152,7 +158,7 @@ bifurcations correspond.
   does not bridge yet.
 - **Self-contact.** Connectivity is always decided by the field, so two branches that touch are
   connected only where the field connects them. Where it does (walls overlapping within one
-  class), the graph cannot tell that from a real junction; QC reports `field_loops`.
+  class), the graph cannot tell that from a real junction; QC reports `field_loop_count`.
 - **Missing, and likely to force a change:**
   - vector-valued columns (frames, tangents);
   - units and descriptions per column.
@@ -161,14 +167,14 @@ bifurcations correspond.
 
 - **Branch table** (`thalweg table … -o branches.parquet`, or `thalweg run`): one row per edge,
   defined in `src/thalweg/measure.py`. `thalweg run` adds, where the store allows:
-  - `lobe`, `lobe_length_fraction` (a lung store; above);
+  - `lobe_name`, `lobe_length_fraction` (a lung store; above);
   - for an airway whose wall the model labels: `wall_area_mm2`, `wall_area_percent`,
     `wall_thickness_mm`, `internal_perimeter_mm` (medians over the edge's stations) and
     `wall_station_count`; the medians are null when fewer than 3 stations have a wall.
     `thalweg table` writes these too;
   - for an airway traced with the arteries: `paired_artery_edge` (the nearest parallel artery
     edge, not a verified companion), `paired_artery_consistent` (whether that edge fits the two
-    trees), `paired_fraction`, `paired_sample_count`,
+    trees), `paired_sample_fraction`, `paired_sample_count`,
     `bronchus_to_artery_ratio` (`thalweg.pairing`). `thalweg run` only.
 
   Columns a structure does not have are null in its rows.
@@ -187,20 +193,20 @@ bifurcations correspond.
   - `radius_percentiles_mm` (`p10`, `p50`, `p90` of the traced radius over the samples);
   - `strahler_order`: per order, `edge_count` and `length_mm`; `unordered`: the same for edges that
     lead only to truncated ends and so have no order;
-  - `sectioned_branches`: edges with at least one measured section;
+  - `sectioned_branch_count`: edges with at least one measured section;
   - `coarse_slices` (see `qc.json`), and a `warning` string when it is true;
   - `tree_statistics` (`thalweg.statistics`):
     - `horton`: `bifurcation_ratio`, `length_ratio`, `diameter_ratio`, and `orders`, per
-      Strahler order `streams`, `mean_length_mm`, `mean_diameter_mm`;
+      Strahler order `stream_count`, `mean_length_mm`, `mean_diameter_mm`;
     - `volume_mm3`, `small_vessel_volume_fraction`, `small_area_mm2` (the threshold, 5);
     - `orientation_entropy`;
-  - `pi10` (airways with a labeled wall): `pi10_mm`, `slope`, `stations` (those with a wall
-    measure) out of `lumen_stations`, `internal_perimeter_range_mm`, and
+  - `pi10` (airways with a labeled wall): `pi10_mm`, `slope`, `wall_station_count` (stations
+    with a wall measure) out of `station_count`, `internal_perimeter_range_mm`, and
     `constant_wall_pi10_mm` (what a wall of the median thickness at every caliber would give: on
     TotalSegmentator's wall class Pi10 restates it, docs/validation.md §5b);
   - `bronchoarterial` (airways traced with the arteries): `paired_sample_share`,
-    `paired_branches`, `consistent_paired_branches`, `bronchus_to_artery_ratio_median`,
-    `consistent_bronchus_to_artery_ratio_median`, `share_of_paired_branches_above_1`,
+    `paired_branch_count`, `consistent_paired_branch_count`, `bronchus_to_artery_ratio_median`,
+    `consistent_bronchus_to_artery_ratio_median`, `share_of_paired_branches_with_ratio_above_1`,
     `reach_mm`, `parallel_cosine`;
   - `lobes` (a lung store): per lobe name, and `outside_lobes`: `edge_count`, `tip_count`, `length_mm`,
     and for a lobe `lobe_volume_ml`, `length_mm_per_ml`.
@@ -214,9 +220,10 @@ bifurcations correspond.
     when it cannot be checked), `reasons`, the two
     `…_length_share_inside_pulmonary_vein` shares, and the roots' distances
     `…_root_to_pulmonary_vein_mm`, `…_root_to_heart_mm`;
-  - `structures`: per structure `dropped_components` (`count`, `lattice_share`, `largest`),
-    `truncated_ends`, `outside_mm`, `length_mm`, `unrefined_points`, `cell_interior_joins`,
-    `field_loops`;
+  - `structures`: per structure `dropped_components` (`component_count`,
+    `lattice_point_share`, `largest_lattice_point_count`), `truncated_end_count`,
+    `length_outside_field_mm`, `length_mm`, `unrefined_point_count`, `cell_interior_join_count`,
+    `field_loop_count`;
   - `timings_s`.
 - **vmtk-compatible export:** `thalweg export … --vmtk-centerlines C.vtp [--vmtk-exact]` writes
   the source-to-tip paths after vmtk's centerline attributes and branch extractor (not the later

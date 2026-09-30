@@ -37,7 +37,7 @@ def binary_tree(depth=4, length=10.0, radius=lambda d: 4.0 / 1.5 ** d):
 def test_horton_on_a_perfect_binary_tree():
     g = binary_tree(depth=5)
     h = horton(g, "t")
-    counts = [h["orders"][k]["streams"] for k in sorted(h["orders"])]
+    counts = [h["orders"][k]["stream_count"] for k in sorted(h["orders"])]
     assert counts == [16, 8, 4, 2, 1]                      # each level is its own order
     assert abs(h["bifurcation_ratio"] - 2.0) < 1e-9
     assert abs(h["diameter_ratio"] - 1.5) < 0.06           # the top stream spans two levels

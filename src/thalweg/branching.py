@@ -134,7 +134,8 @@ def annotate(graph: TubeGraph, structure: str, b: Branching) -> TubeGraph:
             incident.setdefault(e.start_node, []).append(e)
             incident.setdefault(e.end_node, []).append(e)
     positions = graph.positions()
-    counts = dict(junctions_without=0, junctions_with_one=0, junctions_with_several=0)
+    counts = dict(junction_count_with_no_bifurcation=0, junction_count_with_one_bifurcation=0,
+                  junction_count_with_several_bifurcations=0)
     used: dict[int, int] = {}
     on_paths = {n for chain in b.paths.edges for eid in chain
                 for n in (graph.edges[eid].start_node, graph.edges[eid].end_node)}
@@ -149,8 +150,9 @@ def annotate(graph: TubeGraph, structure: str, b: Branching) -> TubeGraph:
                 near = np.linalg.norm(positions[a:z] - np.asarray(nd.position), axis=1) <= reach
                 groups |= {int(g) for g, bb in zip(group[a:z][near], blank[a:z][near]) if bb == 1}
             found = sorted(g for g in groups if g in frame_of)
-            counts["junctions_without" if not found else ("junctions_with_one" if len(found) == 1
-                                                          else "junctions_with_several")] += 1
+            counts["junction_count_with_no_bifurcation" if not found
+                   else ("junction_count_with_one_bifurcation" if len(found) == 1
+                         else "junction_count_with_several_bifurcations")] += 1
             for g in found:
                 used[g] = used.get(g, 0) + 1
             if found:
@@ -161,8 +163,8 @@ def annotate(graph: TubeGraph, structure: str, b: Branching) -> TubeGraph:
                     up_normal=[float(v) for v in fr.point_data["UpNormal"][frame_of[g]]]) for g in found]
                 nd = nd.model_copy(update={"attributes": attrs})
         nodes.append(nd)
-    counts["bifurcations_shared_by_several_junctions"] = sum(1 for v in used.values() if v > 1)
-    counts["bifurcations_on_no_junction"] = len(set(frame_of) - set(used))
+    counts["bifurcation_count_shared_by_several_junctions"] = sum(1 for v in used.values() if v > 1)
+    counts["bifurcation_count_on_no_junction"] = len(set(frame_of) - set(used))
     # groups and bifurcation vectors onto edges
     v = b.vectors
     vec_by_group = {}

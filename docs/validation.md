@@ -47,13 +47,13 @@ Margin fields built from capsule chains with a known axis, radius, ends and angl
     a ladder between them. That is correct for the field (they *are* connected), but a reader of
     the graph should know.
   - Where contact is between classes (artery–vein), the classes stay separate. Within one class,
-    the contact shows as a loop in the field (`qc.json` `field_loops`); flagging the short
+    the contact shows as a loop in the field (`qc.json` `field_loop_count`); flagging the short
     junction-to-junction edges it produces is not done yet.
 - **Loops are seen but not kept.**
   - The field's topology finds the torus's loop (genus 1).
   - The tracer builds trees, so the graph drops the cycle. The format allows cycles; the tracer
     does not produce them yet.
-  - `qc.json` carries the field's loop count per tree (`field_loops`: 0–7 on the ladder below).
+  - `qc.json` carries the field's loop count per tree (`field_loop_count`: 0–7 on the ladder below).
 
 ## 2. Second patient and reconstruction ladders
 
@@ -125,7 +125,7 @@ and the QC columns do not depend on the root.
   spurious junction at depth 0 and its `bifurcation_depth` is offset by one against C3N, whose
   root is the truncated tracheal end. The same stores drop a separate component of 16.6 % of the
   airway lattice, 5 cm lateral of the trachea and touching the grid's top (`qc.json`
-  `dropped_components`): probably mislabeled. Read `dropped_components.lattice_share` and the
+  `dropped_components`): probably mislabeled. Read `dropped_components.lattice_point_share` and the
   airway root's `attributes.end_kind` before comparing airway depths across cases.
 
 ## 3. Tubes that are not vessels
@@ -260,7 +260,7 @@ Effect on the trees:
   - Sub-voxel tubes over-read: an oblique r = 0.5 mm tube goes from +0.029 to +0.098 mm on the
     store's 1.0 × 0.7 × 0.7 grid, and the suite's thin phantom's radius error goes from 0.069 to
     0.090 mm.
-  - C3N arteries' `outside_mm` goes from 2.2 to 4.0 mm, and one junction pair merges
+  - C3N arteries' `length_outside_field_mm` goes from 2.2 to 4.0 mm, and one junction pair merges
     (1065 → 1064 edges).
 
 **Wall pruning (`--prune wall`):**

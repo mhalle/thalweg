@@ -141,7 +141,7 @@ def test_artery_inlet_is_the_pulmonary_trunk(vessels_data):
     assert np.percentile(g.edge_radius(first), 75) > 10.0
     assert g.degree()[root] == 1 and g.nodes[root].attributes["end_kind"] == "tip"
     deep = centerline_graph(st, "lung_arteries", root="deepest")
-    assert g.structures[0].statistics["tips"] == deep.structures[0].statistics["tips"] - 1
+    assert g.structures[0].statistics["tip_count"] == deep.structures[0].statistics["tip_count"] - 1
 
 
 def _ends(trunk, a, b):

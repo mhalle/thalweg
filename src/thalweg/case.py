@@ -7,14 +7,14 @@ the station profile, a per-structure summary and a QC record.
 
 QC reports what a reader of the numbers must know before trusting them:
 
-- ``dropped_components``: the structure's connected pieces other than the traced one (count and
+- ``dropped_components``: the structure's connected pieces other than the traced one (``component_count``, and
   their share of the structure's lattice points) - small fragments, or a second tree;
-- ``truncated_ends``: ends where the structure runs off the field's grid;
-- ``outside_mm``: centerline length that runs where the margin is <= 0 (sampled every 0.05 mm) -
+- ``truncated_end_count``: ends where the structure runs off the field's grid;
+- ``length_outside_field_mm``: centerline length that runs where the margin is <= 0 (sampled every 0.05 mm) -
   a path cutting a corner the field does not make;
-- ``unrefined_points``: centerline points whose inscribed-ball search found no inside point;
-- ``cell_interior_joins``: lattice joins decided inside a cell (the rare "tunnel" configurations);
-- ``field_loops``: the loops of the structure's field (the genus of its zero surface, all pieces).
+- ``unrefined_point_count``: centerline points whose inscribed-ball search found no inside point;
+- ``cell_interior_join_count``: lattice joins decided inside a cell (the rare "tunnel" configurations);
+- ``field_loop_count``: the loops of the structure's field (the genus of its zero surface, all pieces).
   The traced graph is a tree, so a loop in the field - an anastomosis, or two branches of one
   class in contact - is not in the graph; this says how many there are;
 - per case, ``lobes``: how the lobe classes were found (``named_by``: by name, or by value in a
@@ -97,7 +97,7 @@ def summarize(graph: TubeGraph, structure: str, rows: list[dict] | None = None) 
                                for o, (n, L) in sorted(by_order.items())},
                unordered=dict(edge_count=unordered[0], length_mm=round(unordered[1], 3)))
     if rows:
-        out["sectioned_branches"] = sum(1 for x in rows if x.get("area_mm2"))
+        out["sectioned_branch_count"] = sum(1 for x in rows if x.get("area_mm2"))
     return out
 
 
@@ -158,7 +158,7 @@ class Case:
             mine = []
             rows.extend(branch_table(graph, s.name, m, geo, step=step, stations_out=mine, outer=outer))
             if outer is not None:
-                self.pi10[s.name] = dict(pi10(mine), lumen_stations=len(mine))
+                self.pi10[s.name] = dict(pi10(mine), station_count=len(mine))
             prof.extend(mine)
             self.timings[f"measure {s.name}"] = round(time.time() - t, 3)
         return rows, (prof if stations else None)
@@ -169,20 +169,22 @@ class Case:
             t = time.time()
             m, geo, _ = self.margin(s.name, s.source.part)
             st = s.statistics
-            sizes = st.get("component_sizes", [])
+            sizes = st.get("component_lattice_point_counts", [])
             dropped = sizes[1:]
             total = max(sum(sizes), 1)
             edges = graph.structure_edges(s.name)
             pts = graph.point_rows(s.name)
             out[s.name] = dict(
-                dropped_components=dict(count=len(dropped), lattice_share=round(sum(dropped) / total, 5),
-                                        largest=dropped[0] if dropped else 0),
-                truncated_ends=sum(nd.kind == "truncated" for nd in graph.nodes if nd.structure == s.name),
-                outside_mm=round(outside_length(graph, s.name, m, geo), 3),
+                dropped_components=dict(component_count=len(dropped),
+                                        lattice_point_share=round(sum(dropped) / total, 5),
+                                        largest_lattice_point_count=dropped[0] if dropped else 0),
+                truncated_end_count=sum(nd.kind == "truncated" for nd in graph.nodes
+                                        if nd.structure == s.name),
+                length_outside_field_mm=round(outside_length(graph, s.name, m, geo), 3),
                 length_mm=round(sum(e.length_mm for e in edges), 3),
-                unrefined_points=int((graph.radii()[pts] < 0).sum()),
-                cell_interior_joins=st.get("cell_interior_joins"),
-                field_loops=int(surface_loops(m)[0]))
+                unrefined_point_count=int((graph.radii()[pts] < 0).sum()),
+                cell_interior_join_count=st.get("cell_interior_join_count"),
+                field_loop_count=int(surface_loops(m)[0]))
             self.timings[f"qc {s.name}"] = round(time.time() - t, 3)
         return out
 

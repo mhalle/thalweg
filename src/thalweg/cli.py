@@ -80,7 +80,7 @@ def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, r
     """Trace seed-free centerline trees of STORE's structures into one graph file.
 
     Only the largest connected piece of each structure is traced; the others are listed in the
-    structure's statistics (component_sizes)."""
+    structure's statistics (component_lattice_point_counts)."""
     from .centerlines import centerline_graph, combine
     from .store import open_store
     t0 = time.time()
@@ -104,7 +104,8 @@ def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, r
         raise click.ClickException(str(e))
     for s in g.structures:
         st_ = s.statistics
-        log(f"{s.name}: {st_['edges']} edges, {st_['tips']} tips, {st_['truncated_ends']} truncated ends, "
+        log(f"{s.name}: {st_['edge_count']} edges, {st_['tip_count']} tips, "
+            f"{st_['truncated_end_count']} truncated ends, "
             f"{st_['junctions']} junctions, {st_['length_mm'] / 10:.1f} cm")
     log(f"wrote {output}")
 
@@ -210,8 +211,9 @@ def run(store, output, names, step, no_stations, quiet, ridge_passes, prune, roo
     (out / "qc.json").write_text(json.dumps(res["qc"], indent=1) + "\n")
     for n, q in res["qc"]["structures"].items():
         log(f"{n}: {res['summary'][n]['edge_count']} branches, {q['length_mm'] / 10:.1f} cm, "
-            f"{q['truncated_ends']} truncated ends, {q['dropped_components']['count']} pieces dropped, "
-            f"{q['outside_mm']:.1f} mm outside")
+            f"{q['truncated_end_count']} truncated ends, "
+            f"{q['dropped_components']['component_count']} pieces dropped, "
+            f"{q['length_outside_field_mm']:.1f} mm outside")
     log(f"wrote {out}")
 
 

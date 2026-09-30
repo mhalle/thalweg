@@ -27,18 +27,19 @@ def test_run_is_consistent(airways):
     ordered = sum(v["edge_count"] for v in sm["strahler_order"].values())
     assert ordered + sm["unordered"]["edge_count"] == len(g.edges)
     q = qc["structures"]["lung_airways"]
-    assert q["unrefined_points"] == 0 and q["field_loops"] >= 0 and q["outside_mm"] < 0.01 * q["length_mm"]
+    assert q["unrefined_point_count"] == 0 and q["field_loop_count"] >= 0
+    assert q["length_outside_field_mm"] < 0.01 * q["length_mm"]
     assert qc["acquisition"]["1"]["coarse_slices"] is False
     assert qc["acquisition"]["1"]["source_spacing_mm"][0] == pytest.approx(0.625)
     # one decode per class across trace, measure and qc: the airways and their wall
     assert case.decodes == 2 == len(case.margins)
     wall = sm["pi10"]
-    assert wall["pi10_mm"] > 0 and wall["stations"] <= wall["lumen_stations"] == len(res["stations"])
+    assert wall["pi10_mm"] > 0 and wall["wall_station_count"] <= wall["station_count"] == len(res["stations"])
     # everything the batch promises is wired in
     cols = g.points.columns
     assert {"lobe_number", "radius_lower_mm", "radius_upper_mm"} <= set(cols)
     assert set(cols["lobe_number"]) <= set(range(6)) and len(set(cols["lobe_number"])) > 3
-    assert all("lobe" in r and "lobe_length_fraction" in r for r in rows)
+    assert all("lobe_name" in r and "lobe_length_fraction" in r for r in rows)
     ts = sm["tree_statistics"]
     assert ts["horton"]["bifurcation_ratio"] > 1.5 and 0 < ts["orientation_entropy"] <= 1
     assert "outside_lobes" in sm["lobes"]

@@ -128,11 +128,11 @@ def annotate(graph: TubeGraph, fields: LobeFields
 
 
 def lobe_rows(rows: list[dict], edge_lobe: dict[int, tuple[int, float]]) -> None:
-    """Add ``lobe`` (name, or None outside every lobe) and ``lobe_length_fraction`` to branch-table
+    """Add ``lobe_name`` (or None outside every lobe) and ``lobe_length_fraction`` to branch-table
     rows of one structure, in place."""
     for r in rows:
         k, share = edge_lobe.get(r["edge"], (0, 0.0))
-        r["lobe"] = LOBES.get(k)
+        r["lobe_name"] = LOBES.get(k)
         r["lobe_length_fraction"] = share
 
 
