@@ -620,8 +620,24 @@ mm (the wall half a voxel out), times 10 logits/mm, clipped at ±8. Every verb r
   segments; binary and fractional) of synthetic oblique, anisotropic CT slices. Every segmented
   voxel lands inside the true tube in world space and no other voxel is labeled; the overlap is
   kept (each segment is its own mask); the trunk's centerline lies a median 0.2 mm from the true
-  axis. Tested on SEGs written by highdicom only, not yet on SEGs from other tools (IDC, dcmqi,
-  Slicer).
+  axis.
+- **A real IDC SEG**: NLST patient 217076's TotalSegmentator (v1.5.6) segmentation of the CT
+  series thalweg's demo stores come from (IDC, `nlst`, `totalsegmentator_ct_segmentations`, CC BY
+  4.0; 80 binary segments in 5,695 frames, 190 MB). It opens in 3.4 s; each segment is named by its
+  label ("Aorta", "Pulmonary artery", "Left Upper lobe of lung", ...). Against the source CT,
+  read separately with SimpleITK:
+  - the structures sit on the right tissue: trachea voxels a median −982 HU, aorta 37, liver 66,
+    upper lung lobe −879, T8 vertebra 254;
+  - their boundaries sit on the CT's edges: the share of trachea, aorta and T8 boundary voxels
+    whose HU fits the tissue is highest unshifted and drops when the segmentation is moved 2 mm
+    along any axis (trachea 0.70 against 0.55–0.61, T8 0.87 against 0.64–0.72);
+  - left is left: the spleen and the left lung lobes lie at +x (LPS), the liver and the right
+    lobes at −x.
+
+  `thalweg centerlines` traces the aorta (one tube, 39.5 cm), the pulmonary artery (8 tips) and
+  the trachea (12 tips) from the SEG in 14 s. The distance transform runs on each mask's
+  bounding box only (the field is flat beyond 0.8 mm of the wall), which took a segment of this
+  512 × 512 × 249 grid from 12 s to under 1 s with an identical result.
 - **What degraded mode cannot give**: the model's interval. The ±2 logit levels become ±0.2 mm
   offsets of the wall - a convention, not an uncertainty. The graph's
   `source.labeling_scheme` says `degraded:labelmap`, `degraded:sdf` or `degraded:dicom-seg`.

@@ -98,6 +98,26 @@ def signed_distance(mask: np.ndarray, geometry) -> np.ndarray:
     return np.where(mask, inside - half, -(outside - half)).astype(np.float32)
 
 
+def _mask_margin(mask: np.ndarray, geometry) -> np.ndarray:
+    """The margin of a mask: its signed distance x SLOPE, clipped at +-CLIP. The margin is flat
+    beyond CLIP / SLOPE mm of the wall, so the distance transform runs only on the mask's
+    bounding box grown by that much (and two voxels): the same array, a fraction of the work."""
+    out = np.full(mask.shape, -CLIP, np.float32)
+    if not mask.any():
+        return out
+    sp = np.linalg.norm(np.asarray(geometry.directions, float), axis=1)
+    grow = np.ceil(CLIP / SLOPE / sp).astype(int) + 2
+    idx = np.argwhere(mask)
+    lo = np.maximum(idx.min(0) - grow, 0)
+    hi = np.minimum(idx.max(0) + grow + 1, mask.shape)
+    box = tuple(slice(a, b) for a, b in zip(lo, hi))
+    from rankfield.geometry import Geometry
+    sub = Geometry(shape=tuple(int(b - a) for a, b in zip(lo, hi)), directions=geometry.directions,
+                   origin=geometry.origin)                  # only the spacing is read
+    out[box] = np.clip(SLOPE * signed_distance(mask[box], sub), -CLIP, CLIP)
+    return out
+
+
 class VolumeStore:
     """A labelmap, signed distance image or DICOM SEG with ``FieldStore``'s interface (see the
     module docstring). ``names``: label value (segment number) -> structure name, overriding the
@@ -239,12 +259,12 @@ class VolumeStore:
         """(margin float32, Geometry, StructureRef): see the module docstring."""
         ref = self.ref(name, part)
         if ref.label_value not in self._margins:
-            if self.kind == "labelmap":
-                d = signed_distance(self.array == ref.label_value, self._geometry)
-            elif self.kind == "dicom-seg":
-                d = signed_distance(self._seg_mask(ref.label_value), self._geometry)
+            if self.kind in ("labelmap", "dicom-seg"):
+                mask = (self.array == ref.label_value if self.kind == "labelmap"
+                        else self._seg_mask(ref.label_value))
+                self._margins[ref.label_value] = _mask_margin(mask, self._geometry)
             else:
                 sdf = self.array.astype(np.float32)
                 d = -sdf if self.sdf_inside == "negative" else sdf
-            self._margins[ref.label_value] = np.clip(SLOPE * d, -CLIP, CLIP).astype(np.float32)
+                self._margins[ref.label_value] = np.clip(SLOPE * d, -CLIP, CLIP).astype(np.float32)
         return self._margins[ref.label_value], self._geometry, ref

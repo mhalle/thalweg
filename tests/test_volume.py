@@ -1,4 +1,7 @@
 """Labelmaps and signed distance images as input (degraded mode, the `volumes` extra)."""
+import os
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -186,3 +189,28 @@ def test_the_cli_runs_on_a_dicom_seg_and_refuses_other_dicom(tmp_path):
     ct.save_as(str(tmp_path / "ct.dcm"))
     with pytest.raises(ThalwegError, match="not a Segmentation"):
         open_store(tmp_path / "ct.dcm")
+
+
+IDC_SEG = Path(os.environ.get("IDC_SEG_DATA", Path.home() / "tmp/data/idc_seg"))
+
+
+@pytest.mark.data
+@pytest.mark.slow
+def test_a_real_idc_seg():
+    """NLST patient 217076's TotalSegmentator SEG from IDC (80 binary segments, 5,695 frames): the
+    segments are named by their labels, left organs lie at +x (LPS) and right ones at -x, and the
+    aorta traces as one long tube."""
+    pytest.importorskip("highdicom")
+    files = sorted(IDC_SEG.rglob("*.dcm")) if IDC_SEG.exists() else []
+    if not files:
+        pytest.skip(f"no IDC SEG under {IDC_SEG}")
+    from thalweg.centerlines import centerline_graph
+    st = open_store(files[0])
+    assert st.kind == "dicom-seg" and len(st.names) == 80 and "Pulmonary artery" in st.names
+    geo = st.geometry(0)
+
+    def centroid(name):
+        return to_world(geo, np.argwhere(st.margin(name)[0] > 0)).mean(0)
+    assert centroid("Spleen")[0] > 30 > -30 > centroid("Liver")[0]
+    g = centerline_graph(st, "Aorta")
+    assert sum(e.length_mm for e in g.edges) > 300 and sum(n.kind == "tip" for n in g.nodes) == 1
