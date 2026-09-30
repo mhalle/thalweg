@@ -215,18 +215,38 @@ radius error median, in mm:
 | Y, trunk r 5 mm | 0.002 / −0.006 | 0.105 / −0.108 | 0.028 / −0.027 | 0.007 / −0.012 | 0.003 / −0.009 |
 | Y, trunk r 8 mm | 0.001 / −0.004 | 0.102 / −0.102 | 0.026 / −0.025 | 0.007 / −0.010 | 0.002 / −0.007 |
 | Arc, r 5 mm | 0.003 / −0.006 | 0.101 / −0.100 | 0.025 / −0.029 | 0.006 / −0.010 | 0.003 / −0.007 |
-| Flattened, semi-axes 3 × 1.5 mm | 0.260 / +0.062 | 0.269 / −0.056 | | | 0.258 / +0.060 |
-| Flattened, semi-axes 4.5 × 1.5 mm | 0.221 / +0.073 | **1.005** / −0.087 | | | **1.020** / +0.030 |
 
-**On flattened tubes the axis is ill-defined, and thalweg's wanders.** The inscribed radius of a
-flat section is its minor semi-axis (1.5 mm here); both methods read it within 0.09 mm. At 2:1
-both put the centerline 0.26 mm from the axis - the same place, so it is the sampled field's
-(a 3 mm-deep section on a 0.7 mm grid), not either method. At 3:1 vmtk stays within 0.22 mm but
-thalweg's centerline wanders across the flat width, a median 1.0 mm and up to 3.8 mm from the
-axis: a flat lumen's medial set is a sheet, and the tracer's minimal path through it is not
-held to its middle as vmtk's Voronoi-based path is (the same cause as the comb of side branches
-in §1). Centerlines of flat tubes - esophagus, colon, compressed veins - need a rule that keeps
-the path at the middle of the width; this is the tube track's open item.
+**Flattened tubes** (redone 2026-09-30 with true signed distances; `validation/vmtk_phantom.py`).
+Straight 40 mm tubes with an elliptic section, semi-axes a × 1.5 mm, as a true signed distance
+(the phantom suite's `elliptic()` is shallower across the width); "rolled" turns the section 35°
+about the axis, "oblique" puts the tube off the lattice on the anisotropic 0.62 × 0.7 × 0.8 mm
+grid. vmtk computes one line between the seeds; thalweg traces a tree, so its path between the
+same two ends ("main path") is scored apart from all its points. Each cell is the distance from
+the true axis, median / p95 (mm); both methods read the inscribed radius (the minor semi-axis)
+within 0.07 mm everywhere.
+
+| Tube | vmtk | thalweg, main path | thalweg, all points | thalweg tips (true 1–2) |
+|---|---|---|---|---|
+| 3 × 1.5 (2:1) | failed | 0.26 / 0.26 | 0.26 / 0.26 | 1 |
+| 3.75 × 1.5 (2.5:1) | 0.25 / 0.25 | 0.34 / 1.89 | 0.34 / 2.89 | 20 |
+| 4.5 × 1.5 (3:1) | 0.22 / 0.22 | 0.40 / 2.74 | 1.02 / 3.64 | 28 |
+| 3:1, rolled 35° | 0.11 / 0.11 | 0.23 / 2.52 | 0.97 / 3.58 | 26 |
+| 3:1, oblique | 0.17 / 0.30 | 1.00 / 1.33 | 1.14 / 3.50 | 18 |
+| 3:1, rolled and oblique | 0.30 / 0.47 | 0.36 / 1.17 | 0.48 / 3.62 | 22 |
+
+- **Across a flat width the axis is weakly defined, for both methods.** The inscribed radius
+  barely changes along the section's major axis, so both lines sit 0.1–0.3 mm off the middle
+  (at 2:1 on opposite sides, 0.26 mm each). vmtk failed on the 2:1 tube outright: a 2-point line
+  from three different seedings, its Delaunay tessellation reporting degenerate triangles.
+- **From 2.5:1, thalweg's path wanders and grows a comb.** Its main path stays within 0.23–1.0 mm
+  of the axis in the median but reaches 1.2–2.7 mm at the 95th percentile, where vmtk stays within
+  0.47 mm; and it grows 18–28 side branches across the width of a tube with two ends (the same
+  spur-rule failure as §1's elliptic phantom). The earlier version of this comparison scored all
+  of thalweg's points together and reported "a median 1.0 mm and up to 3.8 mm"; most of that tail
+  is the side branches, not the path.
+- **So the fix is two rules, not one:** a path held to the middle of the width (vmtk's
+  Voronoi-based minimal path does this), and a spur rule that does not keep branches running
+  across a flat section. Both are the tube track's open items.
 
 **With one pass, vmtk is more accurate on clean round tubes.** The cause is thalweg's ridge
 refinement:
@@ -684,9 +704,9 @@ a steady inflow at the root and one resistance per outlet as placeholders.
 
 - **Thin-caliber ground truth.** The ~1 mm radius floor belongs to the model; checking the
   method below it needs a phantom scan or a gated high-resolution acquisition.
-- **Flat tubes.** vmtk against thalweg on flattened phantoms is now measured (§4): the radius
-  agrees, the centerline of a 3:1 tube does not stay at its middle. Fixing that is the tube
-  track's work, not validation.
+- **Flat tubes.** vmtk against thalweg on flattened phantoms is measured (§4, redone with true
+  distances, rolled and oblique): the radius agrees; from 2.5:1 thalweg's path wanders up to
+  2.7 mm (95th percentile) and grows a comb of side branches. Fixing that is the tube track's work.
 - **Off the lattice** (§1, `--oblique`): done for every phantom; sections against the true
   diameter read 1–2 % small on round tubes on both grids.
 - **Degraded input** (§5k) is checked on one phantom and one case's own labelmap, not on

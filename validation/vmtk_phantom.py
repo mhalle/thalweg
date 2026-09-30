@@ -10,12 +10,15 @@ On the MSB-02664 subtree the two methods agree to ~0.1 mm for radius < 2.5 mm bu
                                                               # thalweg with N ridge passes (default 1)
 
 Phantoms (0.7 mm grid, slope 10.6 logit/mm): Y bifurcations with a wide trunk (r 3, 5 and 8 mm)
-and daughters at 60 degrees, a wide arc (r 5 mm, curvature radius 30 mm), and two flattened
-tubes (elliptic sections, semi-axes 3 x 1.5 and 4.5 x 1.5 mm): the inscribed radius there is the
-minor semi-axis, 1.5 mm, which both methods should read. vmtk sees the
-field's zero set (marching cubes at 0, unsmoothed - as in the research comparisons), seeded at
+and daughters at 60 degrees, a wide arc (r 5 mm, curvature radius 30 mm), and flattened tubes
+(``flat_*``: elliptic sections a x 1.5 mm as true signed distances, a/b 2, 2.5 and 3, the 3:1 one
+also rolled 35 degrees about its axis and turned off the lattice onto an anisotropic grid; the
+older ``ellipse_*`` files, if present, are the phantom suite's shallower elliptic field). vmtk sees
+the field's zero set (marching cubes at 0, unsmoothed - as in the research comparisons), seeded at
 the true ends; thalweg traces the field. Scores: distance from each method's points to the true
-axis, away from ends and the junction (median, p95), and radius error there.
+axis, away from ends and the junction (median, p95), and radius error there; for thalweg also its
+path between the seeds' ends alone (``thalweg<N>_main``) and its tip count, since it traces a
+tree where vmtk computes one line.
 """
 import json
 import os
@@ -36,10 +39,38 @@ def phantoms():
         out[f"y_r{int(r0)}"] = (segs, truth)
     segs, truth = PS.arc(radius_of_curvature=30.0, r=5.0, sweep_deg=120)
     out["arc_r5"] = (segs, truth)
-    for a, b in ((3.0, 1.5), (4.5, 1.5)):                 # flattened tubes: semi-axes a x b, a/b 2 and 3
-        f, truth = PS.elliptic(a=a, b=b, L=40.0)
-        out[f"ellipse_{a:g}x{b:g}"] = (f, truth)
+    # flattened tubes along x, semi-axes a (flat width) x b: a true signed distance, so the field is
+    # as steep across the width as across the depth (the phantom suite's elliptic() is not: its
+    # slope across the width is b/a); "rolled" turns the section 35 degrees about the tube's axis,
+    # "oblique" turns the whole tube off the lattice onto phantom_suite's anisotropic grid
+    for a, b, roll, oblique in ((3.0, 1.5, 0, False), (3.75, 1.5, 0, False), (4.5, 1.5, 0, False),
+                                (4.5, 1.5, 35, False), (4.5, 1.5, 0, True), (4.5, 1.5, 35, True)):
+        name = f"flat_{a:g}x{b:g}" + (f"_roll{roll}" if roll else "") + ("_oblique" if oblique else "")
+        out[name] = (elliptic_sdf(a, b, 40.0, np.radians(roll)),
+                     dict(ends=[(0.0, 0, 0), (40.0, 0, 0)], junctions=[],
+                          axes=[((0, 0, 0), (40, 0, 0), b, b)], semi_axes=(a, b), oblique=oblique))
     return out, PS
+
+
+def elliptic_sdf(a, b, L, roll=0.0, samples=4000):
+    """Signed distance (mm, positive inside) to a straight tube along x from 0 to L with flat ends
+    and an elliptic section of semi-axes a (along y turned by ``roll``) and b."""
+    from scipy.spatial import cKDTree
+    t = np.linspace(0, 2 * np.pi, samples, endpoint=False)
+    rim = np.stack([a * np.cos(t), b * np.sin(t)], 1)
+    tree = cKDTree(rim)
+    c, s = np.cos(roll), np.sin(roll)
+
+    def f(X):
+        y = c * X[:, 1] + s * X[:, 2]
+        z = -s * X[:, 1] + c * X[:, 2]
+        d2 = tree.query(np.stack([y, z], 1))[0]
+        d2 = np.where((y / a) ** 2 + (z / b) ** 2 <= 1, d2, -d2)
+        dx = np.minimum(X[:, 0], L - X[:, 0])
+        inside = np.minimum(d2, dx)
+        outside = -np.sqrt(np.maximum(-d2, 0) ** 2 + np.maximum(-dx, 0) ** 2)
+        return np.where((d2 > 0) & (dx > 0), inside, outside)
+    return f
 
 
 def prep():
@@ -48,10 +79,17 @@ def prep():
     OUT.mkdir(parents=True, exist_ok=True)
     ph, PS = phantoms()
     for name, (segs, truth) in ph.items():
-        if callable(segs):                                 # an elliptic tube: a field function, its axis
+        if callable(segs):                                 # a flattened tube: a field function, its axis
             f, segs = segs, truth["axes"]
             a, b = truth["semi_axes"]
-            m, geo = PS.field_of(f, (-4.0, -a - 4, -b - 4), (44.0, a + 4, b + 4), 0.7)
+            box = (-4.0, -a - 4, -a - 4), (44.0, a + 4, a + 4)
+            if truth.get("oblique"):
+                m, geo = PS.field_oblique(f, *box)
+                to_w = lambda p: np.asarray(p, float) @ PS.Q.T + PS.SHIFT       # noqa: E731
+                segs = [(to_w(p0), to_w(p1), r0, r1) for p0, p1, r0, r1 in segs]
+                truth = dict(truth, ends=[to_w(e) for e in truth["ends"]])
+            else:
+                m, geo = PS.field_of(f, *box, 0.7)
         else:
             pts = np.concatenate([[s[0], s[1]] for s in segs]).astype(float)
             rmax = max(max(s[2], s[3]) for s in segs)
@@ -114,6 +152,34 @@ def seg_axis(P, segs):
     return best, rad
 
 
+def _main_path(margin, geo, passes, source, target):
+    """thalweg's path between the ends nearest the seeds (the one line vmtk computes there), without
+    the side branches, and the tree's tip count."""
+    from thalweg.centerlines import graph_from_tree
+    from thalweg.graph import Points, Source, TubeGraph
+    from thalweg.kernel import medial
+    T = medial.trace(margin, geo, ridge_passes=passes)
+    nodes, edges, pos, rad, s = graph_from_tree(T, "t", margin, geo, Source(), {})
+    g = TubeGraph(structures=[s], nodes=nodes, edges=edges, points=Points(position=pos, radius=rad))
+    deg = g.degree()
+    ends = [nd for nd in g.nodes if deg[nd.id] == 1]
+    a = min(ends, key=lambda nd: np.linalg.norm(np.array(nd.position) - source)).id
+    b = min(ends, key=lambda nd: np.linalg.norm(np.array(nd.position) - target)).id
+    t = g.tree("t")
+
+    def up(n):
+        out = []
+        while n in t.parent:
+            out.append(t.parent[n])
+            n = g.edges[t.parent[n]].start_node
+        return out
+    pa, pb = up(a), up(b)
+    path = [e for e in pa + pb if e not in set(pa) & set(pb)]
+    P = np.concatenate([g.edge_points(e) for e in path])
+    R = np.concatenate([g.edge_radius(e) for e in path])
+    return P, R, sum(nd.kind == "tip" for nd in g.nodes)
+
+
 def compare(passes=(1,)):
     from rankfield.geometry import Geometry
     from thalweg.kernel import medial
@@ -134,8 +200,16 @@ def compare(passes=(1,)):
             T = medial.trace(Z["margin"], geo, ridge_passes=n)
             methods.append((f"thalweg{n}", np.concatenate([np.array(s["points"]) for s in T.segments]),
                             np.concatenate([np.array(s["radius"]) for s in T.segments])))
+            P, R, tips = _main_path(Z["margin"], geo, n, Z["source"], Z["targets"][-1])
+            methods.append((f"thalweg{n}_main", P, R))
+            row[f"thalweg{n}_tips"] = tips
         for name, P, R in methods:
             away = np.linalg.norm(P[:, None] - keyp[None], axis=2).min(1) > 1.5 * rmax
+            if away.sum() < 3:                             # the method gave no usable line
+                row[f"{name}_axis_mm_median"] = row[f"{name}_axis_mm_p95"] = None
+                row[f"{name}_radius_error_mm_median"] = None
+                row[f"{name}_points"] = int(len(P))
+                continue
             d, r_true = seg_axis(P, segs)
             row[f"{name}_axis_mm_median"] = round(float(np.median(d[away])), 3)
             row[f"{name}_axis_mm_p95"] = round(float(np.percentile(d[away], 95)), 3)
