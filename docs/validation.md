@@ -417,6 +417,32 @@ root), 0.625 mm reconstructions:
 The full tier-1 run (three trees, four ridge passes, lobes, walls, pairing, statistics, QC) takes
 about 60 s on C3N-00704 under load and writes 2.4 MB.
 
+## 5f. The branch partition
+
+`thalweg.partition` labels points with the branch whose tube function is lowest, vmtk's
+branch-clipper rule without the surface (`thalweg.vmtk.partition`).
+
+- **Against vmtkBranchClipper (vmtk 1.5.2, C3N-00704 subtree).** The clipper's output holds the
+  input surface's vertices and the points it inserts along each cut. At every vertex the label is
+  vmtk's: 21,223 of 21,223 with vmtk's centerlines, 21,221 of 21,221 with ours. The inserted
+  points (about 7,000) lie where two groups' values tie, which is what a cut is; there about half
+  carry the other neighbor's label, with a median value gap of 5e-8 mm² (largest 0.18 mm², from
+  the clipper's linear interpolation along mesh edges).
+- **The pruned search is exact.** It gives the labels and values of evaluating every (point,
+  segment) pair, on random tubes of 0.3–9 mm radius and on the clipper's points.
+- **As a volume, by graph edge** (`thalweg run --branch-volumes`, C3N-00704 0.625 mm):
+
+  | Tree | Lattice points inside | Labeled (traced piece) | Edges with volume | Partition volume | Σ π r² ds along the centerlines | Time |
+  |---|---|---|---|---|---|---|
+  | arteries | 305,946 | 303,426 | 1059 of 1064 | 150.4 ml | 176.2 ml | 18 s |
+  | airways | 83,974 | 83,761 | 265 of 265 | 41.5 ml | 42.8 ml | 1.4 s |
+
+  The centerline integral counts junction volume once per edge that meets there, and takes each
+  section as its inscribed circle (smaller than a section that is not round); on the arteries the
+  first effect wins and it reads 17 % above the partition. The partition's volume is the lattice count times
+  the voxel volume, so a branch thinner than a voxel can get none (5 short artery edges here).
+  The arteries take longest because their trunk's radius (14 mm) widens the search.
+
 ## 6. Not yet validated
 
 - **Thin-caliber ground truth.** The ~1 mm radius floor belongs to the model; checking the

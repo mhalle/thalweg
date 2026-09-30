@@ -172,9 +172,11 @@ def table(graph, store, output, names, stations, step):
 @click.option("--step", type=click.FloatRange(min=0, min_open=True), default=1.0, show_default=True,
               help="Section spacing along each branch, mm.")
 @click.option("--no-stations", is_flag=True, help="Skip the per-station profile table.")
+@click.option("--branch-volumes", is_flag=True,
+              help="Add each branch's volume (the branch partition of the field; about a third more time).")
 @click.option("-q", "--quiet", is_flag=True, help="No progress messages.")
 @_method_options
-def run(store, output, names, step, no_stations, quiet, ridge_passes, prune, root):
+def run(store, output, names, step, no_stations, branch_volumes, quiet, ridge_passes, prune, root):
     """The batch product for one case: graph.thalweg.json.gz, branches.parquet, stations.parquet,
     summary.json and qc.json in OUTPUT.
 
@@ -198,8 +200,8 @@ def run(store, output, names, step, no_stations, quiet, ridge_passes, prune, roo
         case = Case.open(store)
         for n in names:
             case.store.ref(n)                                  # every structure exists, before any output
-        res = case.run(names, step=step, stations=not no_stations, log=log, ridge_passes=ridge_passes,
-                       prune=prune, root=root)
+        res = case.run(names, step=step, stations=not no_stations, branch_volumes=branch_volumes, log=log,
+                       ridge_passes=ridge_passes, prune=prune, root=root)
     except ThalwegError as e:
         raise click.ClickException(str(e))
     out.mkdir(parents=True, exist_ok=True)

@@ -60,8 +60,13 @@ def test_run_is_consistent(airways):
 @pytest.mark.slow
 def test_run_verb_writes_the_package(vessels_data, tmp_path):
     r = CliRunner().invoke(main, ["run", str(vessels_data / STORE), "-o", str(tmp_path), "-s", "lung_airways",
-                                  "--step", "2", "-q"])
+                                  "--step", "2", "-q", "--branch-volumes"])
     assert r.exit_code == 0, r.output
+    pq = pytest.importorskip("pyarrow.parquet")
+    rows = pq.read_table(tmp_path / "branches.parquet").to_pylist()
+    total = json.loads((tmp_path / "summary.json").read_text())["lung_airways"]["partition_volume_mm3"]
+    assert 30e3 < total < 60e3 and sum(x["volume_mm3"] for x in rows) == pytest.approx(total, abs=0.5)
+    assert sum(x["volume_mm3"] > 0 for x in rows) > 0.95 * len(rows)
     names = {p.name for p in tmp_path.iterdir()}
     assert names == {"graph.thalweg.json.gz", "branches.parquet", "stations.parquet", "summary.json",
                      "qc.json"}

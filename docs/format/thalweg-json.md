@@ -178,6 +178,12 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
     trees), `paired_sample_fraction`, `paired_sample_count`,
     `bronchus_to_artery_ratio` (`thalweg.pairing`). `thalweg run` only.
 
+  - with `--branch-volumes`: `volume_mm3`, the edge's share of the structure's volume. Every
+    lattice point inside the structure's traced piece goes to the edge whose tube (its traced
+    radii swept along it) has the lowest tube function there, vmtk's branch-clipper rule applied
+    to the graph's edges (`thalweg.partition`); the volume is the lattice points times the voxel
+    volume. The structure's total is `summary.json` `partition_volume_mm3`.
+
   Columns a structure does not have are null in its rows.
 - **Station profile** (`--stations stations.parquet`, or `thalweg run`): one row per
   cross-section, every `--step` mm (default 1) along each edge's interior:

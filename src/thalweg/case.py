@@ -210,8 +210,26 @@ class Case:
         return dict(source_spacing_mm=[float(v) for v in spacing],
                     coarse_slices=bool(max(spacing) > COARSE_MM))
 
-    def run(self, names, step: float = 1.0, stations: bool = True, log=None, **trace_options) -> dict:
+    def volumes(self, graph: TubeGraph, rows: list[dict]) -> dict[str, float]:
+        """Add ``volume_mm3`` to the rows: each edge's share of its structure's volume, from the
+        branch partition of the field (:mod:`thalweg.partition`). Returns each structure's total."""
+        from . import partition
+        total = {}
+        for s in graph.structures:
+            t = time.time()
+            m, geo, _ = self.margin(s.name, s.source.part)
+            labels = partition.label_field(m, geo, partition.edge_tubes(graph, s.name),
+                                           points=graph.positions()[graph.point_rows(s.name)])
+            vol = partition.label_volumes(labels, geo)
+            partition.volume_rows([r for r in rows if r["structure"] == s.name], vol)
+            total[s.name] = round(sum(vol.values()), 2)
+            self.timings[f"partition {s.name}"] = round(time.time() - t, 3)
+        return total
+
+    def run(self, names, step: float = 1.0, stations: bool = True, branch_volumes: bool = False,
+            log=None, **trace_options) -> dict:
         """The batch product for ``names``: graph, rows, stations, summary and qc (see above).
+        ``branch_volumes`` adds each branch's volume (:meth:`volumes`; about a third more time).
         ``trace_options`` go to :func:`thalweg.centerlines.centerline_graph` (ridge_passes, prune, root)."""
         g = self.trace(names, log=log, **trace_options)
         lobes = self.lobes(log=log)
@@ -219,6 +237,7 @@ class Case:
         if lobes is not None:
             g, edge_lobe = lobes_mod.annotate(g, lobes)
         rows, prof = self.measure(g, step=step, stations=stations)
+        partition_volume = self.volumes(g, rows) if branch_volumes else {}
         for s in g.structures:
             if s.name in edge_lobe:
                 lobes_mod.lobe_rows([r for r in rows if r["structure"] == s.name], edge_lobe[s.name])
@@ -236,6 +255,8 @@ class Case:
             coarse = acquisition.get(str(s.source.part), {}).get("coarse_slices")
             sm["coarse_slices"] = coarse
             sm["tree_statistics"] = tree_statistics(g, s.name)
+            if s.name in partition_volume:
+                sm["partition_volume_mm3"] = partition_volume[s.name]
             if s.name in self.pi10:
                 sm["pi10"] = self.pi10[s.name]
             if s.name in pairing:

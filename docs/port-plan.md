@@ -60,7 +60,7 @@ tiers, ported after phase 5.
 | `vmtkcenterlinemerge` | One polyline per branch group (`vmtk.merge`) | ported | 1 |
 | `vmtkcenterlineoffsetattributes` | Abscissa and normals offset to the root bifurcation (`vmtk.offset`) | ported | 1 |
 | `vmtkbifurcationreferencesystems` | Bifurcation frames (origin, normal, up-normal) (`vmtk.frames`); on the graph's junction nodes via `branching.annotate` | ported | 1 |
-| `vmtkbranchclipper` | The tube function evaluated anywhere (`branch_partition.py`): 100.000 % of vmtk's vertex labels with our centerlines, 2–4 s against 183–217 s, and volumetric. The tube function is ported (`vmtk.polyball`); the partition itself is not yet in `src` | native | 1 |
+| `vmtkbranchclipper` | The labeling rule, no surface: a point belongs to the group whose tube function is lowest (`vmtk.partition`), evaluated anywhere with an exact spatial pruning (`partition`). vmtk's label at every vertex of the clipper's input surface, with vmtk's centerlines and ours; the points the clipper inserts on its cuts are ties. As a volume: `partition.label_field`, a volume per branch (`thalweg run --branch-volumes`). Cutting the surface itself along the partition is not ported (the export caps at graph ends) | done | 1 |
 | `vmtkbifurcationvectors` | Bifurcation angles (in-plane and out-of-plane) (`vmtk.vectors`); thalweg's own `deflection_deg` and `sibling_angle_deg` in `measure` | ported | 2 |
 | `vmtkbifurcationsections` | Sections one radius from the bifurcation, read from the field | todo | 2 |
 
@@ -261,7 +261,8 @@ thalweg structures STORE
 thalweg centerlines STORE -s lung_arteries [-s ...] -o arteries.thalweg.json.gz [--part N] [--graph field|voxel]
                     [--ridge-passes N (default 4)] [--prune length|wall] [--root inlet|deepest]
 thalweg table arteries.thalweg.json.gz STORE -o branches.parquet [--stations stations.parquet] [-s NAME] [--step MM]
-thalweg run STORE -o OUT/ [-s NAME ...] [--step MM] [--no-stations] [--ridge-passes N] [--prune ...] [--root ...]
+thalweg run STORE -o OUT/ [-s NAME ...] [--step MM] [--no-stations] [--branch-volumes]
+            [--ridge-passes N] [--prune ...] [--root ...]
                                                # graph, branches, stations, summary.json, qc.json
 thalweg export arteries.thalweg.json.gz STORE -s lung_arteries [--mesh M.vtp [--cap-kinds ...] [--refine N]] [--vmtk-centerlines C.vtp [--vmtk-exact]] [--swc T.swc] [--markups M.mrk.json]
 thalweg summary arteries.thalweg.json.gz

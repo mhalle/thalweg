@@ -22,8 +22,8 @@ a field. Here the field is a model's per-class margin, decoded from a
 - the pipeline - `store` (read a ranked store), `centerlines` (a structure's centerlines as a
   graph), `graph` (the `.thalweg.json` format, `docs/format/thalweg-json.md`), `adapters` and
   `branching` (vmtk's grouping on the graph), `measure` (the branch table, airway walls), `lobes`
-  (a lung lobe per branch), `pairing` (bronchoarterial pairing), `plausibility` (artery/vein
-  check), `statistics` (Horton ratios and other whole-tree numbers), `case` (one case, decoded
+  (a lung lobe per branch), `pairing` (bronchoarterial pairing), `partition` (which branch every
+  point belongs to; branch volumes), `plausibility` (artery/vein check), `statistics` (Horton ratios and other whole-tree numbers), `case` (one case, decoded
   once: the batch product), `export` (a capped surface, VTP, SWC, Slicer markups), `cli`.
 
 Install and test (from the repo):

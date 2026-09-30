@@ -8,8 +8,8 @@ ranked store) instead of a triangulated surface. Two layers (docs/vmtk-successor
 - the pipeline: ``store`` (read a ranked store), ``centerlines`` (a structure's centerlines as a
   graph, rooted at its inlet), ``graph`` (the ``.thalweg.json`` model), ``adapters`` (graph <->
   vmtk's convention), ``branching`` (vmtk's grouping, frames and angles on the graph), ``measure``
-  (the branch table, airway walls), ``lobes``, ``pairing``, ``plausibility``, ``statistics`` (the
-  lung batch's anatomy and whole-tree numbers), ``case`` (one case decoded once: the batch
+  (the branch table, airway walls), ``partition`` (the branch each point belongs to), ``lobes``,
+  ``pairing``, ``plausibility``, ``statistics`` (the lung batch's anatomy and whole-tree numbers), ``case`` (one case decoded once: the batch
   product), ``export`` (capped surface, VTP, SWC, Slicer markups), ``cli``.
 
 ``thalweg.vmtk`` holds faithful ports of vmtk's centerline-only filters on vmtk's own convention,
