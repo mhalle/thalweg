@@ -19,12 +19,10 @@ import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from _catch import run, TRIM, LOBES, tree, ancestor_at, nearest_groups, DATA, SUPPLY, WALLS, supply_mask, wall_of
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "research" / "vessels"))
-import _field                                                          # noqa: E402
-from cases import store                                                # noqa: E402
+from _thalweg import crop_field                                         # noqa: E402
 
 RES = 0.25
-code0 = _field.parts_of(_field.open_store(Path(store(run)), "r").root)[0].field
+code0 = crop_field(run)
 D0, o0 = np.asarray(code0.geometry.directions, float), np.asarray(code0.geometry.origin, float)
 lobe_m = np.stack([rf.margin(code0, code0.labels.index(v)).astype(np.float32) for v in LOBES])
 

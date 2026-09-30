@@ -21,6 +21,10 @@ from its planes (the numpy references in ranked_build, as haversack says to use 
 the one plane rankfield lacks, d1 (distance to the supplying vessel); coarser levels by
 rf.decode_groups, checked against a direct recomputation; and the anatomical test that
 pulmonary veins run between arterial territories.
+
+The arterial and venous trees are thalweg's centerlines, traced from the store in memory
+(explorations/_thalweg.py, ridge_passes=1 = the research reference); the crop layer is
+thalweg's FieldStore.field(0).
 """
 import json, sys, time, zlib
 from collections import defaultdict
@@ -33,18 +37,14 @@ from rankfield.code import byte_of_gap, levels, rank_dtype
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "research" / "vessels"))
-import _field                                                          # noqa: E402
-from _data import DATA                                                 # noqa: E402
-from cases import store                                                # noqa: E402
-from haversack import ranked_build                                     # noqa: E402
+from haversack import ranked_build
 
-from _catch import run, H, STEP, TAU, DEPTH, TRIM, LOBES, T, tick, tree, ancestor_at, nearest_groups, SUPPLY, WALLS, supply_mask, wall_of  # noqa: E402
+from _catch import run, H, STEP, TAU, DEPTH, TRIM, LOBES, T, tick, tree, ancestor_at, nearest_groups, SUPPLY, WALLS, supply_mask, wall_of, DATA  # noqa: E402
+from _thalweg import crop_field                                        # noqa: E402
 
 t0 = time.time()
 # ---- lobes from the crop layer (3 mm total_fast), sampled onto a 1.5 mm grid over the lungs
-root = _field.open_store(Path(store(run)), "r").root
-code0 = _field.parts_of(root)[0].field
+code0 = crop_field(run)
 geo = code0.geometry
 D0, o0 = np.asarray(geo.directions, float), np.asarray(geo.origin, float)
 lobe_m = np.stack([rf.margin(code0, code0.labels.index(v)).astype(np.float32) for v in LOBES])

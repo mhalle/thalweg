@@ -1,12 +1,15 @@
 """Proof of concept: a straightened vessel rendered in 3D straight from the field.
 
-    python bench/vessels/render_straight.py [PATIENT] [R_START_MM] [HALF_WIDTH_MM]
+    cd explorations/rendering && ../../../haversack/.venv/bin/python render_straight.py [PATIENT] [R_START_MM] [HALF_WIDTH_MM]
 
 No resampled volume: rays run straight through a display box (s along the path, u and v across
 it); every sample maps to world as C(s) + u n1(s) + v n2(s) and reads the artery and vein margins
 there (trilinear, torch). First hit where either margin turns positive, refined by bisection;
 normals by central differences in display space through the same map; Lambert shading, full
 opacity. Arteries red, veins blue.
+
+The margins and the artery centerline tree come from thalweg (explorations/_thalweg.py: the store's
+fine layer, and thalweg.kernel.medial.trace with ridge_passes=1, the research reference, in memory).
 """
 import json, sys, time
 import numpy as np
@@ -15,10 +18,8 @@ from scipy.interpolate import splprep, splev
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "research" / "vessels"))   # _data, _field, cases
-from _data import DATA
-from _field import fine_field
-from cases import LADDERS, store
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))                  # explorations/_thalweg.py
+from _thalweg import DATA, LADDERS, centerlines, fine_field
 
 patient = sys.argv[1] if len(sys.argv) > 1 else "C3N-00704"
 R_START = float(sys.argv[2]) if len(sys.argv) > 2 else 6.0
@@ -37,7 +38,7 @@ ref = LADDERS[patient][0][0]
 t0 = time.time()
 
 # the path: trunk -> farthest left-lung tip of the field-mode artery graph (as straighten.py)
-G = json.load(open(DATA / f"{ref}_lung_arteries_centerlines.json"))
+G = centerlines(ref, "lung_arteries")
 N, S = G["nodes"], G["segments"]
 seg_into = {s["b"]: s["id"] for s in S}
 def chain_to(node):
@@ -78,7 +79,7 @@ if fold.any():
 
 # the field on the device, sampled in world mm
 dev = "mps" if torch.backends.mps.is_available() else "cpu"
-margins, _, grid, _ = fine_field(store(ref))
+margins, grid = fine_field(ref)
 if STUB is None:
     chans = np.stack([margins["lung_arteries"], margins["lung_veins"]])
 else:

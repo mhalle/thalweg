@@ -18,8 +18,12 @@ exactly (tests marked `data`).
   port is checked against: a ported function must reproduce its script's output. Do not refactor
   them in place. Their docstrings still say `bench/vessels/...`; the depth is the same, so the
   relative paths still work from `research/vessels/`.
-- `explorations/` — kept here but off the main line (not ported, no API promise): straightened
-  3D rendering (`explorations/rendering/render_straight.py`, path shim to `research/vessels/`).
+- `explorations/` — kept here but off the main line (not ported, no API promise): vascular
+  catchments and named lung segments (`explorations/catchments/`), straightened 3D rendering
+  (`explorations/rendering/render_straight.py`). They get stores, fields and centerlines from the
+  library through `explorations/_thalweg.py` (centerlines with `ridge_passes=1`, the research
+  reference; outputs verified identical to the research-script versions, 2026-09-30) and still take
+  `DATA`, `LADDERS` and the CT reader from `research/vessels/`. Run them with haversack's venv.
 - `docs/` — the design note, the vmtk comparison, the SlicerHeart write-up, and
   `deliverables.md` (proposed batch product: a 2–5 MB core package per case, opt-in extras, on-demand queries).
 - `src/thalweg/` — `kernel/` (numpy/scipy, no files or names), `vmtk/` (vmtk ports, numpy

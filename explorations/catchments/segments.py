@@ -2,7 +2,8 @@
 
     cd explorations/catchments && ../../../haversack/.venv/bin/python segments.py [RUN]
 
-After airway_centerlines.py. A rule-based prototype, not an atlas matcher:
+The airway tree is thalweg's centerlines of `lung_airways` (explorations/_thalweg.py, traced in
+memory). A rule-based prototype, not an atlas matcher:
 
 1. Lobar bronchi. Walking only through SIGNIFICANT children (>= 3 tips), which steps over
    zero-length segments and single-tip side twigs: trachea -> carina -> the main bronchi (left =
@@ -37,9 +38,7 @@ import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from _catch import run, LOBES, tree, ancestor_at, nearest_groups, supply_mask, wall_of, DATA
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "research" / "vessels"))
-import _field                                                          # noqa: E402
-from cases import store                                                # noqa: E402
+from _thalweg import centerlines, crop_field                            # noqa: E402
 
 PURE, SIG, H = 0.75, 3, 1.5
 U = lambda v: np.asarray(v, float) / np.linalg.norm(v)
@@ -58,7 +57,7 @@ TEMPLATES = {
 LOBE_NAME = {"RUL": "right upper", "RML": "right middle", "RLL": "right lower", "LUL": "left upper", "LLL": "left lower"}
 
 # ---- the airway graph
-G = json.load(open(DATA / f"{run}_lung_airways_centerlines.json"))
+G = centerlines(run, "lung_airways")
 S = G["segments"]; NODE = {n["id"]: np.array(n["point"], float) for n in G["nodes"]}
 kids = defaultdict(list)
 for s in S:
@@ -185,7 +184,7 @@ print("  naming confidence (cosine between a subtree's position in its lobe and 
       ", ".join(f"{n.split()[0]} {confidence[n]:.2f}" for n in [k for lb in TEMPLATES for k in TEMPLATES[lb]] if n in confidence))
 
 # ---- catchments of the named segments
-code0 = _field.parts_of(_field.open_store(Path(store(run)), "r").root)[0].field
+code0 = crop_field(run)
 D0, o0 = np.asarray(code0.geometry.directions, float), np.asarray(code0.geometry.origin, float)
 lobe_m = np.stack([rf.margin(code0, code0.labels.index(v)).astype(np.float32) for v in LOBES])
 

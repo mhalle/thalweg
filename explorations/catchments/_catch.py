@@ -1,12 +1,16 @@
-"""Shared pieces of the catchment prototype: the arterial tree, Strahler groups, nearest groups."""
-import json, os, sys, time
+"""Shared pieces of the catchment prototype: the arterial tree, Strahler groups, nearest groups.
+
+The trees are thalweg's centerlines (explorations/_thalweg.py: thalweg.kernel.medial.trace with
+ridge_passes=1, the research reference), traced in memory from the run's store.
+"""
+import os, sys, time
 from collections import defaultdict
 from pathlib import Path
 import numpy as np
 from scipy.spatial import cKDTree
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "research" / "vessels"))
-from _data import DATA                                                 # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _thalweg import DATA, centerlines                                 # noqa: E402
 
 run = sys.argv[1] if len(sys.argv) > 1 else "C3N-00704_ctpa0625"
 H, STEP, TAU, DEPTH, TRIM = 1.5, 0.5, 0.25, 4, 3        # grid mm, site spacing mm, mm per logit, ranks, Strahler cut
@@ -21,7 +25,7 @@ def tick(name, t0):
 
 def tree(cls):
     """Segments with Strahler order, parent, and densified points."""
-    G = json.load(open(DATA / f"{run}_{cls}_centerlines.json"))
+    G = centerlines(run, cls)
     S = G["segments"]
     kids = defaultdict(list); parent = {}
     for s in S:

@@ -1,8 +1,13 @@
 # explorations
 
 Work that lives with thalweg but is not on the main line: nothing here is ported into
-`src/thalweg/` or promised as API. Scripts import the research helpers from `research/vessels/`
-and run with haversack's environment, like the research scripts.
+`src/thalweg/` or promised as API. The scripts run with haversack's environment and read everything
+through `_thalweg.py`, a path shim to this checkout's `src/` plus a few helpers: the run's store
+(`thalweg.store.FieldStore`), its crop layer (`FieldStore.field(0)`), fine-layer margins, and
+centerline trees traced in memory by `thalweg.kernel.medial.trace(..., ridge_passes=1)` (the
+research reference, which `tests/test_medial.py` pins to `research/vessels/centerline.py`'s JSON).
+No research centerline JSON is read. What the library does not provide (`DATA`, `DICOM`, the
+`LADDERS` table, the CT reader `Image`) still comes from `research/vessels/`.
 
 - `rendering/render_straight.py` - straightened 3D rendering of a vessel path directly from the
   field (per-sample display-to-world warp, no resampled volume), with an illustration style
@@ -14,8 +19,8 @@ and run with haversack's environment, like the research scripts.
   decodes coarser levels with `rf.decode_groups`, and tests whether pulmonary veins run between
   arterial territories. `catchments_figure.py [RUN] [Y_MM]` evaluates one coronal slice directly
   at 0.25 mm. `catchment_store.py` writes it as a real haversack store (duckn zarr zip, convention 1.2, 6.6 MB) with
-  its own README inside (`STORE_README.md` + the generic format reference). `airway_centerlines.py`, `airway_catchments.py` and `airway_figure.py`
-  do the same for the airway tree and compare it with the arteries (they agree best at segment scale:
+  its own README inside (`STORE_README.md` + the generic format reference). `airway_catchments.py` and `airway_figure.py`
+  do the same for the airway tree (thalweg's centerlines of `lung_airways`) and compare it with the arteries (they agree best at segment scale:
   ARI 0.70 vs 0.37 for random partitions). `_catch.py` holds the shared pieces and two switches:
   - `SUPPLY=twigs` (default): only Strahler order <= 2 segments feed tissue. With `all`, trunks
     running past other territories cut them into slivers (152 specks < 5 mm2 on one slice vs 14).

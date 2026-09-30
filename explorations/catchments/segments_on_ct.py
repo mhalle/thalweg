@@ -16,9 +16,7 @@ import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from _catch import run, LOBES, tree, supply_mask, wall_of, DATA
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "research" / "vessels"))
-import _field                                                          # noqa: E402
-from cases import store, image, LADDERS                                # noqa: E402
+from _thalweg import crop_field, ct as ct_of                            # noqa: E402
 
 Z_AX = float(sys.argv[2]) if len(sys.argv) > 2 else -60.0
 RES = 0.5
@@ -29,7 +27,7 @@ lobe_of = lambda n: ("RUL" if n.split()[0] in ("RB1", "RB2", "RB3") else "RML" i
 lobe_idx = {k: i for i, k in enumerate(["RUL", "RML", "RLL", "LUL", "LLL"])}
 seg_lobe = np.array([lobe_idx[lobe_of(n)] for n in names])
 
-code0 = _field.parts_of(_field.open_store(Path(store(run)), "r").root)[0].field
+code0 = crop_field(run)
 D0, o0 = np.asarray(code0.geometry.directions, float), np.asarray(code0.geometry.origin, float)
 lobe_m = np.stack([rf.margin(code0, code0.labels.index(v)).astype(np.float32) for v in LOBES])
 
@@ -54,8 +52,7 @@ def labels(P):
     return out
 
 
-src = next(s for r, s, *_ in LADDERS[run.split("_")[0]] if r == run)
-ct = _field.Image(image(src))
+ct = ct_of(run)                                                       # $VESSELS_DICOM, via research/vessels/cases.py
 lung = np.argwhere(lobe_m.max(0) > 0) @ D0 + o0
 lo, hi = lung.min(0) - 5, lung.max(0) + 5
 views = [("coronal y = 90 mm", "xz", 90.0), ("sagittal x = -46 mm (right lung)", "yz", -46.0),

@@ -1,7 +1,9 @@
 # Vascular catchments as a rankfield
 
 *Exploration, 2026-09-24. One patient (C3N-00704, CTPA 0.625 mm, TotalSegmentator `lung_vessels`).
-Prototype code in this directory; nothing here is in the thalweg package.*
+Prototype code in this directory; nothing here is in the thalweg package, but since 2026-09-30 it
+reads the store and the centerline trees through the thalweg library (`../_thalweg.py`), with
+outputs identical to the research-script version.*
 
 ## The idea
 
@@ -45,8 +47,10 @@ basal origins in 4-10 % of left lower lobes). Walls from a lobe model are a defa
 
 ## How the prototype builds it
 
-1. **The tree.** The pulmonary artery centerline graph (1,065 branch segments, 537 tips) from
-   `research/vessels/centerline.py`.
+1. **The tree.** The pulmonary artery centerline graph (1,065 branch segments, 537 tips), traced
+   from the store's `lung_arteries` margin by `thalweg.kernel.medial.trace` with `ridge_passes=1`
+   (the research reference: the same graph `research/vessels/centerline.py` wrote as JSON, which
+   `tests/test_medial.py` checks exactly). Traced in memory by `../_thalweg.py`, a few seconds.
 2. **Groups: trim the bottom of the tree.** Each segment gets a Strahler order (1 = a terminal
    twig; two joining branches of order k make order k+1). Every segment of order ≥ 3 is a group;
    smaller branches belong to their nearest ancestor of order ≥ 3. That gives about 200 groups
@@ -121,10 +125,10 @@ the dark boundaries.*
 ## Airways: the second tree agrees
 
 The fine layer of the same `lung_vessels` store has the airway lumen, so the airway tree comes free:
-`airway_centerlines.py` runs the frozen `research/vessels/centerline.py` on the `lung_airways`
-class, unchanged except for one extra entry in its class table, added in memory. The tree has 265
-segments, 134 tips and 3.4 m of centerline, rooted at the top of the trachea (median lumen
-radius 1.2 mm; 3.4 s after decoding). The model follows airways less far out than arteries
+the same tracer on the `lung_airways` class (`centerlines(run, "lung_airways")` in `../_thalweg.py`;
+until 2026-09-30 a wrapper, `airway_centerlines.py`, ran the frozen research script with one class
+added and wrote a JSON, and the graph is identical). The tree has 265 segments, 134 tips and 3.4 m
+of centerline, rooted at the top of the trachea (median lumen radius 1.2 mm; ~2 s after decoding). The model follows airways less far out than arteries
 (1,065 segments), so the airway levels are coarser.
 
 `airway_catchments.py` builds airway territories under the same rules (Strahler groups, terminal
@@ -250,13 +254,13 @@ fissure walls from a trustworthy lobe model.
 
 ## Running it
 
-From this directory, with haversack's environment:
+From this directory, with haversack's environment (every script traces the centerline trees it
+needs from the store in memory, a few seconds each; nothing reads a centerline JSON):
 
 ```bash
 ../../../haversack/.venv/bin/python catchments.py            # the store, the checks, the vein test (~3 min)
 ../../../haversack/.venv/bin/python catchments_figure.py     # one coronal slice at 0.25 mm; optional args: RUN Y_MM
 ../../../haversack/.venv/bin/python catchment_store.py       # the duckn store, from catchments.py's output
-../../../haversack/.venv/bin/python airway_centerlines.py    # the airway tree (frozen centerline.py, one class added)
 ../../../haversack/.venv/bin/python airway_catchments.py     # airway vs arterial territories, veins, pairing
 ../../../haversack/.venv/bin/python airway_figure.py         # one coronal slice at 0.25 mm; optional args: RUN Y_MM ART_K AIR_K
 ../../../haversack/.venv/bin/python segments.py              # named bronchopulmonary segments and their catchments

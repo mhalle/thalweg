@@ -2,7 +2,8 @@
 
     cd explorations/catchments && ../../../haversack/.venv/bin/python airway_catchments.py [RUN]
 
-After airway_centerlines.py. Anatomy says a bronchopulmonary segment is "supplied by a tertiary
+The airway tree is thalweg's centerlines of `lung_airways`, traced in memory like the arteries
+(explorations/_thalweg.py). Anatomy says a bronchopulmonary segment is "supplied by a tertiary
 bronchus and its own segmental artery", with veins along its edges - so territories drawn from the
 airway tree and from the arterial tree should coincide, and veins should lie on both sets of
 boundaries. Same rules for both trees (_catch.py): classes = Strahler >= k subtrees, sources = the
@@ -24,12 +25,10 @@ import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from _catch import run, LOBES, tree, ancestor_at, nearest_groups, supply_mask, wall_of, DATA
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "research" / "vessels"))
-import _field                                                          # noqa: E402
-from cases import store                                                # noqa: E402
+from _thalweg import crop_field                                         # noqa: E402
 
 H = 1.5
-code0 = _field.parts_of(_field.open_store(Path(store(run)), "r").root)[0].field
+code0 = crop_field(run)
 D0, o0 = np.asarray(code0.geometry.directions, float), np.asarray(code0.geometry.origin, float)
 lobe_m = np.stack([rf.margin(code0, code0.labels.index(v)).astype(np.float32) for v in LOBES])
 

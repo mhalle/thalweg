@@ -27,6 +27,7 @@ import haversack
 from haversack import ranked_build
 from haversack.ranked_store import open_store, segmentation, read_segmentation
 from _catch import run, TAU, TRIM, SUPPLY, WALLS, tree, ancestor_at, DATA
+import thalweg                                                         # noqa: E402  (src/, via _catch)
 
 src_npz = DATA / f"{run}_catchments_{SUPPLY}_{WALLS}.npz"
 out = DATA / f"{run}.lung_artery_catchments.duckn.zip"
@@ -139,8 +140,9 @@ try:
              "software": {"name": "haversack", "version": haversack.__version__}},
             {"name": "Centerline graph",
              "description": "seed-free centerlines on the field of lung_arteries, split into branch "
-                            "segments with Strahler orders",
-             "software": {"name": "thalweg research/vessels/centerline.py", "version": "incubation"}},
+                            "segments with Strahler orders (thalweg.kernel.medial.trace, ridge_passes=1: "
+                            "the research reference)",
+             "software": {"name": "thalweg", "version": thalweg.__version__}},
             {"name": "Catchments",
              "description": "every lung voxel ranked by straight-line distance to the arterial branch "
                             f"groups: classes = segments of Strahler order >= {TRIM} (smaller branches "
