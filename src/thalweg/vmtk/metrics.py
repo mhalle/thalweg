@@ -6,7 +6,7 @@
 
 - ``AbscissaMetric``: the abscissa of the centerline nearest the point;
 - ``AngularMetric``: the angle around the centerline, from the centerline's normal to the point,
-  in (-pi, pi].
+  in [-pi, pi].
 
 Both are point-wise formulas, so they need no surface: :func:`branch_metrics` evaluates them at any
 points that carry a group. For a point of group g, every centerline cell of g gives a closest point
@@ -94,7 +94,8 @@ def branch_metrics(x, groups, cl: Centerlines, vmtk_interp: bool = False) -> tup
     """``(AbscissaMetric, AngularMetric)`` for points ``x`` (Q, 3) whose branch groups are ``groups``
     (Q,) - from :func:`thalweg.vmtk.partition.lowest_label`, or a clipped surface's ``GroupIds``.
     NaN for a point whose group has no cell, or whose offset or normal has no component across the
-    tangent (the point is on the centerline)."""
+    tangent (the point is on the centerline). A group that exists only as blanked cells still gets
+    values (vmtk's filters do not look at blanking for the group's own cells)."""
     x = np.asarray(x, dtype=np.float64).reshape(-1, 3)
     groups = np.asarray(groups).reshape(-1)
     abscissa = np.full(len(x), np.nan)

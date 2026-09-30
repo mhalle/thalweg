@@ -134,9 +134,13 @@ def test_labels_are_vmtk_branch_clippers(vessels_data, which):
     assert vertex.sum() > 20000 and (lab[vertex] == theirs[vertex]).all()
     some = np.nonzero(vertex)[0][::40]
     assert (lowest_label(x[some], tubes)[0] == theirs[some]).all()
-    cut = np.nonzero(~vertex & (lab != theirs))[0][::25]
+    cut = np.nonzero(~vertex & (lab != theirs))[0]
+    assert 3000 < len(cut) < 3500 and vertex.sum() == 21221
     gaps = []
-    for i in cut:
-        v = segment_values(x[i:i + 1], tubes.segments)[0]
-        gaps.append(v[tubes.label == theirs[i]].min() - v[tubes.label == lab[i]].min())
-    assert 0 <= min(gaps) and np.median(gaps) < 1e-2 and max(gaps) < 0.5      # mm^2: on the tie
+    for a in range(0, len(cut), 256):
+        idx = cut[a:a + 256]
+        v = segment_values(x[idx], tubes.segments)
+        for row, i in zip(v, idx):
+            gaps.append(row[tubes.label == theirs[i]].min() - row[tubes.label == lab[i]].min())
+    gaps = np.array(gaps)
+    assert gaps.min() >= 0 and np.median(gaps) < 1e-3 and gaps.max() < 0.7      # mm^2: on the tie

@@ -268,15 +268,16 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
     if wall_maps_out:
         from .centerlines import check_source
         from .store import open_store
-        from .wallmap import ostium, wall_maps, write_wall_maps
+        from .wallmap import ostium, outside_stations, wall_maps, write_wall_maps
         m, geo, ref = open_store(store).margin(name, s.source.part)
         check_source(s, geo, ref)
         maps = wall_maps(g, name, m, geo, step=wall_map_step)
         write_wall_maps(maps, wall_maps_out, name)
         rays = sum(w.radius_mm.size for w in maps.values())
-        open_ = sum(int(ostium(w).sum()) for w in maps.values())
+        lost = sum(int(outside_stations(w).sum()) for w in maps.values())
+        open_ = sum(int((ostium(w) & ~outside_stations(w)[:, None]).sum()) for w in maps.values())
         click.echo(f"{wall_maps_out}: {len(maps)} edges, {rays} rays, {open_ / max(rays, 1):.1%} through "
-                   "an ostium", err=True)
+                   f"an ostium, {lost} stations outside the structure", err=True)
     if mesh:
         from .centerlines import check_source
         from .export import capped_surface, write_vtp_mesh

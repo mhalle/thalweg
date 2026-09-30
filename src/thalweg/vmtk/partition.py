@@ -16,9 +16,11 @@ Public:
   the work.
 
 Checked against vmtk 1.5.2 on the C3N-00704 subtree, with vmtk's centerlines and with ours: at
-every vertex of the surface vmtkBranchClipper was given (21,221 and 21,223 vertices) the label is vmtk's. The
-clipper also inserts points along its cuts (about 7,000); those lie where two groups' values tie,
-and there the label is either neighbor's (``tests/test_partition.py``).
+each of the 21,221 vertices of vmtkBranchClipper's input surface that reach its output, the label
+is vmtk's. The clipper also inserts points along its cuts (about 7,000); those lie where two
+groups' values tie, and there the label is either neighbor's: about 3,200 differ, by a value gap
+of 5e-8 mm^2 (vmtk's centerlines) and 1.5e-4 mm^2 (ours) in the median and 0.34 and 0.58 mm^2 at
+most (``tests/test_partition.py``).
 """
 from __future__ import annotations
 
@@ -87,6 +89,7 @@ def lowest_label(x, tubes: LabeledTubes, pairs: tuple[np.ndarray, np.ndarray] | 
     step = max(1, DENSE_CHUNK // s)
     for a in range(0, n, step):
         val = segment_values(x[a:a + step], seg)
+        val = np.where(np.isfinite(val), val, np.inf)        # a NaN radius makes no tube
         k = np.argmin(val, axis=1)                           # first occurrence
         best = val[np.arange(len(k)), k]
         ok = np.isfinite(best)

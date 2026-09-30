@@ -67,6 +67,13 @@ def test_run_verb_writes_the_package(vessels_data, tmp_path):
     total = json.loads((tmp_path / "summary.json").read_text())["lung_airways"]["partition_volume_mm3"]
     assert 30e3 < total < 60e3 and sum(x["volume_mm3"] for x in rows) == pytest.approx(total, abs=0.5)
     assert sum(x["volume_mm3"] > 0 for x in rows) > 0.95 * len(rows)
+    # the partition covers the traced piece exactly: not the fragments the tracer dropped
+    import gzip
+    import numpy as np
+    st = json.loads(gzip.open(tmp_path / "graph.thalweg.json.gz").read())["structures"][0]
+    voxel = abs(np.linalg.det(np.array(st["source"]["grid"]["directions"])))
+    assert total == pytest.approx(st["statistics"]["traced_lattice_point_count"] * voxel, abs=0.5)
+    assert st["statistics"]["lattice_point_count"] > st["statistics"]["traced_lattice_point_count"]
     names = {p.name for p in tmp_path.iterdir()}
     assert names == {"graph.thalweg.json.gz", "branches.parquet", "stations.parquet", "summary.json",
                      "qc.json"}
@@ -119,5 +126,7 @@ def test_the_other_verbs_run_end_to_end(vessels_data, tmp_path):
     assert r.exit_code == 0, r.output + str(r.exception)
     z = np.load(maps)
     assert len(z["edges"]) > 100 and len(z["angle_rad"]) == 72
+    steps = np.concatenate([np.diff(z[f"edge_{int(e)}_arc_length_mm"]) for e in z["edges"]])
+    assert abs(np.median(steps) - 1.0) < 0.05                          # --wall-map-step 1
     k = int(z["edges"][0])
     assert z[f"edge_{k}_radius_mm"].shape[1] == 72 and np.isfinite(z[f"edge_{k}_radius_mm"]).any()

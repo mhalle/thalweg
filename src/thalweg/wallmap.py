@@ -21,7 +21,9 @@ Two conventions:
 
 **Ostia.** Where a side branch leaves, the ray runs into it: far past the branch's own wall, or to
 no crossing at all. :func:`ostium` marks those rays (no crossing, or more than ``factor`` times the
-station's median radius). They are openings, not wall.
+station's median radius). They are openings, not wall - except at a station whose center lies
+outside the structure, where every ray is NaN (:func:`outside_stations`; 10 of 20,291 stations on
+the C3N-00704 arteries).
 """
 from __future__ import annotations
 
@@ -119,6 +121,13 @@ def ostium(wall: WallMap, factor: float = 1.8) -> np.ndarray:
     med = np.nanmedian(np.where(some, r, 0.0), axis=1, keepdims=True)
     with np.errstate(invalid="ignore"):
         return ~np.isfinite(r) | (r > factor * med)
+
+
+def outside_stations(wall: WallMap) -> np.ndarray:
+    """(S,) bool: stations where no ray found a wall. With a reach of several radii that means
+    the station's center is outside the structure (the smoothed path cut a corner the field does
+    not make) - not an opening; :func:`ostium` marks their rays all the same."""
+    return ~np.isfinite(wall.radius_mm).any(axis=1)
 
 
 def wall_maps(graph: TubeGraph, structure: str, m: np.ndarray, geometry, min_length_mm: float = 3.0,

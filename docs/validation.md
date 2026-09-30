@@ -423,19 +423,23 @@ about 60 s on C3N-00704 under load and writes 2.4 MB.
 branch-clipper rule without the surface (`thalweg.vmtk.partition`).
 
 - **Against vmtkBranchClipper (vmtk 1.5.2, C3N-00704 subtree).** The clipper's output holds the
-  input surface's vertices and the points it inserts along each cut. At every vertex the label is
-  vmtk's: 21,223 of 21,223 with vmtk's centerlines, 21,221 of 21,221 with ours. The inserted
-  points (about 7,000) lie where two groups' values tie, which is what a cut is; there about half
-  carry the other neighbor's label, with a median value gap of 5e-8 mm² (largest 0.18 mm², from
-  the clipper's linear interpolation along mesh edges).
+  input surface's vertices (21,221 of its 21,236 reach the output) and the points it inserts along
+  each cut. At every one of those vertices the label is vmtk's, with vmtk's centerlines and with
+  ours. The inserted points (about 7,000) lie where two groups' values tie, which is what a cut
+  is; there 3,225 (vmtk's centerlines) and 3,251 (ours) carry the other neighbor's label, by a
+  value gap of 4.7e-8 and 1.5e-4 mm² in the median and 0.34 and 0.58 mm² at most (the clipper
+  places them by linear interpolation along mesh edges).
 - **The pruned search is exact.** It gives the labels and values of evaluating every (point,
   segment) pair, on random tubes of 0.3–9 mm radius and on the clipper's points.
 - **As a volume, by graph edge** (`thalweg run --branch-volumes`, C3N-00704 0.625 mm):
 
   | Tree | Lattice points inside | Labeled (traced piece) | Edges with volume | Partition volume | Σ π r² ds along the centerlines | Time |
   |---|---|---|---|---|---|---|
-  | arteries | 305,946 | 303,426 | 1059 of 1064 | 150.4 ml | 176.2 ml | 18 s |
-  | airways | 83,974 | 83,761 | 265 of 265 | 41.5 ml | 42.8 ml | 1.4 s |
+  | arteries | 305,946 | 303,418 | 1059 of 1064 | 150.4 ml | 176.2 ml | 18–23 s |
+  | airways | 83,974 | 83,652 | 265 of 265 | 41.5 ml | 42.8 ml | 1.4–1.8 s |
+
+  The labeled points are exactly the tracer's piece (`traced_lattice_point_count`): pieces are
+  told apart by the field's own connectivity, as the tracer does it.
 
   The centerline integral counts junction volume once per edge that meets there, and takes each
   section as its inscribed circle (smaller than a section that is not round); on the arteries the
@@ -448,9 +452,15 @@ branch-clipper rule without the surface (`thalweg.vmtk.partition`).
 - **vmtk's branch metrics** (`thalweg.vmtk.metrics`), at the 21,221 vertices of the surface vmtk
   mapped on the C3N-00704 subtree: with vmtk's end-point defect switched on, AbscissaMetric
   agrees to 3e-14 mm and AngularMetric to 5e-13 rad. Interpolating along each segment, as vmtk
-  meant to, moves the abscissa by a median 0.11 mm and at most 0.30 mm, one centerline step.
+  meant to, moves the abscissa by a median 0.11 mm and at most 0.30 mm, one centerline step. The
+  angle moves too, because the normal is interpolated instead of read at the segment's end: not
+  at all in the median, 1.9° at the 99th percentile, more than 5.7° at 44 vertices and up to 159°
+  at a few close to the centerline's end points, where the angle is ill-conditioned.
 - **Rays** (`thalweg.kernel.rays`): in a phantom tube of radius 2 mm on a 0.7 mm grid, the wall
   is found at 1.97–2.00 mm from the axis, and at the right distances from a point off the axis.
+  On a margin that is linear along a ray the crossing is exact for any step. A ray that starts
+  outside, does not leave within its reach, or runs off the grid while still inside has no
+  crossing.
 - **Wall maps in vmtk's coordinates** against vmtk's DistanceToCenterlines at the same (group,
   abscissa, angle), 13,443 surface vertices away from the groups' ends: median difference
   −0.009 mm, median |difference| 0.025 mm, 90th percentile 0.084 mm. 92 groups, 177,336 rays,
@@ -460,7 +470,8 @@ branch-clipper rule without the surface (`thalweg.vmtk.partition`).
   map varies by that much around the angle while its mean and the wall points themselves are the
   cylinder's (within 0.03 and 0.05 mm). On the C3N-00704 arteries: 949 edges, 1.46 million rays
   at 0.5 mm × 5°, 27 s, 6.2 MB; 3.8 % of the rays pass through an ostium (no wall, or one beyond
-  1.8 × the station's median radius).
+  1.8 × the station's median radius). 10 of the 20,291 stations lie outside the structure (the
+  smoothed path cuts a corner): all their rays are empty, and they are counted apart.
 
 ## 6. Not yet validated
 

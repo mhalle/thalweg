@@ -32,11 +32,11 @@ Every segment that can win is evaluated, with vmtk's arithmetic.
 from __future__ import annotations
 
 import numpy as np
-from scipy import ndimage
 from scipy.spatial import cKDTree
 
 from .errors import ThalwegError
 from .graph import TubeGraph
+from .kernel.topology import components, field_edges
 from .vmtk import partition as _vp
 from .vmtk.partition import LabeledTubes
 from .vmtk.polyball import TubeSegments, segment_values
@@ -52,7 +52,7 @@ def edge_tubes(graph: TubeGraph, structure: str) -> LabeledTubes:
     p0, p1, r0, r1, cell, sub = [], [], [], [], [], []
     for e in graph.structure_edges(structure):
         p = graph.edge_points(e)
-        r = np.maximum(graph.edge_radius(e), 0.0)
+        r = np.maximum(np.nan_to_num(graph.edge_radius(e), nan=0.0), 0.0)
         n = len(p) - 1
         p0.append(p[:-1]), p1.append(p[1:]), r0.append(r[:-1]), r1.append(r[1:])
         cell.append(np.full(n, e.id, np.int64)), sub.append(np.arange(n, dtype=np.int64))
@@ -113,15 +113,23 @@ def label_points(x, tubes: LabeledTubes, exhaustive: bool = False) -> tuple[np.n
 
 
 def traced_mask(m: np.ndarray, geometry, points: np.ndarray) -> np.ndarray:
-    """The lattice points with m > 0 in pieces (26-connected) that hold a centerline sample: the
-    structure's traced piece, without the fragments the tracer dropped."""
-    lab, _ = ndimage.label(m > 0, structure=np.ones((3, 3, 3), bool))
+    """The lattice points with m > 0 in the pieces that hold a centerline sample: the structure's
+    traced piece, without the fragments the tracer dropped. Pieces are the field's own (the
+    interpolant's connectivity, :func:`thalweg.kernel.topology.field_edges`, as the tracer uses);
+    a sample counts for the piece of the lattice point nearest it."""
+    idx_all, rows, cols = field_edges(m)[:3]
+    _, comp = components(len(idx_all), rows, cols)
+    node = np.full(m.shape, -1, np.int64)
+    node[tuple(idx_all.T)] = np.arange(len(idx_all))
     d = np.asarray(geometry.directions, float)
     idx = np.rint((np.asarray(points, float) - np.asarray(geometry.origin, float)) @ np.linalg.inv(d))
     idx = idx.astype(np.int64)
-    ok = ((idx >= 0) & (idx < np.asarray(m.shape))).all(1)
-    keep = np.unique(lab[tuple(idx[ok].T)])
-    return np.isin(lab, keep[keep > 0])
+    idx = idx[((idx >= 0) & (idx < np.asarray(m.shape))).all(1)]
+    at = node[tuple(idx.T)]
+    keep = np.isin(comp, np.unique(comp[at[at >= 0]]))
+    out = np.zeros(m.shape, bool)
+    out[tuple(idx_all[keep].T)] = True
+    return out
 
 
 def label_field(m: np.ndarray, geometry, tubes: LabeledTubes, points: np.ndarray | None = None) -> np.ndarray:

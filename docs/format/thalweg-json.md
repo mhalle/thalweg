@@ -237,7 +237,7 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
   bifurcation stages). The integer arrays (`GroupIds`, `Blanking`, `CenterlineIds`, `TractIds`)
   are Int32, as vmtk's filters require.
 - **Wall maps** (`thalweg export … --wall-maps W.npz [--wall-map-step MM]`): per edge at least
-  3 mm long, the wall's distance from the centerline at every station and angle, ray-cast from
+  3 mm long with at least 4 samples, the wall's distance from the centerline at every station and angle, ray-cast from
   the field (`thalweg.wallmap`). One `.npz`:
   - `structure`, `edges` (the edge ids), `angle_rad` (72 angles in [-π, π), shared);
   - per edge `edge_<id>_arc_length_mm` (S,), from the edge's start along its smoothed path;
