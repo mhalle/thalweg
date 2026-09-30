@@ -236,6 +236,16 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
   the source-to-tip paths after vmtk's centerline attributes and branch extractor (not the later
   bifurcation stages). The integer arrays (`GroupIds`, `Blanking`, `CenterlineIds`, `TractIds`)
   are Int32, as vmtk's filters require.
+- **Bifurcation sections** (`thalweg export … --bifurcation-sections S.parquet
+  [--distance-spheres N]`): vmtk's sections N touching spheres (default 1) from each of its
+  bifurcations, one row per adjacent branch group, cut from the field (`thalweg.branching`):
+  `group`, `bifurcation_group` (vmtk's group ids, from the structure's vmtk branching),
+  `orientation` (`upstream`: the parent; `downstream`: a daughter), `distance_spheres`,
+  `point_{x,y,z}_mm`, `normal_{x,y,z}`, `area_mm2` with `area_low_mm2` / `area_high_mm2`,
+  vmtk's `min_size_mm`, `max_size_mm` and `shape`, `equivalent_diameter_mm`, `min_feret_mm`,
+  `max_feret_mm`, `aspect_ratio`, and `closed` (a section that also crosses a neighboring branch
+  is not closed, and its area includes the neighbor). `--vmtk-exact` places the sections with
+  vmtk's defects.
 - **Wall maps** (`thalweg export … --wall-maps W.npz [--wall-map-step MM]`): per edge at least
   3 mm long with at least 4 samples, the wall's distance from the centerline at every station and angle, ray-cast from
   the field (`thalweg.wallmap`). One `.npz`:

@@ -6,6 +6,8 @@
         python tests/oracle/vmtk_centerline_oracle.py C3N-00704_ctpa0625  # -> $VESSELS_DATA/oracle/<run>/
     uv run --offline --no-project --python 3.12 --with vmtk --with scipy \\
         python tests/oracle/vmtk_centerline_oracle.py small               # every SMALL fixture below
+    uv run --offline --no-project --python 3.12 --with vmtk --with scipy \\
+        python tests/oracle/vmtk_centerline_oracle.py sections            # the phantom's bifurcation sections
 
 vmtk is an oracle only, never a thalweg dependency: this script runs in the isolated vmtk env
 (vmtk 1.5.2 wheels, VTK 9.6.2) and imports nothing from thalweg. Every stage is vmtk's own script
@@ -310,8 +312,58 @@ def case(run):
     return lines, [Z["ours_radius"][tree.query(L)[1]] for L in lines]
 
 
+def sphere_union(lines, radii, h=0.35, pad=3.0):
+    """The phantom's tubes as a field on a lattice: max over the centerline samples of r - |x - p|
+    (a union of spheres every 0.3 mm, within 0.01 mm of the swept tube), and the lattice's
+    (origin, spacing, shape). thalweg's test rebuilds the same field with the same formula."""
+    P = np.concatenate(lines)
+    r = np.concatenate(radii)
+    lo = P.min(0) - r.max() - pad
+    hi = P.max(0) + r.max() + pad
+    shape = tuple(int(np.ceil((b - a) / h)) + 1 for a, b in zip(lo, hi))
+    X = lo + h * np.stack(np.meshgrid(*[np.arange(n) for n in shape], indexing="ij"), -1).reshape(-1, 3)
+    d, i = cKDTree(P).query(X, k=32, workers=-1)
+    f = (r[i] - d).max(1)
+    return f.reshape(shape), lo, h
+
+
+def surface_of(f, lo, h):
+    """Marching cubes of the field's zero set (VTK), triangulated and cleaned."""
+    img = vtk.vtkImageData(); img.SetDimensions(*f.shape); img.SetOrigin(*lo); img.SetSpacing(h, h, h)
+    img.GetPointData().SetScalars(numpy_to_vtk(np.ascontiguousarray(f.transpose(2, 1, 0)).ravel(), deep=True))
+    mc = vtk.vtkMarchingCubes(); mc.SetInputData(img); mc.SetValue(0, 0.0); mc.ComputeNormalsOff()
+    tri = vtk.vtkTriangleFilter(); tri.SetInputConnection(mc.GetOutputPort())
+    clean = vtk.vtkCleanPolyData(); clean.SetInputConnection(tri.GetOutputPort()); clean.Update()
+    return clean.GetOutput()
+
+
+def sections():
+    """vmtkbifurcationsections on the phantom: its split centerlines (as ``run`` makes them), the
+    surface of its tubes (``sphere_union``) cut into groups by vmtkBranchClipper, sections one and
+    two distance spheres from each bifurcation. -> tests/fixtures/vmtk_oracle/phantom/
+    bifurcation_sections_{1,2}.npz (cell data: vmtk's arrays; points and polygon cells: the sections)."""
+    out_dir = HERE.parent / "fixtures" / "vmtk_oracle" / "phantom"
+    lines, radii = phantom()
+    cl = lines_polydata(lines, radii)
+    ca = vmtkscripts.vmtkCenterlineAttributes(); ca.Centerlines = cl; ca.Execute()
+    be = vmtkscripts.vmtkBranchExtractor(); be.Centerlines = ca.Centerlines; be.RadiusArrayName = R; be.Execute()
+    split = be.Centerlines
+    f, lo, h = sphere_union(lines, radii)
+    bc = vmtkscripts.vmtkBranchClipper(); bc.Surface = surface_of(f, lo, h); bc.Centerlines = split
+    bc.RadiusArrayName = R; bc.GroupIdsArrayName = "GroupIds"; bc.BlankingArrayName = "Blanking"; bc.Execute()
+    meta = {}
+    for n in (1, 2):
+        bs = vmtkscripts.vmtkBifurcationSections(); bs.Surface = bc.Surface; bs.Centerlines = split
+        bs.NumberOfDistanceSpheres = n; bs.Execute()
+        np.savez_compressed(out_dir / f"bifurcation_sections_{n}.npz", **dump(bs.BifurcationSections))
+        meta[n] = bs.BifurcationSections.GetNumberOfCells()
+    print(json.dumps({"sections": meta, "field": {"origin": lo.tolist(), "spacing": h, "shape": list(f.shape)}}))
+
+
 def main():
     names = sys.argv[1:] or ["phantom"]
+    if names == ["sections"]:
+        return sections()
     if names == ["small"]:
         names = list(SMALL)
     for name in names:

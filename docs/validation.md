@@ -519,6 +519,28 @@ The C3N-00704 subtree, opened at the nine cuts vmtk was given (an inlet and eigh
   | airways | 109 | 3.8 mm | 13 | 0.24 million | 2.7 s |
   | arteries | 436 | 6.1 mm | 7 | 1.03 million | 9.7 s |
 
+## 5i. Bifurcation sections
+
+`branching.bifurcation_sections` places vmtk's bifurcation sections (`thalweg.vmtk.sections`) and
+cuts them from the field. The oracle (`tests/oracle/vmtk_centerline_oracle.py sections`) runs
+vmtkBranchClipper and vmtkBifurcationSections on the phantom tree, on a surface marching-cubed
+from a field that thalweg's test rebuilds exactly (a union of spheres along the centerlines).
+
+- **Placement.** With vmtk's defects on (`vmtk_interp`, `vmtk_steps`), the ten section points and
+  normals at one and at two distance spheres are vmtk's to 1e-10 mm; the default moves the points
+  by at most 0.2 µm here.
+- **vmtk's measures** of its own section polygons (area; MinSize and MaxSize, the calipers through
+  the center along the nearest and farthest boundary points; Shape, their ratio) are recomputed
+  exactly.
+- **Cut from the field instead of the surface**, on the same field: areas within 0.3 % and
+  calipers within 0.03 mm on every closed section. At one sphere, one section's plane also
+  crosses a neighboring daughter at the trifurcation: vmtk cuts only its own group's surface and
+  returns an open polygon, the field's contour takes in the neighbor (82 % more area), and both
+  flag it as not closed. Read `closed` before using an area.
+- **Whole trees** (`thalweg export --bifurcation-sections`), C3N-00704: airways 366 sections, 309
+  closed, 18 s; arteries 1,302 sections, 1,172 closed, 70 s (mostly vmtk's branch extraction on
+  the whole tree). Median shape (MinSize / MaxSize) of the closed ones: 0.82 and 0.88.
+
 ## 6. Not yet validated
 
 - **Thin-caliber ground truth.** The ~1 mm radius floor belongs to the model; checking the

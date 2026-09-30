@@ -62,7 +62,7 @@ tiers, ported after phase 5.
 | `vmtkbifurcationreferencesystems` | Bifurcation frames (origin, normal, up-normal) (`vmtk.frames`); on the graph's junction nodes via `branching.annotate` | ported | 1 |
 | `vmtkbranchclipper` | The labeling rule, no surface: a point belongs to the group whose tube function is lowest (`vmtk.partition`), evaluated anywhere with an exact spatial pruning (`partition`). vmtk's label at each of the 21,221 input-surface vertices in the clipper's output, with vmtk's centerlines and ours; the points the clipper inserts on its cuts are ties. As a volume: `partition.label_field`, a volume per branch (`thalweg run --branch-volumes`). Cutting the surface itself along the partition is not ported (the export caps at graph ends) | done | 1 |
 | `vmtkbifurcationvectors` | Bifurcation angles (in-plane and out-of-plane) (`vmtk.vectors`); thalweg's own `deflection_deg` and `sibling_angle_deg` in `measure` | ported | 2 |
-| `vmtkbifurcationsections` | Sections one radius from the bifurcation, read from the field | todo | 2 |
+| `vmtkbifurcationsections` | vmtk's section planes, N touching spheres from each bifurcation on each adjacent group (`vmtk.sections`; vmtk's points and normals to 1e-10 mm on the phantom oracle with its defects on), cut from the field and measured as vmtk measures them plus Feret widths, aspect ratio and the ±2 logit areas (`branching.bifurcation_sections`, `thalweg export --bifurcation-sections S.parquet`). Areas within 0.3 % of vmtk's surface sections of the same field | done | 2 |
 
 ### Geometry and sections
 
@@ -264,7 +264,7 @@ thalweg table arteries.thalweg.json.gz STORE -o branches.parquet [--stations sta
 thalweg run STORE -o OUT/ [-s NAME ...] [--step MM] [--no-stations] [--branch-volumes]
             [--ridge-passes N] [--prune ...] [--root ...]
                                                # graph, branches, stations, summary.json, qc.json
-thalweg export arteries.thalweg.json.gz STORE -s lung_arteries [--mesh M.vtp [--cap-kinds ...] [--refine N] [--flow-extensions RATIO [--extension-transition T]]] [--vmtk-centerlines C.vtp [--vmtk-exact]] [--swc T.swc] [--markups M.mrk.json] [--wall-maps W.npz [--wall-map-step MM]]
+thalweg export arteries.thalweg.json.gz STORE -s lung_arteries [--mesh M.vtp [--cap-kinds ...] [--refine N] [--flow-extensions RATIO [--extension-transition T]]] [--vmtk-centerlines C.vtp [--vmtk-exact]] [--swc T.swc] [--markups M.mrk.json] [--wall-maps W.npz [--wall-map-step MM]] [--bifurcation-sections S.parquet [--distance-spheres N]]
 thalweg summary arteries.thalweg.json.gz
 thalweg schema [-o FILE]
 ```

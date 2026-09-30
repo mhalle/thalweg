@@ -140,6 +140,13 @@ def test_the_other_verbs_run_end_to_end(vessels_data, tmp_path):
     r = run.invoke(main, ["export", str(graph), str(vessels_data / STORE), "-s", "lung_airways",
                           "--mesh", str(mesh), "--extension-transition", "0.5"])
     assert r.exit_code != 0 and "needs --flow-extensions" in r.output
+    r = run.invoke(main, ["export", str(graph), str(vessels_data / STORE), "-s", "lung_airways",
+                          "--bifurcation-sections", str(tmp_path / "s.parquet"), "--distance-spheres", "2"])
+    assert r.exit_code == 0, r.output + str(r.exception)
+    pq = pytest.importorskip("pyarrow.parquet")
+    sections = pq.read_table(tmp_path / "s.parquet").to_pylist()
+    assert len(sections) > 100 and all(x["distance_spheres"] == 2 for x in sections)
+    assert sum(x["closed"] for x in sections) > 0.7 * len(sections)
     z = np.load(maps)
     assert len(z["edges"]) > 100 and len(z["angle_rad"]) == 72
     steps = np.concatenate([np.diff(z[f"edge_{int(e)}_arc_length_mm"]) for e in z["edges"]])

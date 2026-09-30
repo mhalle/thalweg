@@ -26,6 +26,12 @@ the graph:
   angles (radians; definitions in :mod:`thalweg.vmtk.vectors`) of the edge's own group - the first
   unblanked group after its start junction's bifurcation - at that bifurcation. An edge whose start
   junction has no vmtk bifurcation, or that ends inside it, gets none.
+
+:func:`bifurcation_sections` is ``vmtkbifurcationsections`` on the field: vmtk's section planes, a
+set number of touching spheres from each bifurcation on each adjacent branch group
+(:mod:`thalweg.vmtk.sections`), cut from the margin instead of a surface, measured as vmtk measures
+them (area, its two calipers and their ratio) and as the branch table does (Feret widths, aspect
+ratio, the model's +-2 logit areas).
 """
 from __future__ import annotations
 
@@ -36,6 +42,7 @@ from scipy.spatial import cKDTree
 
 from .adapters import VmtkPaths, to_vmtk
 from .graph import TubeGraph
+from .kernel import sections as S
 from .vmtk import (VMTK_FLAGS, Centerlines, ReferenceSystems, bifurcation_reference_systems,
                    bifurcation_vectors, branch_geometry, centerline_attributes, extract_branches,
                    offset_attributes)
@@ -208,3 +215,47 @@ def annotate(graph: TubeGraph, structure: str, b: Branching) -> TubeGraph:
                   if st.name == structure else st for st in graph.structures]
     return graph.model_copy(
         update={"points": points, "nodes": nodes, "edges": edges, "structures": structures})
+
+
+ORIENTATION = {0: "upstream", 1: "downstream"}
+
+
+def bifurcation_sections(b: Branching, margin: np.ndarray, geometry, number_of_distance_spheres: int = 1,
+                         vmtk_compatible: bool = False, pixel: float = S.PIXEL) -> list[dict]:
+    """One row per section vmtk places (see the module docstring), measured on the field:
+
+    - ``group``, ``bifurcation_group`` (vmtk ids in ``b.split``), ``orientation`` (``upstream``: the
+      parent, ``downstream``: a daughter), ``distance_spheres``;
+    - ``point_x_mm`` .. ``point_z_mm``, ``normal_x`` .. ``normal_z``: the plane (LPS);
+    - ``area_mm2`` (level 0), ``area_low_mm2`` / ``area_high_mm2`` (+2 / -2 logits);
+    - vmtk's measures of the contour: ``min_size_mm``, ``max_size_mm``, ``shape``;
+    - ``equivalent_diameter_mm``, ``min_feret_mm``, ``max_feret_mm``, ``aspect_ratio``;
+    - ``closed``: the contour closes inside the section window (a section that runs into the
+      neighboring branch does not). A plane whose point lies outside the structure has area 0 and
+      no shape."""
+    from .vmtk.sections import bifurcation_section_planes, section_shape
+    flags = dict(vmtk_interp=vmtk_compatible, vmtk_steps=vmtk_compatible)
+    rows = []
+    for pl in bifurcation_section_planes(b.split, number_of_distance_spheres, **flags):
+        n = pl["normal"]
+        n1 = np.cross(n, [1.0, 0, 0] if abs(n[0]) < 0.9 else [0, 1.0, 0])
+        n1 /= np.linalg.norm(n1)
+        n2 = np.cross(n, n1)
+        img, g = S.section_image(margin, geometry, pl["point"], n1, n2, S.half_width(pl["radius"]), pixel)
+        d = S.describe(img, g, 0.0)
+        areas = S.pixel_areas(img, pixel, (S.LEVELS[4], S.LEVELS[0]))
+        row = dict(group=pl["group"], bifurcation_group=pl["bifurcation_group"],
+                   orientation=ORIENTATION[pl["orientation"]],
+                   distance_spheres=int(number_of_distance_spheres),
+                   **{f"point_{a}_mm": float(v) for a, v in zip("xyz", pl["point"])},
+                   **{f"normal_{a}": float(v) for a, v in zip("xyz", n)},
+                   area_mm2=d["area"], area_low_mm2=float(areas[0]), area_high_mm2=float(areas[1]),
+                   min_size_mm=None, max_size_mm=None, shape=None,
+                   equivalent_diameter_mm=d["equivalent_diameter"], min_feret_mm=d["min_feret"],
+                   max_feret_mm=d["max_feret"], aspect_ratio=d["aspect_ratio"], closed=bool(d["closed"]))
+        if d["contour"] is not None:
+            xy = d["contour"][:-1] if np.allclose(d["contour"][0], d["contour"][-1]) else d["contour"]
+            poly = pl["point"] + xy[:, :1] * n1 + xy[:, 1:2] * n2
+            row["min_size_mm"], row["max_size_mm"], row["shape"] = section_shape(poly, pl["point"])
+        rows.append(row)
+    return rows

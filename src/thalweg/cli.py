@@ -6,7 +6,8 @@
     thalweg table GRAPH STORE -o BRANCHES.parquet [--stations STATIONS.parquet] [-s NAME] [--step MM]
     thalweg run STORE -o DIR [-s NAME ...]                the batch product: graph, tables, summary, QC
     thalweg export GRAPH STORE -s NAME [--mesh M.vtp] [--vmtk-centerlines C.vtp] [--swc T.swc]
-                   [--markups M.mrk.json] [--wall-maps W.npz]   at least one output
+                   [--markups M.mrk.json] [--wall-maps W.npz]
+                   [--bifurcation-sections S.parquet]   at least one output
     thalweg summary GRAPH                                 structures, counts, lengths
     thalweg schema [-o FILE]                              the .thalweg.json JSON Schema
 """
@@ -257,12 +258,16 @@ def _cap_kinds(ctx, param, value):
                    "(vmtk's adaptive length; vmtk's own default is 10).")
 @click.option("--extension-transition", type=click.FloatRange(0, 1), default=0.25, show_default=True,
               help="The share of an extension's length over which the ring becomes a circle.")
+@click.option("--bifurcation-sections", "sections_out", type=click.Path(dir_okay=False), default=None,
+              help="vmtk's bifurcation sections, cut from the field (.parquet; needs pyarrow).")
+@click.option("--distance-spheres", type=click.IntRange(min=1), default=1, show_default=True,
+              help="How many touching spheres from each bifurcation its sections lie.")
 @click.option("--wall-maps", "wall_maps_out", type=click.Path(dir_okay=False), default=None,
               help="Wall maps r(arc length, angle) of every edge, ray-cast from the field (.npz).")
 @click.option("--wall-map-step", type=click.FloatRange(min=0, min_open=True), default=0.5, show_default=True,
               help="Station spacing of the wall maps, mm.")
 def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, swc, markups, extension_ratio,
-           extension_transition, wall_maps_out, wall_map_step):
+           extension_transition, sections_out, distance_spheres, wall_maps_out, wall_map_step):
     """Export one structure: a capped surface for CFD, vmtk-compatible centerlines, SWC, Slicer
     markups and/or wall maps (give at least one output)."""
     from .graph import TubeGraph
@@ -270,11 +275,25 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
         raise click.UsageError("--flow-extensions needs --mesh")
     if extension_ratio is None and extension_transition != 0.25:
         raise click.UsageError("--extension-transition needs --flow-extensions")
-    if not (mesh or vmtk_out or swc or markups or wall_maps_out):
-        raise click.UsageError("nothing to export: give --mesh, --vmtk-centerlines, --swc, --markups "
-                               "and/or --wall-maps")
+    if not (mesh or vmtk_out or swc or markups or wall_maps_out or sections_out):
+        raise click.UsageError("nothing to export: give --mesh, --vmtk-centerlines, --swc, --markups, "
+                               "--bifurcation-sections and/or --wall-maps")
     g = TubeGraph.read(graph)
     s = g.structure(name)
+    if sections_out:
+        from .branching import bifurcation_sections, vmtk_branching
+        from .centerlines import check_source
+        from .measure import write_table
+        from .store import open_store
+        m, geo, ref = open_store(store).margin(name, s.source.part)
+        check_source(s, geo, ref)
+        b = vmtk_branching(g, name, vmtk_compatible=vmtk_exact)
+        rows = bifurcation_sections(b, m, geo, distance_spheres, vmtk_compatible=vmtk_exact)
+        if not rows:
+            raise ThalwegError(f"{name}: vmtk's branching finds no bifurcation to section")
+        write_table(rows, sections_out)
+        closed = sum(r["closed"] for r in rows)
+        click.echo(f"{sections_out}: {len(rows)} bifurcation sections ({closed} closed)", err=True)
     if wall_maps_out:
         from .centerlines import check_source
         from .store import open_store
