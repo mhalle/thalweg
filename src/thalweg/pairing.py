@@ -68,7 +68,7 @@ def pair(graph: TubeGraph, airway: str, artery: str, reach: float = REACH_MM, pa
 
 def airway_rows(graph: TubeGraph, airway: str, artery: str, rows: list[dict], **kw) -> dict:
     """Add the pairing columns (see the module docstring) to the airway's branch-table rows, in
-    place; returns a summary: paired share of airway length, median ratio, and the share of paired
+    place; returns a summary: the paired share of airway samples, the median ratio, and the share of paired
     airway branches whose ratio exceeds 1."""
     partner, ra, rv, edge = pair(graph, airway, artery, **kw)
     ok = (partner >= 0) & (ra > 0) & (rv > 0)

@@ -43,8 +43,8 @@ without a junction node (no angles there).
   lumen's is the wall area; ``wall_area_percent`` = 100 x wall / outer area (the clinical WA%);
   ``wall_thickness_mm`` = wall area / the mean of the two perimeters; ``internal_perimeter_mm`` is
   the lumen's perimeter (for :func:`pi10`). Medians over the stations where the outer contour
-  closes; ``wall_station_count`` counts them. The model's wall is a shell about one voxel thick,
-  so thin walls are at its resolution.
+  closes; ``wall_station_count`` counts them. The model's wall is a shell about two voxels thick
+  (1.1-1.45 mm on a 0.7 mm grid, at every airway order), so thin walls are at its resolution.
 
 Sections near a junction cut through the neighboring branches too, so stations within the
 junction's radius + 1 mm of a junction end are left out (an edge shorter than that has none).

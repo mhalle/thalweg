@@ -57,39 +57,44 @@ Margin fields built from capsule chains with a known axis, radius, ends and angl
 
 ## 2. Second patient and reconstruction ladders
 
-`thalweg run` (the tier-1 batch, default options) was run on both patients' ladders: the same
+`thalweg run --ridge-passes 1 --root deepest` (the research reference settings, not the defaults:
+§5 gives what the defaults change) was run on both patients' ladders: the same
 scan reconstructed at 0.625 to 5 mm, each run through TotalSegmentator `lung_vessels`. Each case
-took 21–39 s for the three trees. One bug surfaced on the way and was fixed: newer stores record
-one labeling scheme per cascade stage, and the graph's `Source` expected a single one. Numbers
-regenerated 2026-09-30 with the current code (the round-2 review's runs); the deflection column
-changed when angle chords moved outside the junction's ball (§1).
+took 24–42 s for the three trees (without the station table; the lung additions of §5b–§5e are
+included). One bug surfaced on the way and was fixed: newer stores record one labeling scheme per
+cascade stage, and the graph's `Source` expected a single one. Numbers regenerated 2026-09-30
+with the current code. The deflection column is the median over branches with a defined angle; it
+fell about 2° from the earlier table when angle chords moved outside the junction's ball (§1).
+Every other column reproduced to the digit. Inlet rooting (the default) changes edge directions,
+so Strahler lengths and deflections under the defaults differ from these; lengths, radii, areas
+and the QC columns do not depend on the root.
 
 | Run | Tree | Edges | Length (cm) | Radius p50 (mm) | Strahler ≥ 3 (cm) | Strahler ≥ 4 (cm) | Area median (mm²) | Deflection median (°) | Outside field (mm) | Field loops |
 |---|---|---|---|---|---|---|---|---|---|---|
-| C3N 0.625 | arteries | 1065 | 1052.0 | 1.55 | 228.8 | 95.3 | 6.63 | 44.6 | 2.2 | 4 |
-| C3N 1.25 (lung kernel) | arteries | 1056 | 1041.0 | 1.55 | 233.3 | 91.3 | 6.42 | 44.6 | 0.5 | 2 |
-| C3N 2 mm slab | arteries | 1002 | 1019.6 | 1.57 | 231.5 | 94.9 | 6.88 | 44.7 | 0.9 | 6 |
-| C3N 3.75 | arteries | 552 | 694.2 | 1.73 | 153.4 | 43.2 | 10.04 | 44.4 | 0.5 | 3 |
-| C3N 0.625 | veins | 950 | 937.9 | 1.58 | 207.7 | 86.6 | 6.49 | 46.6 | 0.6 | 2 |
-| C3N 1.25 | veins | 933 | 911.5 | 1.57 | 203.9 | 71.7 | 6.38 | 48.9 | 1.2 | 3 |
-| C3N 2 mm slab | veins | 900 | 905.0 | 1.60 | 201.9 | 72.0 | 6.58 | 48.7 | 1.1 | 2 |
-| C3N 3.75 | veins | 496 | 621.9 | 1.74 | 134.5 | 55.9 | 9.96 | 43.9 | 3.3 | 2 |
-| C3N 0.625 | airways | 265 | 343.7 | 1.17 | 62.8 | 28.5 | 4.52 | 27.9 | 2.0 | 2 |
-| C3N 1.25 | airways | 251 | 313.9 | 1.20 | 59.0 | 31.6 | 4.91 | 28.4 | 1.8 | 3 |
-| C3N 2 mm slab | airways | 229 | 316.5 | 1.23 | 56.9 | 28.4 | 4.97 | 28.9 | 9.0 | 1 |
-| C3N 3.75 | airways | 212 | 215.2 | 1.47 | 43.7 | 25.0 | 10.04 | 33.2 | 1.2 | 0 |
-| MSB 0.625 | arteries | 590 | 706.9 | 1.66 | 142.9 | 51.9 | 7.58 | 46.9 | 0.5 | 3 |
-| MSB 1.25 | arteries | 592 | 709.8 | 1.66 | 146.7 | 53.3 | 7.95 | 46.8 | 1.7 | 5 |
-| MSB 2 mm slab | arteries | 518 | 662.9 | 1.67 | 137.8 | 45.3 | 7.69 | 45.4 | 0.0 | 5 |
-| MSB 5 mm (DLIR) | arteries | 240 | 324.7 | 1.99 | 66.8 | 25.7 | 13.32 | 48.6 | 1.7 | 7 |
-| MSB 0.625 | veins | 467 | 536.4 | 1.63 | 125.1 | 44.6 | 7.26 | 47.9 | 3.5 | 5 |
-| MSB 1.25 | veins | 474 | 557.0 | 1.64 | 127.7 | 43.6 | 7.41 | 49.4 | 0.5 | 1 |
-| MSB 2 mm slab | veins | 427 | 508.6 | 1.65 | 115.5 | 37.3 | 7.49 | 46.8 | 3.1 | 2 |
-| MSB 5 mm (DLIR) | veins | 196 | 251.8 | 2.02 | 45.3 | 22.9 | 16.35 | 42.9 | 0.4 | 1 |
-| MSB 0.625 | airways | 162 | 186.4 | 1.34 | 35.7 | 21.7 | 6.25 | 34.0 | 0.2 | 7 |
-| MSB 1.25 | airways | 151 | 178.0 | 1.38 | 38.6 | 19.7 | 5.89 | 35.7 | 0.0 | 4 |
-| MSB 2 mm slab | airways | 126 | 160.2 | 1.47 | 32.4 | 15.9 | 7.28 | 31.9 | 0.7 | 2 |
-| MSB 5 mm (DLIR) | airways | 79 | 84.2 | 1.96 | 23.4 | 9.2 | 16.66 | 32.5 | 0.0 | 0 |
+| C3N 0.625 | arteries | 1065 | 1052.0 | 1.55 | 228.8 | 95.3 | 6.63 | 42.8 | 2.2 | 4 |
+| C3N 1.25 (lung kernel) | arteries | 1056 | 1041.0 | 1.55 | 233.3 | 91.3 | 6.42 | 42.7 | 0.5 | 2 |
+| C3N 2 mm slab | arteries | 1002 | 1019.6 | 1.57 | 231.5 | 94.9 | 6.88 | 42.1 | 0.9 | 6 |
+| C3N 3.75 | arteries | 552 | 694.2 | 1.73 | 153.4 | 43.2 | 10.04 | 41.9 | 0.5 | 3 |
+| C3N 0.625 | veins | 950 | 937.9 | 1.58 | 207.7 | 86.6 | 6.49 | 44.4 | 0.6 | 2 |
+| C3N 1.25 | veins | 933 | 911.5 | 1.57 | 203.9 | 71.7 | 6.38 | 45.5 | 1.2 | 3 |
+| C3N 2 mm slab | veins | 900 | 905.0 | 1.60 | 201.9 | 72.0 | 6.58 | 45.0 | 1.1 | 2 |
+| C3N 3.75 | veins | 496 | 621.9 | 1.74 | 134.5 | 55.9 | 9.96 | 39.9 | 3.3 | 2 |
+| C3N 0.625 | airways | 265 | 343.7 | 1.17 | 62.8 | 28.5 | 4.52 | 27.5 | 2.0 | 2 |
+| C3N 1.25 | airways | 251 | 313.9 | 1.20 | 59.0 | 31.6 | 4.91 | 27.9 | 1.8 | 3 |
+| C3N 2 mm slab | airways | 229 | 316.5 | 1.23 | 56.9 | 28.4 | 4.97 | 27.2 | 9.0 | 1 |
+| C3N 3.75 | airways | 212 | 215.2 | 1.47 | 43.7 | 25.0 | 10.04 | 30.9 | 1.2 | 0 |
+| MSB 0.625 | arteries | 590 | 706.9 | 1.66 | 142.9 | 51.9 | 7.58 | 43.8 | 0.5 | 3 |
+| MSB 1.25 | arteries | 592 | 709.8 | 1.66 | 146.7 | 53.3 | 7.95 | 43.1 | 1.7 | 5 |
+| MSB 2 mm slab | arteries | 518 | 662.9 | 1.67 | 137.8 | 45.3 | 7.69 | 42.8 | 0.0 | 5 |
+| MSB 5 mm (DLIR) | arteries | 240 | 324.7 | 1.99 | 66.8 | 25.7 | 13.32 | 45.8 | 1.7 | 7 |
+| MSB 0.625 | veins | 467 | 536.4 | 1.63 | 125.1 | 44.6 | 7.26 | 44.5 | 3.5 | 5 |
+| MSB 1.25 | veins | 474 | 557.0 | 1.64 | 127.7 | 43.6 | 7.41 | 44.6 | 0.5 | 1 |
+| MSB 2 mm slab | veins | 427 | 508.6 | 1.65 | 115.5 | 37.3 | 7.49 | 44.4 | 3.1 | 2 |
+| MSB 5 mm (DLIR) | veins | 196 | 251.8 | 2.02 | 45.3 | 22.9 | 16.35 | 40.8 | 0.4 | 1 |
+| MSB 0.625 | airways | 162 | 186.4 | 1.34 | 35.7 | 21.7 | 6.25 | 33.4 | 0.2 | 7 |
+| MSB 1.25 | airways | 151 | 178.0 | 1.38 | 38.6 | 19.7 | 5.89 | 35.3 | 0.0 | 4 |
+| MSB 2 mm slab | airways | 126 | 160.2 | 1.47 | 32.4 | 15.9 | 7.28 | 31.7 | 0.7 | 2 |
+| MSB 5 mm (DLIR) | airways | 79 | 84.2 | 1.96 | 23.4 | 9.2 | 16.66 | 32.1 | 0.0 | 0 |
 
 - **Up to 2 mm, arteries and veins hold.**
   - Total length moves −6.2 to +3.8 %; the radius, area and deflection medians stay within 5 %.
@@ -276,7 +281,7 @@ area within 5 %, WA% within 2 points and thickness within 0.05 mm (`tests/test_m
 | C3N-00704 0.625 | 4.17 (1151 stations) | 85.6 / 73.7 / 61.1 | 1.37 / 1.30 / 1.12 |
 | MSB-02664 0.625 | 4.34 (431 stations) | 85.4 / 69.8 / 67.8 | 1.45 / 1.36 / 1.30 |
 
-**The wall is at the model's resolution.** The measured thickness is nearly constant, 1.3–1.45 mm
+**The wall is at the model's resolution.** The measured thickness is nearly constant, 1.1–1.45 mm
 at every order: about two voxels of the 0.7 mm grid, the thinnest shell the model draws. Real
 small-airway walls are thinner, so small-airway WA% and Pi10 read high, the airway analog of the
 vessels' ~1 mm radius floor. Pi10 here (4.2–4.3 mm) is above the ~3.6–3.8 mm usually reported for
@@ -308,22 +313,30 @@ As with the walls, compare across cases on one model and grid.
 `qc.json` `artery_vein` (`thalweg.plausibility`): the share of each tree's centerline inside the
 crop stage's `pulmonary_vein` class.
 
-| Case | Arteries inside | Veins inside | Plausible | The same trees, names swapped |
-|---|---|---|---|---|
-| C3N-00704 0.625 (misnamed crop classes, found by value) | 0.0 % | 5.6 % | yes | fails |
-| C3N-00704 3.75 | 0.0 % | 7.2 % | yes | fails |
-| MSB-02664 0.625 | 0.0 % | 7.4 % | yes | fails |
-| MSB-02664 5 mm | 0.0 % | 13.4 % | yes | fails |
+| Case | Arteries inside | Veins inside | Plausible |
+|---|---|---|---|
+| C3N-00704 0.625 (misnamed crop classes, found by value) | 0.00 % | 5.4 % | yes |
+| C3N-00704 1.25 | 0.06 % | 5.3 % | yes |
+| C3N-00704 2 mm slab | 0.00 % | 5.6 % | yes |
+| C3N-00704 3.75 | 0.00 % | 7.0 % | yes |
+| MSB-02664 0.625 | 0.00 % | 7.4 % | yes |
+| MSB-02664 1.25 | 0.00 % | 7.9 % | yes |
+| MSB-02664 2 mm slab | 0.00 % | 7.8 % | yes |
+| MSB-02664 5 mm | 0.00 % | 13.3 % | yes |
+
+(The §2 runs. With the names swapped every case fails, by the rule; the test suite checks the
+swap on the two 0.625 mm cases.)
 
 A first version tested the veins' root against the class and failed every correct case: the
-model's veins run on past the vein trunks into the left atrium, so the root lies 30–36 mm beyond
-the class, inside `heart`. The length share separates the trees on all four, thick slices
-included. Four cases from two patients is thin evidence for the thresholds (veins ≥ 1 %,
+model's veins run on past the vein trunks into the left atrium, so the root lies 27–36 mm beyond
+the class, inside `heart`. The length share separates the trees on all eight, thick slices
+included. Eight reconstructions of two patients is thin evidence for the thresholds (veins ≥ 1 %,
 arteries ≤ 2 %).
 
 ## 5e. Tree statistics and the radius interval
 
-`summary.json` `<tree>.tree` (`thalweg.statistics`), default options, 0.625 mm reconstructions:
+`summary.json` `<tree>.tree` (`thalweg.statistics`), default options (four ridge passes, inlet
+root), 0.625 mm reconstructions:
 
 | Case | Tree | Streams by Strahler order | Bifurcation ratio | Length ratio | Diameter ratio | Small-vessel volume fraction | Orientation entropy |
 |---|---|---|---|---|---|---|---|
@@ -342,8 +355,8 @@ arteries ≤ 2 %).
 - **Orientation entropy is saturated** (0.97–0.99): a lung tree points everywhere, so this
   statistic separates little here.
 - **The per-point radius interval** (`radius_lower_mm`, `radius_upper_mm`: margin +2 and −2
-  logits) has a half-width of 0.14–0.17 mm at every radius on the C3N arteries: 1.01 mm reads
-  0.80–1.13, 1.64 reads 1.47–1.74, 3.56 reads 3.30–3.76. On the Y phantom it is 2 / slope, as it
+  logits) has a half-width of 0.14–0.21 mm on the C3N arteries, widening slowly with radius: 1.01 mm
+  reads 0.80–1.13, 1.64 reads 1.47–1.74, 3.56 reads 3.30–3.76. On the Y phantom it is 2 / slope, as it
   should be.
 
 The full tier-1 run (three trees, four ridge passes, lobes, walls, pairing, statistics, QC) takes

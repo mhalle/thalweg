@@ -9,7 +9,7 @@ The *thalweg* is the line joining the deepest points of a river channel: a cente
 a field. Here the field is a model's per-class margin, decoded from a
 [rankfield](https://github.com/mhalle/rankfield) store (e.g. one written by haversack).
 
-**Status: port in progress** (branch `port`; plan and per-module status in `docs/port-plan.md`).
+**Status: first version on `main`** (plan and per-module status in `docs/port-plan.md`).
 `src/thalweg/` holds:
 
 - `thalweg.kernel` - numpy/scipy only, no files or names: field sampling and sub-voxel zero
@@ -21,8 +21,10 @@ a field. Here the field is a model's per-class margin, decoded from a
   found on the way; `vmtk_*=True` flags reproduce vmtk exactly;
 - the pipeline - `store` (read a ranked store), `centerlines` (a structure's centerlines as a
   graph), `graph` (the `.thalweg.json` format, `docs/format/thalweg-json.md`), `adapters` and
-  `branching` (vmtk's grouping on the graph), `measure` (the branch table), `case` (one case,
-  decoded once: the batch product), `export` (a capped surface, VTP, SWC, Slicer markups), `cli`.
+  `branching` (vmtk's grouping on the graph), `measure` (the branch table, airway walls), `lobes`
+  (a lung lobe per branch), `pairing` (bronchoarterial pairing), `plausibility` (artery/vein
+  check), `statistics` (Horton ratios and other whole-tree numbers), `case` (one case, decoded
+  once: the batch product), `export` (a capped surface, VTP, SWC, Slicer markups), `cli`.
 
 Install and test (from the repo):
 

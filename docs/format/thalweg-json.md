@@ -37,7 +37,8 @@ migration; 1.0 will be the first stable version.
     `label_value`, and `grid` (`shape`, `directions`, `origin` of the field).
   - `parameters` records the tracer's settings: `connectivity` (`field` or `voxel`),
     `cover_scale`, `cover_constant_mm`, `cost_epsilon_mm`, `ridge_passes` (default 4; 1 is the
-    research reference) and `prune` (default `length`).
+    research reference), `prune` (default `length`) and `root` (`inlet`, the default, or
+    `deepest`).
   - `statistics` records counts from the tracer and the graph (below).
 - **Nodes** have one of these kinds:
   - `root`: where the tree starts. By default (`parameters.root: "inlet"`) this is the
@@ -46,7 +47,8 @@ migration; 1.0 will be the first stable version.
     end). `attributes.end` says what the node was (`tip` or `truncated`; a truncated one also has
     `on_grid_boundary`). With `root: "deepest"` it is the tracer's own start, the deepest point,
     which need not be an end: the arteries' deepest point lies inside the pulmonary trunk (the
-    research reference). `statistics.deepest_point` records that point either way;
+    research reference). With the default, `statistics.deepest_point` records the tracer's start;
+    with `root: "deepest"` the root node is that point and the key is absent;
   - `junction`: degree 3 or more;
   - `tip`: a free end, degree 1;
   - `truncated`: an end where the structure runs off the edge of the source field, degree 1.
@@ -81,7 +83,8 @@ migration; 1.0 will be the first stable version.
 - Ids are positions: `nodes[i].id == i`, `edges[i].id == i`. Structure names are unique.
 - An edge's first and last samples sit on its start and end nodes, within 1e-6 mm.
 - Both end nodes belong to the edge's structure, and so do the structure's roots.
-- Point ranges are at least two samples long and do not overlap.
+- Point ranges are at least two samples long, do not overlap, and together cover the table.
+- `length_mm` is the edge polyline's length, within 1e-6 mm.
 - Kinds agree with degree:
   - `tip` and `truncated` have degree 1;
   - `joint` has degree 2;
@@ -110,7 +113,8 @@ migration; 1.0 will be the first stable version.
 **`statistics.vmtk_bifurcations`** (from `thalweg.branching.annotate`): how junctions and vmtk's
 bifurcations correspond.
 
-**Attributes** (all from `thalweg.branching.annotate`, which no CLI verb runs yet):
+**Attributes.** From the tracer, on a root node: `end` and `on_grid_boundary` (see Nodes). From
+`thalweg.branching.annotate`, which no CLI verb runs yet:
 - on a node, `bifurcation_frames`: a list of `{group, origin, normal, up_normal}`, vmtk's
   bifurcation reference systems at that junction;
 - on an edge:
@@ -124,21 +128,11 @@ bifurcations correspond.
 - `lobe` (written by `thalweg run` for lung stores): 1 left upper, 2 left lower, 3 right upper,
   4 right middle, 5 right lower, 0 outside every lobe (the hilum). Lobes come from the store's own
   crop stage (`thalweg.lobes`). The branch table gets `lobe` (the lobe holding most of the edge's
-  length, by name) and `lobe_length_fraction`; `summary.json` gets per-lobe counts, lengths,
-  volumes and length densities.
+  length, by name; null when most of it lies outside every lobe) and `lobe_length_fraction`.
 - `radius_lower_mm`, `radius_upper_mm` (written by `thalweg run`): the model's own interval on
   each sample's radius, the distance to the surfaces where the margin is +2 and -2 logits (a
-  half-width of ~0.15 mm on the lung vessels). `radius_lower_mm` is 0 where the stricter surface
+  half-width of 0.14–0.21 mm on the lung arteries measured). `radius_lower_mm` is 0 where the stricter surface
   does not contain the sample.
-- Tree statistics (`summary.json` `<structure>.tree`, from `thalweg.statistics`): Horton's
-  bifurcation, length and diameter ratios with the per-order stream table, the volume and the
-  small-vessel volume fraction (cross-section under 5 mm²), and the orientation entropy.
-- Airway walls (not in the graph; `thalweg run` and `thalweg table`): branch-table columns
-  `wall_area_mm2`, `wall_area_percent`, `wall_thickness_mm`, `internal_perimeter_mm`,
-  `wall_station_count`, and Pi10 under `summary.json` `lung_airways.wall`.
-- Bronchoarterial pairing (`thalweg run` with both airways and arteries): airway branch-table
-  columns `paired_artery_edge`, `paired_fraction`, `bronchus_to_artery_ratio`, and a summary
-  under `summary.json` `lung_airways.bronchoarterial`.
 
 ## The tube requirements (docs/port-plan.md), as of 0.1
 
@@ -163,8 +157,58 @@ bifurcations correspond.
 ## Beside it
 
 - **Branch table** (`thalweg table … -o branches.parquet`, or `thalweg run`): one row per edge,
-  defined in `src/thalweg/measure.py`.
-- **Station profile** (`--stations stations.parquet`): one row per cross-section.
+  defined in `src/thalweg/measure.py`. `thalweg run` adds, where the store allows:
+  - `lobe`, `lobe_length_fraction` (a lung store; above);
+  - for an airway whose wall the model labels: `wall_area_mm2`, `wall_area_percent`,
+    `wall_thickness_mm`, `internal_perimeter_mm` (medians over the edge's stations) and
+    `wall_station_count`. `thalweg table` writes these too;
+  - for an airway traced with the arteries: `paired_artery_edge`, `paired_fraction`,
+    `bronchus_to_artery_ratio` (`thalweg.pairing`). `thalweg run` only.
+
+  Columns a structure does not have are null in its rows.
+- **Station profile** (`--stations stations.parquet`, or `thalweg run`): one row per
+  cross-section, every `--step` mm (default 1) along each edge's interior:
+  - `structure`, `edge`, `arc_length_mm` (from the edge's start);
+  - `position_x_mm`, `position_y_mm`, `position_z_mm` (LPS, the section's center on the path);
+  - `traced_radius_mm` (the graph's radius there);
+  - `area_mm2`, with `area_low_mm2` and `area_high_mm2` (the areas inside the margin's +2 and
+    -2 logit contours);
+  - `equivalent_diameter_mm`, `perimeter_mm`, `min_feret_mm`, `max_feret_mm`, `aspect_ratio`,
+    `centroid_offset_mm`, `contour_closed`;
+  - the wall columns above, per station, for an airway with a labeled wall.
+- **`summary.json`** (`thalweg run`): one object per structure, keyed by its name.
+  - `edges`; `nodes` (a count per node kind); `length_mm`;
+  - `radius_percentiles_mm` (`p10`, `p50`, `p90` of the traced radius over the samples);
+  - `strahler_order`: per order, `edges` and `length_mm`; `unordered`: the same for edges that
+    lead only to truncated ends and so have no order;
+  - `sectioned_branches`: edges with at least one measured section;
+  - `coarse_slices` (see `qc.json`), and a `warning` string when it is true;
+  - `tree` (`thalweg.statistics`):
+    - `horton`: `bifurcation_ratio`, `length_ratio`, `diameter_ratio`, and `orders`, per
+      Strahler order `streams`, `mean_length_mm`, `mean_diameter_mm`;
+    - `volume_mm3`, `small_vessel_volume_fraction`, `small_area_mm2` (the threshold, 5);
+    - `orientation_entropy`;
+  - `wall` (airways with a labeled wall): `pi10_mm`, `slope`, `stations`,
+    `internal_perimeter_range_mm`;
+  - `bronchoarterial` (airways traced with the arteries): `paired_sample_share`,
+    `paired_branches`, `bronchus_to_artery_ratio_median`, `share_of_paired_branches_above_1`,
+    `reach_mm`, `parallel_cosine`;
+  - `lobes` (a lung store): per lobe name, and `outside_lobes`: `edges`, `tips`, `length_mm`,
+    and for a lobe `lobe_volume_ml`, `length_mm_per_ml`.
+- **`qc.json`** (`thalweg run`; meanings in `src/thalweg/case.py`):
+  - `thalweg` (the version), `store` (its path);
+  - `labeling_scheme`: a string, or a list with one scheme per cascade stage in newer stores;
+  - `acquisition`: keyed by part number (as a string), `source_spacing_mm` and `coarse_slices`
+    (the largest spacing exceeds 3 mm);
+  - `lobes`: `named_by` and `part`, or `named_by: null` and a `reason`;
+  - `artery_vein` (`thalweg.plausibility`): `plausible` (true, false, or null with a `reason`
+    when it cannot be checked), `reasons`, the two
+    `…_length_share_inside_pulmonary_vein` shares, and the roots' distances
+    `…_root_to_pulmonary_vein_mm`, `…_root_to_heart_mm`;
+  - `structures`: per structure `dropped_components` (`count`, `lattice_share`, `largest`),
+    `truncated_ends`, `outside_mm`, `length_mm`, `unrefined_points`, `cell_interior_joins`,
+    `field_loops`;
+  - `timings_s`.
 - **vmtk-compatible export:** `thalweg export … --vmtk-centerlines C.vtp [--vmtk-exact]` writes
   the source-to-tip paths after vmtk's centerline attributes and branch extractor (not the later
   bifurcation stages). The integer arrays (`GroupIds`, `Blanking`, `CenterlineIds`, `TractIds`)

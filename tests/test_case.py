@@ -54,8 +54,8 @@ def test_default_order_run_writes_the_airway_columns(vessels_data, tmp_path):
     """Arteries first, airways second (the default order): the airway-only wall and pairing columns
     must still be in branches.parquet and the wall columns in stations.parquet."""
     pq = pytest.importorskip("pyarrow.parquet")
-    args = ["run", str(vessels_data / STORE), "-o", str(tmp_path), "-s", "lung_arteries", "-s", "lung_airways",
-            "--step", "2", "--ridge-passes", "1", "-q"]
+    args = ["run", str(vessels_data / STORE), "-o", str(tmp_path), "-s", "lung_arteries",
+            "-s", "lung_airways", "--step", "2", "--ridge-passes", "1", "-q"]
     r = CliRunner().invoke(main, args)
     assert r.exit_code == 0, r.output
     rows = pq.read_table(tmp_path / "branches.parquet").to_pylist()

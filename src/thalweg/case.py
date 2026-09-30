@@ -212,7 +212,7 @@ class Case:
 
     def run(self, names, step: float = 1.0, stations: bool = True, log=None, **trace_options) -> dict:
         """The batch product for ``names``: graph, rows, stations, summary and qc (see above).
-        ``trace_options`` go to :func:`thalweg.centerlines.centerline_graph` (ridge_passes, prune)."""
+        ``trace_options`` go to :func:`thalweg.centerlines.centerline_graph` (ridge_passes, prune, root)."""
         g = self.trace(names, log=log, **trace_options)
         lobes = self.lobes(log=log)
         edge_lobe = {}

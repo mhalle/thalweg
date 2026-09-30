@@ -5,8 +5,11 @@ between tiers are the user's to decide. Update 2026-09-30: tier 1 is partly buil
 graph, branch table, stations, summary, QC), with trees rooted at their inlet, lobes per
 branch, airway wall thickness (with Pi10), the bronchoarterial ratio and an artery/vein
 plausibility check, the radius interval per point, and tree statistics (Horton ratios,
-small-vessel volume fraction, orientation entropy). Still missing: Strahler order stored in the
-graph, 0.3 mm polylines, contrast along branches (needs the CT), and the preview image.*
+small-vessel volume fraction, orientation entropy). Still missing from the tier-1 list below:
+Strahler order and generation stored in the graph (they are in the branch table), 0.3 mm
+polylines, curvature and torsion summaries, tips per lobe and bridged gaps in QC (tips per lobe
+are in the summary; the tracer does not bridge), artery–vein ratios, model and store versions in
+QC, contrast along branches (needs the CT), and the preview image.*
 
 ## The principle
 
@@ -54,14 +57,16 @@ For **three trees**: arteries, veins and airways (the airways come free in the s
    - counts, total length, densities per lobe volume;
    - Horton ratios, small-vessel volume fraction (BV5-like), artery–vein ratios;
    - orientation entropy (the OSMnx-style panel);
-   - the **artery-to-bronchus ratio** at paired branches, a clinical measure that needs airway
+   - the **bronchoarterial ratio** (bronchus diameter over artery diameter) at paired
+     branches, a clinical measure that needs airway
      and artery in one geometry, which this input has and most pipelines do not.
 4. **QC:**
    - completeness (tips per lobe, disconnected pieces, loops, bridged gaps);
    - an acquisition-regime flag: slices > ~3 mm drop thin vessels, so thin-order statistics are
      invalid there (§12.2);
-   - artery/vein plausibility: arteries root toward the pulmonary trunk and right heart, veins
-     toward the left atrium, from the `total` layer;
+   - artery/vein plausibility, from the `total` layer. (Proposed as a test on where each tree
+     roots; built as the share of each tree's length inside the `pulmonary_vein` class, because
+     the root test failed on correct cases: docs/validation.md §5d.);
    - model and store versions, and one preview image.
 
 Parquet for tables (cohorts concatenate), JSON for the summary and QC. Ideally a haversack serve
@@ -95,5 +100,7 @@ the user's outlets and flow extensions, meshes of a chosen subtree.
 
 Tier 1 needs the port's "must" items: native centerline processing, the whole-tree pipeline with
 a spatial index, geometry and angles, export, plus airway graphs (the same code on another
-class). Estimated batch cost after the models: ~21–39 s per case for three trees (47–52 s with 4 ridge passes; measured 2026-09-30) on an M2, dominated by the
-three graphs, and much less on CUDA.
+class). Measured batch cost after the models (2026-09-30, an M2 shared with other jobs, so rough):
+about 60 s per case for three trees with the defaults (four ridge passes, lobes, walls, pairing,
+statistics, QC), and 21–39 s with one ridge pass and without the lung additions. Tracing and
+sectioning dominate; nothing runs on a GPU yet.

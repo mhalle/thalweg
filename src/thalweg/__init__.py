@@ -6,10 +6,11 @@ ranked store) instead of a triangulated surface. Two layers (docs/vmtk-successor
 - ``thalweg.kernel``: numpy/scipy algorithms on arrays and grids (field sampling, field
   connectivity, the centerline tracer); knows nothing of files, names or formats;
 - the pipeline: ``store`` (read a ranked store), ``centerlines`` (a structure's centerlines as a
-  graph), ``graph`` (the ``.thalweg.json`` model), ``adapters`` (graph <-> vmtk's convention),
-  ``branching`` (vmtk's grouping, frames and angles on the graph), ``measure`` (the branch table),
-  ``case`` (one case decoded once: the batch product), ``export`` (capped surface, VTP, SWC,
-  Slicer markups), ``cli``.
+  graph, rooted at its inlet), ``graph`` (the ``.thalweg.json`` model), ``adapters`` (graph <->
+  vmtk's convention), ``branching`` (vmtk's grouping, frames and angles on the graph), ``measure``
+  (the branch table, airway walls), ``lobes``, ``pairing``, ``plausibility``, ``statistics`` (the
+  lung batch's anatomy and whole-tree numbers), ``case`` (one case decoded once: the batch
+  product), ``export`` (capped surface, VTP, SWC, Slicer markups), ``cli``.
 
 ``thalweg.vmtk`` holds faithful ports of vmtk's centerline-only filters on vmtk's own convention,
 checked against vmtk's output; vmtk itself is never imported.

@@ -4,8 +4,8 @@ Centerlines, branches and wall geometry of tubular structures read from a segmen
 model's continuous field (rankfield margins), never from a triangulated surface except at
 export. A successor to vmtk. Private, Apache-2.0. Incubated in medseg (2026-09-23/24).
 
-**Status (2026-09-30):** the port is under way on branch `port` (worktree
-`.worktrees/port`, excluded locally). `docs/port-plan.md` has the per-module status and the phase
+**Status (2026-09-30):** the first version of the library is on `main` (checked out in the
+worktree `.worktrees/port`, excluded locally; the main folder is another session's branch). `docs/port-plan.md` has the per-module status and the phase
 order, `docs/validation.md` the behavior beyond the build case, `docs/format/thalweg-json.md`
 the graph format. The research evidence is in `docs/vmtk-successor.md` §12–13 (read §6 for the
 package design). `research/vessels/` stays the frozen reference: kernel ports reproduce it
@@ -27,8 +27,8 @@ exactly (tests marked `data`).
 - `docs/` — the design note, the vmtk comparison, the SlicerHeart write-up, and
   `deliverables.md` (proposed batch product: a 2–5 MB core package per case, opt-in extras, on-demand queries).
 - `src/thalweg/` — `kernel/` (numpy/scipy, no files or names), `vmtk/` (vmtk ports, numpy
-  only), and the pipeline modules (store, centerlines, graph, adapters, branching, measure, case,
-  export, cli). `tests/test_layering.py` enforces the split.
+  only), and the pipeline modules (store, centerlines, graph, adapters, branching, measure, lobes,
+  pairing, plausibility, statistics, case, export, cli). `tests/test_layering.py` enforces the split.
 - `tests/` — `fixtures/vmtk_oracle/phantom/` (frozen vmtk output on a synthetic tree, in git);
   `oracle/vmtk_centerline_oracle.py` regenerates it and the case oracle
   (`$VESSELS_DATA/oracle/C3N-00704_ctpa0625/`) in the isolated vmtk env.
@@ -136,9 +136,13 @@ need the user's permission.
 
 ## Next (agreed 2026-09-24; progress in docs/port-plan.md)
 
-Done on `port` (2026-09-30): (1) as a library (`thalweg.vmtk`, `branching`; no CLI verb runs the
+Done on `main` (2026-09-30): (1) as a library (`thalweg.vmtk`, `branching`; no CLI verb runs the
 grouping yet), (2) (`kernel.geometry`, `kernel.sections`, `measure`), (3) and (4) as first versions
-(`case`, `export`); (5) started (`docs/validation.md`).
+(`case`, `export`); (5) started (`docs/validation.md`). Tier 1 of the lung batch is built: trees
+rooted at their inlet, lobes per branch (`lobes`), airway walls and Pi10 (`measure`),
+bronchoarterial pairing (`pairing`), artery/vein plausibility (`plausibility`), the per-point
+radius interval, and Horton ratios / small-vessel fraction / orientation entropy (`statistics`).
+Of the "nice" list below, those tree statistics are therefore done.
 
 Must: (1) native centerline processing (arc length + parallel-transport frames, branch grouping,
 bifurcation frames), checked bit for bit against saved vmtk outputs; (2) centerline geometry

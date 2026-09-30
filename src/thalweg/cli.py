@@ -2,7 +2,8 @@
 
     thalweg structures STORE                              what a store names
     thalweg centerlines STORE -s NAME [-s NAME ...] -o OUT.thalweg.json[.gz]
-    thalweg table GRAPH STORE -o BRANCHES.parquet [--stations STATIONS.parquet]
+                        [--ridge-passes N] [--prune length|wall] [--root inlet|deepest]
+    thalweg table GRAPH STORE -o BRANCHES.parquet [--stations STATIONS.parquet] [-s NAME] [--step MM]
     thalweg run STORE -o DIR [-s NAME ...]                the batch product: graph, tables, summary, QC
     thalweg export GRAPH STORE -s NAME [--mesh M.vtp] [--vmtk-centerlines C.vtp] [--swc T.swc]
                    [--markups M.mrk.json]              at least one output
@@ -37,8 +38,8 @@ def _method_options(f):
                           "refinement's radius deficit (0.03-0.07 mm) and matches vmtk; 1 is the research "
                           "reference, ~1.9x faster to trace. docs/validation.md.")(f)
     f = click.option("--root", type=click.Choice(["inlet", "deepest"]), default="inlet", show_default=True,
-                     help="Root each tree at its inlet (the widest end, or one running off the field) or at "
-                          "the tracer's deepest point (the research reference).")(f)
+                     help="Root each tree at its inlet (the widest end that runs off the field; if none "
+                          "does, the widest end) or at the tracer's deepest point (research reference).")(f)
     f = click.option("--prune", type=click.Choice(["length", "wall"]), default="length", show_default=True,
                      help="Spur rule: 'length' (the reference) or 'wall' (also drops terminal branches that "
                           "do not protrude beyond the parent's wall: flat-lumen lobes, and 9-26 % of vessel "
@@ -121,7 +122,8 @@ def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, r
               help="Section spacing along each branch, mm.")
 def table(graph, store, output, names, stations, step):
     """Measure every branch of GRAPH's structures in STORE's field: one row per branch (Parquet;
-    needs pyarrow, the `tables` extra). Column definitions: thalweg.measure."""
+    needs pyarrow, the `tables` extra). Column definitions: thalweg.measure (lobe columns:
+    thalweg.lobes). The bronchoarterial pairing columns are written by `thalweg run` only."""
     from .centerlines import check_source
     from .graph import TubeGraph
     import numpy as np
@@ -178,7 +180,11 @@ def table(graph, store, output, names, stations, step):
 @_method_options
 def run(store, output, names, step, no_stations, quiet, ridge_passes, prune, root):
     """The batch product for one case: graph.thalweg.json.gz, branches.parquet, stations.parquet,
-    summary.json and qc.json in OUTPUT."""
+    summary.json and qc.json in OUTPUT.
+
+    With a lung_vessels store it also gives: a lobe per branch, airway wall measures and Pi10,
+    bronchoarterial pairing, an artery/vein plausibility check, the radius interval per point and
+    whole-tree statistics. `thalweg centerlines` alone writes none of those."""
     from pathlib import Path
     from .case import Case
     from .measure import write_table

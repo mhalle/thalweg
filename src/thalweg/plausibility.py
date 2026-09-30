@@ -12,7 +12,7 @@ heart as information, and calls the pair ``plausible`` when
 
 A model that swapped arteries and veins, or a tree traced from the wrong piece, fails these; the
 reasons say which. (A first version tested the veins' root against the class: the root lies
-30-36 mm past it, inside the atrium, so that test failed on every correct case.)
+27-36 mm past it, inside the atrium, so that test failed on every correct case.)
 """
 from __future__ import annotations
 

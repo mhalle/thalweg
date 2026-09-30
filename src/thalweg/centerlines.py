@@ -5,6 +5,10 @@
 nodes (root, junctions, tips; a tip where the structure runs off the field's grid is marked
 ``truncated``), one edge per segment between nodes, and the shared point table. :func:`combine`
 puts several structures' graphs into one document.
+
+:func:`inlet` and :func:`reroot` root the tree at its inlet (the default; the tracer's own root is
+its deepest point), :func:`radius_interval` adds the model's +-2-logit radius bounds as point
+columns, and :func:`check_source` refuses a field the graph was not traced from.
 """
 from __future__ import annotations
 

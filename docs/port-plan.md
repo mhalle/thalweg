@@ -6,7 +6,7 @@ results), `deliverables.md` and CLAUDE.md "Next". This file is the working list 
 
 ## Status words
 
-Updated 2026-09-30 for the port (branch `port`); the module that holds each item is named.
+Updated 2026-09-30 (on `main`); the module that holds each item is named.
 
 - **ported**: a numpy port in `thalweg.vmtk` reproduces vmtk's filter on the phantom and case
   oracles (integers exact, floats within 1e-9; defects fixed by default, `vmtk_*` flags
@@ -71,7 +71,7 @@ tiers, ported after phase 5.
 | `vmtkcenterlinegeometry` | Curvature, torsion, Frenet frame, tortuosity (`vmtk.geometry`); thalweg's own spline geometry in `kernel.geometry` | ported | 2 |
 | `vmtkbranchgeometry` | Per-branch length, curvature, torsion, tortuosity (`vmtk.branch_geometry`); thalweg's per-branch table in `measure` | ported | 2 |
 | `vmtkcenterlinesections`, `vmtkbranchsections` | Normal-plane sections sampled from the field, sub-voxel contours, area ± the model's interval, Feret widths, aspect ratio (`kernel.sections`, `measure`; pixel areas equal `straighten.py`'s). No vmtk oracle (vmtk's needs the clipped surface) | done | 2 |
-| `vmtksurfacethickness` | Wall thickness between labeled lumen and wall (airways; the model labels the airway wall) | todo | 2 |
+| `vmtksurfacethickness` | Wall area, WA%, thickness and Pi10 between the labeled lumen and wall (`measure`, `case`; airways) | done | 2 |
 | `vmtksurfacecurvature` | Level-set mean curvature by a quadric fit (`curvature.py`): 1.02–1.04 × truth on phantoms, 6× vmtk's repeatability | native | T3 |
 
 ### Mapping and modeling
@@ -106,15 +106,17 @@ tiers, ported after phase 5.
 
 These are carried in the data model from phase 1, not bolted on afterwards:
 
-- **Names.** Classes come from the model, and edges carry their lobe and generation.
+- **Names.** Classes come from the model; points carry their lobe, and the branch table gives
+  each edge's lobe and generation.
 - **Field topology.** Connectivity is decided by the interpolant, loops by the genus of the zero
   set, and artery–vein contacts stay separate.
 - **Intervals.** Radius and area carry the model's own ± interval.
 - **Provenance per edge:** field-connected or bridged.
 - **Whole trees with no seeds.**
 
-Later ("nice" in CLAUDE.md): tree statistics (OSMnx panel, Strahler/Horton, Murray,
-small-vessel fraction) and territories (`explorations/catchments`).
+Built since: lobes per branch (`lobes`, from the store's crop stage), Horton ratios, small-vessel
+volume fraction and orientation entropy (`statistics`), the per-point radius interval. Later:
+Murray's exponent, fractal dimension, the OSMnx panel, territories (`explorations/catchments`).
 
 ## Tubes, not only vessels: requirements on the data model
 
@@ -157,7 +159,7 @@ them after the vessel code exists would be a rewrite.
 ## Structure-specific analyses (a tier after phase 2)
 
 These are built on phase 2's sections and geometry. Suggested order: airways (same store as the
-vessels, pairing half built), then the aorta (the most-used clinical measurement), then the GI
+vessels; walls and pairing are built: `measure`, `pairing`), then the aorta (the most-used clinical measurement), then the GI
 tract (the hardest lumen).
 
 **Any tube**
@@ -174,8 +176,8 @@ tract (the hardest lumen).
 - Lengths between landmarks and landing-zone diameters, for stent-graft planning.
 
 **Airways**
-- Wall thickness and wall-area % by generation, and Pi10.
-- Airway-to-artery ratio at paired branches (the pairing exists in `explorations/catchments`).
+- Wall thickness and wall-area % by generation, and Pi10: done (`measure`, `case`).
+- Bronchus-to-artery ratio at paired branches: done (`pairing`, `bronchus_to_artery_ratio`).
 - Total airway count, and tapering along a path (bronchiectasis).
 - Anatomical branch naming (segment naming exists in `explorations/catchments`).
 
@@ -188,7 +190,8 @@ tract (the hardest lumen).
 - Prone/supine correspondence by arc length along the named tube.
 
 **Trees**
-- Strahler/Horton order, Murray's exponent, fractal dimension, small-vessel volume fraction.
+- Strahler/Horton order and small-vessel volume fraction: done (`measure`, `statistics`).
+  Murray's exponent and fractal dimension: not yet.
 - Territories per branch, as rankfields (`explorations/catchments`). The liver's Couinaud
   segments follow from the portal venous tree the same way lung segments follow from the
   bronchi.
@@ -209,7 +212,7 @@ tract (the hardest lumen).
 - Layout: a kernel layer (numpy, torch optional, no tasks or files) and a pipeline layer
   (graph, naming, IO, provenance). A layering test enforces the split, as in haversack.
 - Geometry: rankfield's `Geometry` (origin + one direction row per array axis, LPS mm; the
-  vocabulary of the store and of `research/_field.Grid`). labelfield's `Grid` is axis-aligned
+  vocabulary of the store and of `research/vessels/_field.py`'s `Grid`). labelfield's `Grid` is axis-aligned
   (no direction cosines), so it does not fit oriented CT grids; decided 2026-09-30.
 - The CLI uses click, like haversack.
 - vmtk is only a test oracle, run in its isolated `uv run --with vmtk` env.
@@ -255,9 +258,11 @@ esophagus, both in `total`), which is the real test of the general data model.
 
 ```
 thalweg structures STORE
-thalweg centerlines STORE -s lung_arteries [-s ...] -o arteries.thalweg.json.gz [--ridge-passes N (default 4)] [--prune wall]
-thalweg table arteries.thalweg.json.gz STORE -o branches.parquet [--stations stations.parquet]
-thalweg run STORE -o OUT/                      # graph, branches, stations, summary.json, qc.json
+thalweg centerlines STORE -s lung_arteries [-s ...] -o arteries.thalweg.json.gz [--part N] [--graph field|voxel]
+                    [--ridge-passes N (default 4)] [--prune length|wall] [--root inlet|deepest]
+thalweg table arteries.thalweg.json.gz STORE -o branches.parquet [--stations stations.parquet] [-s NAME] [--step MM]
+thalweg run STORE -o OUT/ [-s NAME ...] [--step MM] [--no-stations] [--ridge-passes N] [--prune ...] [--root ...]
+                                               # graph, branches, stations, summary.json, qc.json
 thalweg export arteries.thalweg.json.gz STORE -s lung_arteries [--mesh M.vtp [--cap-kinds ...] [--refine N]] [--vmtk-centerlines C.vtp [--vmtk-exact]] [--swc T.swc] [--markups M.mrk.json]
 thalweg summary arteries.thalweg.json.gz
 thalweg schema [-o FILE]
