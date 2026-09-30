@@ -122,6 +122,16 @@ class FieldStore:
         vol = [abs(np.linalg.det(np.asarray(self.geometry(s.part).directions, float))) for s in cands]
         return cands[int(np.argmin(vol))]
 
+    def ref_by_name_or_value(self, name: str, value: int) -> StructureRef:
+        """A crop-stage class by name, or - in stores emitted before haversack 0.13, whose crop stage
+        is named ``label_<value>`` - by its TotalSegmentator value. Raises ThalwegError if neither."""
+        if any(s.name == name for s in self.structures):
+            return self.ref(name)
+        cand = [s for s in self.structures if s.name == f"label_{value}" and s.label_value == value]
+        if not cand:
+            raise ThalwegError(f"{self.path.name} has no class {name!r} (nor label_{value})")
+        return cand[0]
+
     def geometry(self, part: int):
         """A part's grid placement, read from its attributes without decoding its planes."""
         return self._rs.array_geometry(self.root[f"parts/{part}"]["ranks"])

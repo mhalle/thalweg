@@ -303,6 +303,24 @@ plausible, and neither has been separated from the other:
 
 As with the walls, compare across cases on one model and grid.
 
+## 5d. Artery/vein plausibility
+
+`qc.json` `artery_vein` (`thalweg.plausibility`): the share of each tree's centerline inside the
+crop stage's `pulmonary_vein` class.
+
+| Case | Arteries inside | Veins inside | Plausible | The same trees, names swapped |
+|---|---|---|---|---|
+| C3N-00704 0.625 (misnamed crop classes, found by value) | 0.0 % | 5.6 % | yes | fails |
+| C3N-00704 3.75 | 0.0 % | 7.2 % | yes | fails |
+| MSB-02664 0.625 | 0.0 % | 7.4 % | yes | fails |
+| MSB-02664 5 mm | 0.0 % | 13.4 % | yes | fails |
+
+A first version tested the veins' root against the class and failed every correct case: the
+model's veins run on past the vein trunks into the left atrium, so the root lies 30–36 mm beyond
+the class, inside `heart`. The length share separates the trees on all four, thick slices
+included. Four cases from two patients is thin evidence for the thresholds (veins ≥ 1 %,
+arteries ≤ 2 %).
+
 ## 6. Not yet validated
 
 - **Thin-caliber ground truth.** The ~1 mm radius floor belongs to the model; checking the

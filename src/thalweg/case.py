@@ -19,6 +19,8 @@ QC reports what a reader of the numbers must know before trusting them:
   class in contact - is not in the graph; this says how many there are;
 - per case, ``lobes``: how the lobe classes were found (``named_by``: by name, or by value in a
   store that predates haversack's naming fix), or why there are none;
+- per case, ``artery_vein``: whether the arteries and veins are plausibly what they are called
+  (:mod:`thalweg.plausibility`: the veins, not the arteries, run through the pulmonary vein class);
 - per case, ``acquisition``: the source image's spacing (from the part's frame record) and
   ``coarse_slices`` when its largest spacing exceeds 3 mm - at 3.75-5 mm slices the model drops
   thin vessels rather than widening them, so thin-order statistics are invalid there
@@ -35,6 +37,7 @@ import numpy as np
 from . import __version__
 from .centerlines import centerline_graph, combine
 from . import lobes as lobes_mod
+from . import plausibility
 from .errors import ThalwegError
 from .graph import TubeGraph
 from .kernel.field import sample
@@ -247,5 +250,6 @@ class Case:
                   acquisition=acquisition,
                   lobes=(dict(named_by=lobes.named_by, part=lobes.part) if lobes is not None
                          else dict(named_by=None, reason=self.lobe_error)),
+                  artery_vein=plausibility.check(g, self.store),
                   structures=self.qc(g), timings_s=dict(self.timings))
         return dict(graph=g, rows=rows, stations=prof, summary=summary, qc=qc)
