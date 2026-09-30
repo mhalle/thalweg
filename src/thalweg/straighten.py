@@ -43,7 +43,10 @@ def straighten(volume: np.ndarray, geometry, points, radius, step: float = 0.5,
     radius = np.asarray(radius, float)
     if len(points) < 4:
         raise ThalwegError(f"a path of {len(points)} points is too short to straighten")
-    st = S.stations(points, np.where(radius > 0, radius, 0.5), step=step)
+    try:
+        st = S.stations(points, np.where(radius > 0, radius, 0.5), step=step)
+    except ValueError as e:
+        raise ThalwegError(f"the path cannot be straightened: {e}") from e
     half = S.half_width(float(np.max(st.radius))) if half_width is None else float(half_width)
     g = np.arange(-half, half + 1e-9, pixel)
     U, V = np.meshgrid(g, g, indexing="ij")

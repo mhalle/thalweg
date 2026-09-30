@@ -89,3 +89,34 @@ def test_path_to_a_node():
         path_to(g, "y", st.roots[0])
     view = straighten(m, geo, P, R, step=1.0)
     assert (view.image[2:-2, len(view.coords) // 2, len(view.coords) // 2] > 0).all()
+
+
+def test_too_few_unclipped_samples_give_no_curvature():
+    """Only five samples within reach are below the clip: no fit (NaN), not a guess."""
+    geo = Geometry(shape=(20, 20, 20), directions=((0.7, 0, 0), (0, 0.7, 0), (0, 0, 0.7)), origin=(0.0, 0, 0))
+    m = np.full((20, 20, 20), -8.0, np.float32)
+    m[10, 10, 8:13] = np.linspace(-1, 1, 5)
+    assert np.isnan(mean_curvature(m, geo, [[7.0, 7.0, 7.0]])[0])
+
+
+def test_straightened_axes_follow_the_frames_and_the_window():
+    """A volume equal to world x: each section is the plane x = c_x + u n1_x + v n2_x exactly (axis
+    0 along n1, axis 1 along n2); outside the grid it reads cval; the default window is 1.6 x the
+    largest radius + 2 mm."""
+    shape = (40, 40, 40)
+    geo = Geometry(shape=shape, directions=((0.5, 0, 0), (0, 0.5, 0), (0, 0, 0.5)), origin=(0.0, 0, 0))
+    x = (np.arange(40) * 0.5)[:, None, None] * np.ones(shape)
+    t = np.linspace(0, 1, 60)
+    path = np.stack([8 + 4 * t, 10 + 2 * np.sin(2 * t), 3 + 12 * t], 1)
+    radius = np.linspace(1.0, 2.5, 60)
+    s = straighten(x.astype(np.float32), geo, path, radius, step=2.0, cval=-99.0)
+    assert s.coords[-1] == pytest.approx(1.6 * s.radius_mm.max() + 2.0, abs=0.101)
+    U, V = np.meshgrid(s.coords, s.coords, indexing="ij")
+    for i in range(1, len(s.arc_length_mm) - 1):
+        want = s.centers[i, 0] + U * s.n1[i, 0] + V * s.n2[i, 0]
+        inside = (want > 0.3) & (want < 19.2)
+        assert np.allclose(s.image[i][inside], want[inside], atol=1e-4)
+    far = straighten(x.astype(np.float32), geo, path + [30.0, 0, 0], radius, step=2.0, cval=-99.0)
+    assert (far.image == -99.0).all()
+    with pytest.raises(Exception, match="cannot be straightened"):
+        straighten(x, geo, np.zeros((10, 3)), np.ones(10))

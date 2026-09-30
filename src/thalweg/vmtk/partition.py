@@ -112,9 +112,11 @@ def distance_to_centerlines(x, cl: Centerlines, use_radius: bool = False, radius
                             segments: TubeSegments | None = None):
     """vtkvmtkPolyDataDistanceToCenterlines (``vmtkdistancetocenterlines``, defaults): per point,
     the distance to the nearest centerline point - the polyball search over every cell, with
-    ``UseRadiusInformation`` off by default (plain Euclidean) - and that point's interpolated
-    radius. With ``use_radius`` the search is the tube function's (the nearest point in the
-    Minkowski sense). Returns ``(distance, center, center_radius)``. ``pairs``: evaluate only those
+    ``UseRadiusInformation`` off by default (plain Euclidean). With ``use_radius`` the search is
+    the tube function's (the nearest point in the Minkowski sense). Returns
+    ``(distance, center, center_radius)``. ``center_radius`` is the centerline radius interpolated
+    at ``center``; vmtk reports a radius only with radius information on (off, its polyball's
+    radii are zero), so with ``use_radius=False`` it is thalweg's addition. ``pairs``: evaluate only those
     (point, segment) pairs (see :func:`lowest_label`); ``segments``: the segment table, if already
     built (``tube_segments(cl, radius if use_radius else None)``)."""
     seg = segments if segments is not None else tube_segments(cl, radius if use_radius else None)

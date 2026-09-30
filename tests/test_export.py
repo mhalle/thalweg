@@ -683,3 +683,60 @@ def test_a_ring_with_crowded_vertices_does_not_drag_thin_triangles_along_the_tub
     quality = 2 * np.sqrt(3) * np.linalg.norm(np.cross(u, v), axis=1) / ((u * u) + (v * v) + (w * w)).sum(1)
     round_part = tri.mean(1)[:, 2] - 6.0 > e["transition"] * e["length_mm"]
     assert round_part.sum() > 1000 and quality[round_part].min() > 0.5
+
+
+def _c_ring(outer=3.0, inner=2.6, gap_deg=60.0, n=40):
+    """A C-shaped section (an annulus with a gap), counterclockwise: its barycenter is outside it."""
+    half = np.radians(gap_deg) / 2
+    t = np.linspace(half, 2 * np.pi - half, n)
+    return np.concatenate([np.c_[outer * np.cos(t), outer * np.sin(t)],
+                           np.c_[inner * np.cos(t[::-1]), inner * np.sin(t[::-1])]])
+
+
+@pytest.mark.parametrize("gap", [60.0, 10.0])
+def test_a_ring_the_blend_would_cross_is_extruded_unchanged(gap):
+    """A thin C (and a hook, 350 degrees round): blending it toward a circle passes some layers
+    through themselves, so the extension is a straight prism of the ring, ending in the ring's own
+    shape, every layer a simple polygon; the sidecar says so."""
+    from thalweg.export import _simple, flow_extensions
+    mesh = _prism(_c_ring(gap_deg=gap), center=(-2.8, 0.0))              # the fan from inside the C
+    ext = flow_extensions(mesh)
+    _good(ext)
+    e = ext.extensions[1]
+    assert e["end_shape"] == "ring"
+    a, z = e["vertices"]
+    m = len(cap_ring_of(mesh))
+    layers = ext.vertices[a:z].reshape(-1, m, 3)
+    ring = mesh.vertices[cap_ring_of(mesh)]
+    assert np.allclose(layers[..., :2], ring[None, :, :2])              # a straight prism
+    assert all(_simple(q[:, :2]) for q in layers)
+    assert (_normals(ext, 1)[:, 2] > 0).all() and len(np.unique(ext.faces[ext.boundary == 1])) == m
+    assert boundaries(ext)["boundaries"][1]["extension_end_shape"] == "ring"
+
+
+def test_simple_polygon_test():
+    from thalweg.export import _simple
+    square = np.array([[0.0, 0], [1, 0], [1, 1], [0, 1]])
+    bowtie = np.array([[0.0, 0], [1, 1], [1, 0], [0, 1]])
+    assert _simple(square) and not _simple(bowtie) and _simple(_c_ring())
+    touching = np.array([[0.0, 0], [2, 0], [2, 2], [1, 0], [0, 2]])            # a vertex on an edge
+    assert not _simple(touching)
+
+
+def test_the_circle_is_turned_to_meet_the_ring():
+    """A square ring with its vertices started at an arbitrary corner: every vertex's angle on the
+    final circle is within one vertex spacing of its angle on the ring - the circle is turned to
+    the ring, not started at an arbitrary angle."""
+    from thalweg.export import flow_extensions
+    ring = np.roll(_outline([(-2, -2), (2, -2), (2, 2), (-2, 2)], 6), 7, axis=0)
+    mesh = _prism(ring)
+    ext = flow_extensions(mesh)
+    e = ext.extensions[1]
+    a, z = e["vertices"]
+    m = len(ring)
+    last = ext.vertices[z - 1 - m:z - 1, :2]
+    order = cap_ring_of(mesh)
+    start = np.arctan2(*mesh.vertices[order][:, [1, 0]].T)
+    end = np.arctan2(last[:, 1], last[:, 0])
+    gap = np.abs(np.angle(np.exp(1j * (end - start))))
+    assert gap.max() < 2 * np.pi / m + 0.2

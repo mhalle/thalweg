@@ -84,8 +84,8 @@ def _sphere_union(lines, h=0.35, pad=3.0):
 def test_field_sections_match_vmtks_surface_sections(phantom, phantom_oracle):
     """The same field vmtk meshed and clipped: section areas within 0.3 %, calipers within 0.03 mm,
     except where the plane also crosses a neighboring branch - vmtk cuts only its own group's
-    surface (an open polygon), the field's contour takes in the neighbor, and both say the section
-    is not closed."""
+    surface (an open polygon), the field's contour would take in the neighbor, and both say the
+    section is not closed (and ours reports no size for it)."""
     E, sections = phantom
     f, geo = _sphere_union(Centerlines.from_npz(phantom_oracle["input"]))
     for n in (1, 2):
@@ -94,11 +94,44 @@ def test_field_sections_match_vmtks_surface_sections(phantom, phantom_oracle):
         assert len(rows) == len(z["cd__BifurcationSectionArea"])
         for k, row in enumerate(rows):
             assert row["distance_spheres"] == n and row["orientation"] in ("upstream", "downstream")
-            assert row["area_low_mm2"] < row["area_mm2"] < row["area_high_mm2"]
             if not row["closed"]:
-                assert z["cd__BifurcationSectionClosed"][k] == 0
+                assert z["cd__BifurcationSectionClosed"][k] == 0 and row["area_mm2"] is None
                 continue
+            assert row["area_low_mm2"] < row["area_mm2"] < row["area_high_mm2"]
             assert row["area_mm2"] == pytest.approx(z["cd__BifurcationSectionArea"][k], rel=3e-3)
             assert row["min_size_mm"] == pytest.approx(z["cd__BifurcationSectionMinSize"][k], abs=0.03)
             assert row["max_size_mm"] == pytest.approx(z["cd__BifurcationSectionMaxSize"][k], abs=0.03)
         assert sum(r["closed"] for r in rows) >= 9
+
+
+def test_a_walk_that_leaves_the_group_gives_no_section(phantom):
+    """Fifty spheres from a bifurcation is farther than most groups reach: those sections are
+    skipped, not placed at a bogus point."""
+    E, _ = phantom
+    one = bifurcation_section_planes(E, 1)
+    far = bifurcation_section_planes(E, 50)
+    assert len(far) < len(one) and all(np.isfinite(p["point"]).all() for p in far)
+
+
+def test_sections_of_the_y_phantom_from_its_graph():
+    """vmtk's branching of the Y phantom's graph, sections cut from its field: the trunk's is about
+    pi 3^2, each daughter's pi r^2 for its radius, all closed and nearly round."""
+    from thalweg.branching import vmtk_branching
+    from thalweg.centerlines import graph_from_tree
+    from thalweg.graph import Points, Source, TubeGraph
+    from thalweg.kernel import medial
+    from phantoms import tube_field, y_tree
+    m, geo = tube_field(*y_tree())
+    T = medial.trace(m, geo)
+    nodes, edges, pos, rad, st = graph_from_tree(T, "y", m, geo, Source(), {"connectivity": "field"})
+    g = TubeGraph(structures=[st], nodes=nodes, edges=edges, points=Points(position=pos, radius=rad))
+    rows = bifurcation_sections(vmtk_branching(g, "y", step=0.3), m, geo)
+    assert len(rows) == 3 and [r["orientation"] for r in rows].count("upstream") == 1
+    areas = sorted(r["area_mm2"] for r in rows)
+    want = sorted(np.pi * np.array([3.0, 2.2, 1.8]) ** 2)
+    assert all(r["closed"] and r["shape"] > 0.9 for r in rows)
+    assert np.allclose(areas, want, rtol=0.08)
+    for r in rows:
+        normal = np.array([r["normal_x"], r["normal_y"], r["normal_z"]])
+        assert abs(np.linalg.norm(normal) - 1) < 1e-9
+        assert r["min_size_mm"] <= r["max_size_mm"] and r["area_low_mm2"] < r["area_mm2"] < r["area_high_mm2"]

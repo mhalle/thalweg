@@ -256,3 +256,24 @@ def test_distance_to_centerlines_is_vmtks(vessels_data):
     some = slice(None, None, 5)
     d, c, r = distance_to_centerlines(M["surf_points"][some], cl)
     assert np.abs(d - M["surf_dist"][some]).max() < 1e-9 and (r > 0).all()
+
+
+def test_distance_with_and_without_radius_on_a_tapering_tube():
+    """A tube whose radius grows from 1 to 5 mm along 40 mm: the Euclidean nearest point of a point
+    beside the axis is straight across, with the radius there; the tube function's nearest point is
+    shifted toward the wide end, so its distance is larger."""
+    from thalweg.graph import Edge, Node, Provenance, Structure
+    from thalweg.partition import distance_to_centerlines
+    z = np.linspace(0, 40, 41)
+    pos = [(0.0, 0.0, float(v)) for v in z]
+    g = TubeGraph(structures=[Structure(name="t", roots=[0], method="test")],
+                  nodes=[Node(id=0, kind="root", position=pos[0], structure="t"),
+                         Node(id=1, kind="tip", position=pos[-1], structure="t")],
+                  edges=[Edge(id=0, structure="t", start_node=0, end_node=1, point_range=(0, 41),
+                              length_mm=40.0, provenance=Provenance(method="field"))],
+                  points=Points(position=pos, radius=list(1.0 + z / 10.0)))
+    x = np.array([[4.0, 0.0, 20.0]])
+    d, r = distance_to_centerlines(x, g, "t")
+    assert d[0] == pytest.approx(4.0) and r[0] == pytest.approx(3.0)
+    d2, r2 = distance_to_centerlines(x, g, "t", use_radius=True)
+    assert d2[0] > 4.01 and r2[0] > 3.0

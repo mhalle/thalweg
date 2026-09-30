@@ -65,6 +65,8 @@ def bifurcation_section_planes(cl: Centerlines, number_of_distance_spheres: int 
                 r_sum += w * r
             if not any_point:
                 continue
+            if not w_sum > 0:                   # every touching radius zero: vmtk divides by 0
+                continue
             point = p_sum / w_sum
             normal = t_sum / w_sum
             normal = normal / np.linalg.norm(normal)
@@ -75,13 +77,16 @@ def bifurcation_section_planes(cl: Centerlines, number_of_distance_spheres: int 
 
 def section_area(polygon, normal) -> float:
     """The area of a planar polygon (k, 3) with the given unit normal (vmtk ear-cuts it and sums
-    the triangles; for a simple polygon that is this)."""
+    the triangles; for a simple planar polygon that is this - a self-intersecting or non-planar
+    one gives something else in each, and a contour of the field is neither)."""
     P = np.asarray(polygon, float)
     return float(abs(np.cross(P, np.roll(P, -1, axis=0)).sum(0) @ np.asarray(normal, float)) / 2.0)
 
 
 def _intersect(a, b, c, d):
-    """vtkLine::Intersection in the plane of the four points: (hit, u) for segment a-b against c-d."""
+    """Segment a-b against segment c-d for coplanar segments: (hit, u along a-b). vtkLine::Intersection
+    also rejects skew pairs by a tolerance and reports collinear ones apart; for the coplanar,
+    non-collinear edges of a section contour the two agree (checked against VTK)."""
     u_dir, v_dir, w = b - a, d - c, a - c
     A = np.array([[u_dir @ u_dir, -(u_dir @ v_dir)], [-(u_dir @ v_dir), v_dir @ v_dir]])
     rhs = np.array([-(u_dir @ w), v_dir @ w])

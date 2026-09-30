@@ -230,9 +230,9 @@ def bifurcation_sections(b: Branching, margin: np.ndarray, geometry, number_of_d
     - ``area_mm2`` (level 0), ``area_low_mm2`` / ``area_high_mm2`` (+2 / -2 logits);
     - vmtk's measures of the contour: ``min_size_mm``, ``max_size_mm``, ``shape``;
     - ``equivalent_diameter_mm``, ``min_feret_mm``, ``max_feret_mm``, ``aspect_ratio``;
-    - ``closed``: the contour closes inside the section window (a section that runs into the
-      neighboring branch does not). A plane whose point lies outside the structure has area 0 and
-      no shape."""
+    - ``closed``: the contour closes inside the section window. A section that runs into the
+      neighboring branch does not, and neither does a plane whose point lies outside the structure
+      (vmtk emits no row for that); their sizes would measure the window, so they are all None."""
     from .vmtk.sections import bifurcation_section_planes, section_shape
     flags = dict(vmtk_interp=vmtk_compatible, vmtk_steps=vmtk_compatible)
     rows = []
@@ -253,9 +253,13 @@ def bifurcation_sections(b: Branching, margin: np.ndarray, geometry, number_of_d
                    min_size_mm=None, max_size_mm=None, shape=None,
                    equivalent_diameter_mm=d["equivalent_diameter"], min_feret_mm=d["min_feret"],
                    max_feret_mm=d["max_feret"], aspect_ratio=d["aspect_ratio"], closed=bool(d["closed"]))
-        if d["contour"] is not None:
+        if d["contour"] is not None and d["closed"]:
             xy = d["contour"][:-1] if np.allclose(d["contour"][0], d["contour"][-1]) else d["contour"]
             poly = pl["point"] + xy[:, :1] * n1 + xy[:, 1:2] * n2
             row["min_size_mm"], row["max_size_mm"], row["shape"] = section_shape(poly, pl["point"])
+        else:                                   # runs into a neighbor, or the point is outside: its size
+            for key in ("area_mm2", "area_low_mm2", "area_high_mm2", "equivalent_diameter_mm",  # is the
+                        "min_feret_mm", "max_feret_mm", "aspect_ratio"):                     # window's
+                row[key] = None
         rows.append(row)
     return rows

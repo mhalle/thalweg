@@ -12,6 +12,11 @@ curvature low. :func:`mean_curvature` instead fits a quadric to the lattice samp
 takes the curvature of the fitted quadric's level set at the point
 (research/vessels/curvature.py: 1.02-1.04 x the truth on oblique tube and sphere phantoms, and
 about six times less spread than vmtk's mesh curvature across reconstructions of one scan).
+
+The fit smooths over its 2.8 mm window: where the curvature changes within it - a saddle, a
+bifurcation's crotch - it reads the window's average (the inner equator of a torus of radii 3 and
+2, H = -0.25, reads -0.09). ``clip`` must be the store's own clip value: samples at it are left
+out, and a wrong value lets plateau samples into the fit.
 """
 from __future__ import annotations
 

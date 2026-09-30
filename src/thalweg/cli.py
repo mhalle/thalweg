@@ -331,7 +331,7 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
         if curvature:
             from .kernel.curvature import mean_curvature
             h = np.full(len(msh.vertices), np.nan)
-            h[~tube] = mean_curvature(m, geo, msh.vertices[~tube])
+            h[~tube] = mean_curvature(m, geo, msh.vertices[~tube], clip=open_store(store).clip(s.source.part))
             msh.point_data["MeanCurvature"] = h                 # the extensions are not the field's surface
         if with_distance:
             from .partition import distance_to_centerlines

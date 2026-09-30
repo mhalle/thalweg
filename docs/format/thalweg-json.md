@@ -243,8 +243,9 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
   `orientation` (`upstream`: the parent; `downstream`: a daughter), `distance_spheres`,
   `point_{x,y,z}_mm`, `normal_{x,y,z}`, `area_mm2` with `area_low_mm2` / `area_high_mm2`,
   vmtk's `min_size_mm`, `max_size_mm` and `shape`, `equivalent_diameter_mm`, `min_feret_mm`,
-  `max_feret_mm`, `aspect_ratio`, and `closed` (a section that also crosses a neighboring branch
-  is not closed, and its area includes the neighbor). `--vmtk-exact` places the sections with
+  `max_feret_mm`, `aspect_ratio`, and `closed`. A section that also crosses a neighboring branch,
+  or whose point lies outside the structure, is not closed and has no sizes (null): they would
+  measure the section window. `--vmtk-exact` places the sections with
   vmtk's defects.
 - **Wall maps** (`thalweg export … --wall-maps W.npz [--wall-map-step MM]`): per edge at least
   3 mm long with at least 4 samples, the wall's distance from the centerline at every station and angle, ray-cast from
@@ -293,7 +294,9 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
         `node`, `edge` and `inscribed_radius_mm` still describe the cut. The cap also has
         `"cut_center"` (where the centerline crossed the cut), `"extension_start_barycenter"`
         (the cut ring's barycenter, which the extension's axis starts from),
-        `"extension_length_mm"`, `"extension_radius_mm"`, `"extension_transition"`, and
+        `"extension_length_mm"`, `"extension_radius_mm"`, `"extension_transition"`,
+        `"extension_end_shape"` (`circle`, or `ring` where the cap was extruded unchanged because
+        a blend toward the circle would have passed through itself), and
         `"extension_vertices_inside_structure"` (tube vertices that lie inside the structure
         past the stub the extension grew from: above 0, it has run into a branch);
     - `skipped`: `[{"name", "cap_kind", "node", "reason"}]`, every requested end that got no cap, and

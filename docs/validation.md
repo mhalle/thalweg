@@ -498,12 +498,19 @@ The C3N-00704 subtree, opened at the nine cuts vmtk was given (an inlet and eigh
   of the tube's faces inward, and the manifold check passed it); one of the 436 artery caps was
   such a ring.
 - **No thin triangles along the tubes.** Over the transition the vertices also slide round the
-  circle to even spacing (both spacings increase round the ring, so every blend does too and
-  nothing folds). Before this a ring with a very short edge carried a strip of thin triangles the
+  circle to even spacing (both spacings increase round the ring, so the circle's points stay in
+  order). Before this a ring with a very short edge carried a strip of thin triangles the
   whole length of its tube: faces under 1e-5 mm², 43 on the C3N-00704 airways and 234 on the
   arteries, now none. Poorly shaped faces (quality under 0.1) remain only in the first 15 % of
   a tube, next to the ring whose own edges are that short: 73 of 90,358 new faces on the airways,
   766 of 544,228 on the arteries; the straight parts are clean (median quality 0.87).
+- **Rings the blend would pass through.** Keeping the circle's points in order does not keep
+  every intermediate layer a simple polygon: for a ring whose barycenter lies outside it (a thin C,
+  a hook) some layers cross themselves - 27 and 38 of 100 blend steps on the round-7 review's
+  test rings - with every triangle still facing out, so the manifold check does not see it.
+  Every layer is now tested; where one is not simple, the cap is extruded unchanged (a straight
+  prism of its own section, `extension_end_shape` `ring`). None of the 545 caps of the C3N-00704
+  airways and arteries needed it.
 - **The mesh stays closed and manifold**, and its volume grows by the tubes' (π R² L per cap,
   within 3 % on the Y phantom).
 - **Collisions.** An extension is straight and knows nothing of its surroundings.
@@ -535,8 +542,9 @@ from a field that thalweg's test rebuilds exactly (a union of spheres along the 
 - **Cut from the field instead of the surface**, on the same field: areas within 0.3 % and
   calipers within 0.03 mm on every closed section. At one sphere, one section's plane also
   crosses a neighboring daughter at the trifurcation: vmtk cuts only its own group's surface and
-  returns an open polygon, the field's contour takes in the neighbor (82 % more area), and both
-  flag it as not closed. Read `closed` before using an area.
+  returns an open polygon, the field's contour would take in the neighbor (82 % more area), and
+  both flag it as not closed. A section that is not closed (or whose point lies outside the
+  structure) gets no sizes: they would measure the section window.
 - **Whole trees** (`thalweg export --bifurcation-sections`), C3N-00704: airways 366 sections, 309
   closed, 18 s; arteries 1,302 sections, 1,172 closed, 70 s (mostly vmtk's branch extraction on
   the whole tree). Median shape (MinSize / MaxSize) of the closed ones: 0.82 and 0.88.
@@ -547,8 +555,11 @@ from a field that thalweg's test rebuilds exactly (a union of spheres along the 
   within 2.8 mm): on tubes of radius 0.75, 1.5 and 3 mm and spheres of 2 and 4 mm, oblique to an
   anisotropic 0.62–0.7 mm grid, the median over the zero set's vertices is 1.02–1.04 × the truth,
   with the 10th–90th percentiles within 0.99–1.05. A cavity reads negative. On the C3N-00704
-  meshes (`thalweg export --mesh --curvature`) every vertex gets a value; the median is 0.26
-  (airways) and 0.24 (arteries) 1/mm, a tube of about 2 mm radius.
+  meshes (`thalweg export --mesh --curvature`, without flow extensions) every vertex gets a
+  value; the median is 0.26 (airways) and 0.24 (arteries) 1/mm, a tube of about 2 mm radius. The
+  fit averages over its 2.8 mm window, so where the curvature changes within it (a saddle, a
+  bifurcation's crotch) it reads low: the inner equator of a torus of radii 3 and 2 mm (H =
+  −0.25) reads −0.09.
 - **Distance to centerlines** (`vmtkdistancetocenterlines`, its defaults: the Euclidean distance to
   the nearest centerline point): at 5,690 of the 28,449 surface points vmtk mapped on the
   C3N-00704 subtree, from the centerlines vmtk used, ours equals vmtk's to 1e-9 mm (1e-14 in

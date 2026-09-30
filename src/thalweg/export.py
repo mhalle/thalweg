@@ -723,11 +723,17 @@ def flow_extensions(mesh: Mesh, ratio: float = 5.0, transition: float = 0.25, ca
     has no kink where it starts or ends), then runs straight, and ends in a flat cap.
 
     Each ring vertex starts toward the circle point at its own fraction of the ring's length (the
-    circle turned to lie as close to the ring as it can), so the tube does not fold whatever the
-    ring's shape - a ring that is not star-shaped about its barycenter would fold if its vertices
-    were sent out radially. Over the transition the vertices also slide round to even spacing, so
-    by the straight part a ring with a very short edge no longer drags a strip of thin triangles
-    along the tube; they stay only where the wall's own ring has them.
+    circle turned to lie as close to the ring as it can); a ring that is not star-shaped about its
+    barycenter folds if its vertices are sent out radially. Over the transition the vertices also
+    slide round to even spacing, so by the straight part a ring with a very short edge no longer
+    drags a strip of thin triangles along the tube; they stay only where the wall's own ring has
+    them.
+
+    For a ring whose barycenter lies outside it (a C or a hook), no blend toward a circle is
+    guaranteed to stay a simple polygon, and some layers of it would pass through themselves -
+    triangles that keep their orientation, so no manifold check sees it. Every layer is tested;
+    if one is not simple, the cap is extruded unchanged instead (a straight prism of its own
+    section, ``Mesh.extensions[k]["end_shape"]`` ``"ring"`` rather than ``"circle"``).
 
     The tube's faces are wall (``BoundaryId`` 0); the new end cap keeps the cap's id and name.
     ``caps``: the BoundaryIds to extend (default: all). ``Mesh.extensions[k]`` records each one:
@@ -777,10 +783,18 @@ def flow_extensions(mesh: Mesh, ratio: float = 5.0, transition: float = 0.25, ca
         t = np.clip(s / (transition * L), 0.0, 1.0) if transition > 0 else np.ones(n_layers)
         w = t * t * (3.0 - 2.0 * t)                             # smoothstep
         # each layer's circle point: the vertex's own arc-length fraction at the ring, evenly spaced by
-        # the end of the transition; both are increasing, so every blend is too (no fold)
+        # the end of the transition (both increase round the ring, so the circle points stay in order)
         angle = (1.0 - w)[:, None] * phi[None] + w[:, None] * (even + shift)[None] + turn
         circle = b + R * (np.cos(angle)[..., None] * e1 + np.sin(angle)[..., None] * e2)
-        layers = (1.0 - w)[:, None, None] * P[None] + w[:, None, None] * circle + s[:, None, None] * n
+        plane = (1.0 - w)[:, None, None] * P[None] + w[:, None, None] * circle
+        rel = plane - b
+        xy = np.stack([rel @ e1, rel @ e2], axis=2)
+        shape = "circle"
+        if not all(_simple(q) for q, wj in zip(xy, w) if 0.0 < wj < 1.0):
+            # the blend passes through itself (a C- or hook-shaped ring, its barycenter outside it):
+            # extrude the ring unchanged instead - a straight prism of the cap's own section
+            plane, shape = np.broadcast_to(P, (n_layers,) + P.shape), "ring"
+        layers = plane + s[:, None, None] * n
         first = nv
         ids_layer = [ring] + [nv + j * m + np.arange(m) for j in range(n_layers)]
         V.append(layers.reshape(-1, 3))
@@ -791,13 +805,19 @@ def flow_extensions(mesh: Mesh, ratio: float = 5.0, transition: float = 0.25, ca
             F.append(np.concatenate([np.stack([a, a2, c2], 1), np.stack([a, c2, c], 1)]))
             B.append(np.zeros(2 * m, mesh.boundary.dtype))
         end = b + L * n
-        V.append(end[None])
         last = ids_layer[-1]
-        F.append(np.stack([np.full(m, nv), last, np.roll(last, -1)], 1))
-        B.append(np.full(m, k, mesh.boundary.dtype))
-        nv += 1
+        if shape == "circle":
+            V.append(end[None])
+            F.append(np.stack([np.full(m, nv), last, np.roll(last, -1)], 1))
+            B.append(np.full(m, k, mesh.boundary.dtype))
+            nv += 1
+        else:                                                   # the ring's own polygon, ear-clipped
+            rel = P - b
+            tri = np.asarray(_ear_clip(np.stack([rel @ e1, rel @ e2], 1)), np.int64)
+            F.append(last[tri])
+            B.append(np.full(len(tri), k, mesh.boundary.dtype))
         new_caps[k - 1] = replace(mesh.caps[k - 1], center=end)
-        ext[k] = dict(length_mm=float(L), radius_mm=float(R), transition=float(transition),
+        ext[k] = dict(length_mm=float(L), radius_mm=float(R), transition=float(transition), end_shape=shape,
                       ring_barycenter=b, cut_center=np.asarray(mesh.caps[k - 1].center, float),
                       vertices=(first, nv))
     out = Mesh(np.concatenate(V), np.concatenate(F), np.concatenate(B), list(mesh.names), list(mesh.skipped),
@@ -808,6 +828,22 @@ def flow_extensions(mesh: Mesh, ratio: float = 5.0, transition: float = 0.25, ca
             raise ThalwegError("the extended surface is not closed and manifold ("
                                + ", ".join(f"{a} {v}" for a, v in d.items()) + ")")
     return out
+
+
+def _simple(xy: np.ndarray) -> bool:
+    """Whether a closed polygon (k, 2) is simple: no two edges that do not share a vertex cross or
+    touch."""
+    a, b = xy, np.roll(xy, -1, axis=0)
+    k = len(xy)
+    i, j = np.triu_indices(k, 2)
+    keep = ~((i == 0) & (j == k - 1))                             # the closing edge meets the first
+    i, j = i[keep], j[keep]
+
+    def orient(p, q, r):
+        return np.sign((q[:, 0] - p[:, 0]) * (r[:, 1] - p[:, 1]) - (q[:, 1] - p[:, 1]) * (r[:, 0] - p[:, 0]))
+    p1, p2, q1, q2 = a[i], b[i], a[j], b[j]
+    o1, o2, o3, o4 = orient(p1, p2, q1), orient(p1, p2, q2), orient(q1, q2, p1), orient(q1, q2, p2)
+    return not ((o1 * o2 <= 0) & (o3 * o4 <= 0)).any()
 
 
 def extension_collisions(mesh: Mesh, margin: np.ndarray, geometry) -> dict[int, int]:
@@ -866,7 +902,7 @@ def boundaries(mesh: Mesh) -> dict:
             if "vertices_inside_structure" in e:
                 row["extension_vertices_inside_structure"] = e["vertices_inside_structure"]
             row.update(extension_length_mm=round(e["length_mm"], 6),
-                       extension_radius_mm=round(e["radius_mm"], 6),
+                       extension_radius_mm=round(e["radius_mm"], 6), extension_end_shape=e["end_shape"],
                        extension_transition=e["transition"], cut_center=vec(e["cut_center"]),
                        extension_start_barycenter=vec(e["ring_barycenter"]))
         rows.append(row)
