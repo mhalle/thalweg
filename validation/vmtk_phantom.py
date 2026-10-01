@@ -186,8 +186,9 @@ def compare(passes=(1,), tube=False):
     from rankfield.geometry import Geometry
     from thalweg.kernel import medial
     rows = []
+    current = set(phantoms()[0])                          # files of phantoms no longer made are skipped
     for p in sorted(OUT.glob("*.npz")):
-        if p.stem.endswith("_vmtk"):
+        if p.stem.endswith("_vmtk") or p.stem not in current:
             continue
         Z = np.load(p)
         V = np.load(OUT / f"{p.stem}_vmtk.npz")
