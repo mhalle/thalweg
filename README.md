@@ -50,6 +50,8 @@ Also here:
   connectivity and topology, seed-free centerlines, caliber and the model's resolution floor,
   straightened rendering, and vmtk's surface stages reproduced from the field, with a
   stage-by-stage speed comparison).
+- `docs/vmtk-guide.md` - thalweg for vmtk users: every vmtk tool and array mapped to thalweg,
+  the differences explained, and the vmtk port layer for vmtk developers.
 - `docs/vmtk-vs-field-method.md` - the method against vmtk, point by point.
 - `docs/slicerheart-opportunities.md` - where it fits with SlicerHeart.
 - `research/vessels/` - the incubation scripts, copied unchanged from `medseg/bench/vessels/`

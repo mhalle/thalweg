@@ -311,7 +311,8 @@ def _cap_kinds(ctx, param, value):
 @click.option("--curvature", is_flag=True,
               help="With --mesh: the wall's mean curvature from the field, point array MeanCurvature (1/mm).")
 @click.option("--distance-to-centerlines", "with_distance", is_flag=True,
-              help="With --mesh: point arrays DistanceToCenterlines and CenterlineRadius (mm), vmtk's.")
+              help="With --mesh: point arrays DistanceToCenterlines (mm, as vmtk's "
+                   "vmtkdistancetocenterlines computes it) and CenterlineRadius (the traced radius there).")
 @click.option("--flow-extensions", "extension_ratio", type=click.FloatRange(min=0, min_open=True),
               default=None,
               help="With --mesh: replace each cap by a flow extension this many ring radii long "
