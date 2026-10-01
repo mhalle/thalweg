@@ -2,7 +2,7 @@
 
     thalweg structures STORE                              what a store names
     thalweg centerlines STORE -s NAME [-s NAME ...] -o OUT.thalweg.json[.gz]
-                        [--ridge-passes N] [--prune length|wall] [--root inlet|deepest]
+                        [--ridge-passes N] [--prune length|wall] [--recenter] [--root inlet|deepest]
     thalweg table GRAPH STORE -o BRANCHES.parquet [--stations STATIONS.parquet] [-s NAME] [--step MM]
     thalweg run STORE -o DIR [-s NAME ...]                the batch product: graph, tables, summary, QC
     thalweg export GRAPH STORE -s NAME [--mesh M.vtp] [--vmtk-centerlines C.vtp] [--swc T.swc]
@@ -45,6 +45,10 @@ def _method_options(f):
                      help="Spur rule: 'length' (the reference) or 'wall' (also drops terminal branches that "
                           "do not protrude beyond the parent's wall: flat-lumen lobes, and 9-26 % of vessel "
                           "tips).")(f)
+    f = click.option("--recenter", is_flag=True,
+                     help="Move each centerline point to the area centroid of its cross-section (three "
+                          "rounds; points near nodes held). Puts the path on the axis of flattened lumens, "
+                          "where the tracer wanders across the width; use with --prune wall.")(f)
     return f
 
 
@@ -77,7 +81,7 @@ def structures(store):
               help="Connectivity: decided by the field, or the 26-connected labelmap (comparison only).")
 @click.option("-q", "--quiet", is_flag=True, help="No progress messages.")
 @_method_options
-def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, root):
+def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, recenter, root):
     """Trace seed-free centerline trees of STORE's structures into one graph file.
 
     Only the largest connected piece of each structure is traced; the others are listed in the
@@ -98,7 +102,8 @@ def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, r
         for n in names:
             log(f"{n}: decoding and tracing")
             graphs.append(centerline_graph(st, n, part=part, graph=graph, ridge_passes=ridge_passes,
-                                           prune=prune, root=root, log=lambda m, n=n: log(f"{n}: {m}")))
+                                           prune=prune, recenter=recenter, root=root,
+                                           log=lambda m, n=n: log(f"{n}: {m}")))
         g = graphs[0] if len(graphs) == 1 else combine(graphs)
         g.write(output)
     except ThalwegError as e:
@@ -177,7 +182,8 @@ def table(graph, store, output, names, stations, step):
               help="Add each branch's volume (the branch partition of the field; about a third more time).")
 @click.option("-q", "--quiet", is_flag=True, help="No progress messages.")
 @_method_options
-def run(store, output, names, step, no_stations, branch_volumes, quiet, ridge_passes, prune, root):
+def run(store, output, names, step, no_stations, branch_volumes, quiet, ridge_passes, prune, recenter,
+        root):
     """The batch product for one case: graph.thalweg.json.gz, branches.parquet, stations.parquet,
     summary.json and qc.json in OUTPUT.
 
@@ -202,7 +208,7 @@ def run(store, output, names, step, no_stations, branch_volumes, quiet, ridge_pa
         for n in names:
             case.store.ref(n)                                  # every structure exists, before any output
         res = case.run(names, step=step, stations=not no_stations, branch_volumes=branch_volumes, log=log,
-                       ridge_passes=ridge_passes, prune=prune, root=root)
+                       ridge_passes=ridge_passes, prune=prune, recenter=recenter, root=root)
     except ThalwegError as e:
         raise click.ClickException(str(e))
     out.mkdir(parents=True, exist_ok=True)

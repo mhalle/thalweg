@@ -115,23 +115,16 @@ def _feret(xy):
     return fmin, fmax
 
 
-def describe(image: np.ndarray, coords: np.ndarray, level: float = 0.0) -> dict:
-    """Shape of the component holding the center, from its sub-pixel contour at ``level``.
-
-    Returns area, perimeter (mm), equivalent_diameter (diameter of the circle of equal area),
-    min_feret and max_feret (caliper widths, mm), aspect_ratio (minor / major axis of the region's
-    second moments of area, exact b / a for an ellipse; 1 = round, 0.5 = twice as wide as deep - not
-    eccentricity, which reads 0.4 for an 8 % flattening), centroid_offset (mm, from the station), closed
-    (the contour does not reach the window's edge) and contour ((k, 2) in (n1, n2) mm). A center
-    outside the structure gives area 0 and contour None."""
+def center_contour(image: np.ndarray, coords: np.ndarray, level: float = 0.0):
+    """The innermost closed contour at ``level`` around the image's center pixel, as (contour
+    (k, 2) in mm, closed: last point = first; signed area; area centroid), or None if the center
+    is outside. The image is padded with the outside value, so a component reaching the window's
+    edge still yields a closed contour (``describe`` reports whether it did)."""
     from skimage.measure import find_contours
     c = len(image) // 2
-    pixel = float(coords[1] - coords[0])
-    empty = dict(area=0.0, perimeter=0.0, equivalent_diameter=0.0, min_feret=0.0, max_feret=0.0,
-                 aspect_ratio=None, centroid_offset=None, closed=False, contour=None)
     if not image[c, c] > level:
-        return empty
-    # pad with the outside value so a component reaching the edge still yields a closed contour
+        return None
+    pixel = float(coords[1] - coords[0])
     pad = np.pad(image, 1, constant_values=min(float(image.min()), level) - 1.0)
     center = np.array([coords[c], coords[c]])
     best = None
@@ -142,9 +135,27 @@ def describe(image: np.ndarray, coords: np.ndarray, level: float = 0.0) -> dict:
         a, cen = _polygon_area_centroid(xy[:-1])
         if abs(a) > 0 and _inside(xy[:-1], center) and (best is None or abs(a) < abs(best[1])):
             best = (xy, a, cen)                               # the innermost contour around the center
+    return best
+
+
+def describe(image: np.ndarray, coords: np.ndarray, level: float = 0.0) -> dict:
+    """Shape of the component holding the center, from its sub-pixel contour at ``level``.
+
+    Returns area, perimeter (mm), equivalent_diameter (diameter of the circle of equal area),
+    min_feret and max_feret (caliper widths, mm), aspect_ratio (minor / major axis of the region's
+    second moments of area, exact b / a for an ellipse; 1 = round, 0.5 = twice as wide as deep - not
+    eccentricity, which reads 0.4 for an 8 % flattening), centroid_offset (mm, from the station), closed
+    (the contour does not reach the window's edge) and contour ((k, 2) in (n1, n2) mm). A center
+    outside the structure gives area 0 and contour None."""
+    empty = dict(area=0.0, perimeter=0.0, equivalent_diameter=0.0, min_feret=0.0, max_feret=0.0,
+                 aspect_ratio=None, centroid_offset=None, closed=False, contour=None)
+    best = center_contour(image, coords, level)
     if best is None:
         return empty
     xy, a, cen = best
+    c = len(image) // 2
+    center = np.array([coords[c], coords[c]])
+    pixel = float(coords[1] - coords[0])
     area = abs(a)
     seg = np.linalg.norm(np.diff(xy, axis=0), axis=1)
     perimeter = float(seg.sum())

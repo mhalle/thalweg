@@ -152,13 +152,13 @@ def seg_axis(P, segs):
     return best, rad
 
 
-def _main_path(margin, geo, passes, source, target):
+def _main_path(margin, geo, passes, source, target, **options):
     """thalweg's path between the ends nearest the seeds (the one line vmtk computes there), without
-    the side branches, and the tree's tip count."""
+    the side branches, and the tree's tip count. ``options`` go to the tracer (prune, recenter)."""
     from thalweg.centerlines import graph_from_tree
     from thalweg.graph import Points, Source, TubeGraph
     from thalweg.kernel import medial
-    T = medial.trace(margin, geo, ridge_passes=passes)
+    T = medial.trace(margin, geo, ridge_passes=passes, **options)
     nodes, edges, pos, rad, s = graph_from_tree(T, "t", margin, geo, Source(), {})
     g = TubeGraph(structures=[s], nodes=nodes, edges=edges, points=Points(position=pos, radius=rad))
     deg = g.degree()
@@ -180,7 +180,9 @@ def _main_path(margin, geo, passes, source, target):
     return P, R, sum(nd.kind == "tip" for nd in g.nodes)
 
 
-def compare(passes=(1,)):
+def compare(passes=(1,), tube=False):
+    """vmtk against thalweg with each number of ridge passes; ``tube``: thalweg with wall pruning
+    and recentering (the settings for flattened lumens), written to results_tube.json."""
     from rankfield.geometry import Geometry
     from thalweg.kernel import medial
     rows = []
@@ -196,11 +198,12 @@ def compare(passes=(1,)):
         rmax = segs[:, 6].max()
         row = dict(phantom=p.stem, trunk_radius_mm=float(segs[0, 6]))
         methods = [("vmtk", V["points"], V["radius"])]
+        options = dict(prune="wall", recenter=True) if tube else {}
         for n in passes:
-            T = medial.trace(Z["margin"], geo, ridge_passes=n)
+            T = medial.trace(Z["margin"], geo, ridge_passes=n, **options)
             methods.append((f"thalweg{n}", np.concatenate([np.array(s["points"]) for s in T.segments]),
                             np.concatenate([np.array(s["radius"]) for s in T.segments])))
-            P, R, tips = _main_path(Z["margin"], geo, n, Z["source"], Z["targets"][-1])
+            P, R, tips = _main_path(Z["margin"], geo, n, Z["source"], Z["targets"][-1], **options)
             methods.append((f"thalweg{n}_main", P, R))
             row[f"thalweg{n}_tips"] = tips
         for name, P, R in methods:
@@ -216,11 +219,12 @@ def compare(passes=(1,)):
             row[f"{name}_radius_error_mm_median"] = round(float(np.median((R - r_true)[away])), 3)
         rows.append(row)
         print(json.dumps(row))
-    (OUT / "results.json").write_text(json.dumps(rows, indent=1))
+    (OUT / ("results_tube.json" if tube else "results.json")).write_text(json.dumps(rows, indent=1))
 
 
 if __name__ == "__main__":
     if sys.argv[1] == "compare":
-        compare(tuple(int(a) for a in sys.argv[2:]) or (1,))
+        args = [a for a in sys.argv[2:] if a != "--tube"]
+        compare(tuple(int(a) for a in args) or (1,), tube="--tube" in sys.argv[2:])
     else:
         {"prep": prep, "vmtk": run_vmtk}[sys.argv[1]]()

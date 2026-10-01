@@ -28,8 +28,8 @@ Only the largest connected component is traced (the reference's behavior); ``sta
 others so a caller can see what was dropped. A structure too compact to have a branch (a blob no
 wider than its own cover) comes back as its root alone.
 
-Two options depart from the reference (docs/validation.md §5 has the measurements; defaults
-decided 2026-09-30):
+Three options depart from the reference (docs/validation.md §5 has the measurements; defaults
+decided 2026-09-30, ``recenter`` added after):
 
 - ``ridge_passes``: coarse-to-fine ridge refinement (:func:`~thalweg.kernel.field.inscribed_radius`).
   The default is 4, which removes the one-pass refinement's quantization (a radius 0.03-0.07 mm
@@ -41,6 +41,13 @@ decided 2026-09-30):
   field from the parent's axis, clear of the junction. The length rule assumes round lumens: in a
   flattened one the junction's inscribed radius is half the depth, and side lobes across the
   width survive as branches (an elliptic tube of 3 x 1.2 mm traced as 24 ends, an esophagus as 13).
+  Branches leaving the root are tested against its first branch, unless they continue its axis
+  backward (:func:`prune_by_wall`);
+- ``recenter`` (default off): after pruning, move every point to the area centroid of its
+  cross-section (:mod:`.recenter`), holding radius + 1 mm around every node. The path then lies on
+  a flattened lumen's axis (3:1 elliptic tubes: 0.3-1.0 mm median off it -> 0.002 mm), where the
+  tracer wanders across the width; a round tube barely moves. Pair it with ``prune="wall"``: the
+  length rule's side lobes hold the path at their junctions.
 """
 from __future__ import annotations
 
@@ -52,6 +59,7 @@ from scipy.sparse.csgraph import dijkstra
 from scipy.spatial import cKDTree
 
 from .field import crossings, edge_lengths, inscribed_radius, sample, to_world
+from . import recenter as _rc
 from .topology import OFFSETS, components, field_edges, voxel_edges
 
 SCALE, CONST, EPS = 1.5, 1.0, 0.1
@@ -77,13 +85,14 @@ def _path_length(world, path) -> float:
 
 def trace(m: np.ndarray, geometry, graph: str = "field", scale: float = SCALE, const: float = CONST,
           eps: float = EPS, mask: np.ndarray | None = None, ridge_passes: int = 4, prune: str = "length",
-          log=None) -> MedialTree:
+          recenter: bool = False, log=None) -> MedialTree:
     """The centerline tree of ``{m > 0}``'s largest component (see the module docstring).
 
     ``m``: the margin, float32, positive inside, on ``geometry`` (origin + direction rows).
     ``mask``: voxel mode only - the lattice points to connect (default ``m > 0``; the reference
     used the argmax labelmap, which also counts exact ties m == 0 won by this class).
-    ``log``: optional callable taking one message string per step.
+    ``log``: optional callable taking one message string per step. ``ridge_passes``, ``prune`` and
+    ``recenter``: see the module docstring.
     """
     if prune not in ("length", "wall"):
         raise ValueError(f"prune must be 'length' or 'wall'; got {prune!r}")
@@ -235,10 +244,52 @@ def trace(m: np.ndarray, geometry, graph: str = "field", scale: float = SCALE, c
         out, dropped = prune_by_wall(out, m, geometry)
         say(f"wall pruning dropped {dropped} terminal branches")
         stats["pruned_by_wall"] = dropped
+    if recenter:
+        out, n_moved = recenter_branches(out, m, geometry, xtree)
+        say(f"recentered {n_moved} points")
+        stats["recentered_points"] = n_moved
     nodes, segments = split(out)
     stats["branches"] = len(out)
     return MedialTree(root=np.round(world[root], 3), branches=out, nodes=nodes, segments=segments,
                       stats=stats)
+
+
+def _junction_index(parent: dict, child: dict) -> int:
+    """Where ``child`` leaves ``parent``: the parent's point nearest the child's first point."""
+    return int(np.argmin(np.linalg.norm(np.array(parent["points"]) - np.array(child["points"][0]), axis=1)))
+
+
+def recenter_branches(branches: list[dict], m, geometry, xtree) -> tuple[list[dict], int]:
+    """Each branch's points moved to their sections' area centroids (:mod:`.recenter`), holding
+    radius + 1 mm around both ends and every child's junction on it, so the nodes stay where they
+    are. A root that only two branches leave is a point along one path (the deepest point,
+    mid-tube), not a node to hold: those two are recentered as one path through it.
+    Returns (the branches, the number of points moved)."""
+    at = {b["id"]: [] for b in branches}
+    for b in branches:
+        if b["parent"] >= 0:
+            at[b["parent"]].append(_junction_index(branches[b["parent"]], b))
+    paths = [np.array(b["points"], float) for b in branches]
+    radii = [np.array(b["radius"], float) for b in branches]
+    holds = [_rc.end_holds(p, r, at[b["id"]]) for p, r, b in zip(paths, radii, branches)]
+    roots = [b["id"] for b in branches if b["parent"] < 0]
+    through = len(roots) == 2 and min(len(paths[i]) for i in roots) > 1
+    if through:                                         # one path: reversed second branch, then the first
+        a, b = roots
+        nb = len(paths[b])
+        paths[a] = np.concatenate([paths[b][::-1], paths[a][1:]])
+        radii[a] = np.concatenate([radii[b][::-1], radii[a][1:]])
+        joins = [nb - 1 + k for k in at[a]] + [nb - 1 - k for k in at[b]]
+        holds[a] = _rc.end_holds(paths[a], radii[a], joins)
+        paths[b], radii[b], holds[b] = paths[b][:1], radii[b][:1], np.ones(1, bool)
+    P, R, moved = _rc.recenter(m, geometry, paths, radii, holds, xtree)
+    if through:
+        P[b], R[b], moved[b] = P[a][:nb][::-1], R[a][:nb][::-1], moved[a][:nb]
+        P[a], R[a], moved[a] = P[a][nb - 1:], R[a][nb - 1:], moved[a][nb - 1:]
+        moved[a][0] = False                             # the shared root point, counted once
+    out = [dict(b_, points=np.round(p, 3).tolist(), radius=np.round(r, 3).tolist())
+           for b_, p, r in zip(branches, P, R)]
+    return out, int(sum(int(v.sum()) for v in moved))
 
 
 def split(branches: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -248,9 +299,7 @@ def split(branches: list[dict]) -> tuple[list[dict], list[dict]]:
     cuts = {b["id"]: [] for b in branches}
     for b in branches:
         if b["parent"] >= 0:
-            par = branches[b["parent"]]
-            k = int(np.argmin(np.linalg.norm(np.array(par["points"]) - np.array(b["points"][0]), axis=1)))
-            cuts[b["parent"]].append((k, b["id"]))
+            cuts[b["parent"]].append((_junction_index(branches[b["parent"]], b), b["id"]))
     nodes, segments = [], []
 
     def node_at(p, kind):
@@ -326,8 +375,16 @@ def protrusion(m, geometry, parent_points, k: int, tip, spacing: float, stations
 def prune_by_wall(branches: list[dict], m, geometry, relative: float = 1.0, floor: float = 1.0):
     """Drop terminal branches whose tip does not reach beyond the parent's wall by
     max(``relative`` x the branch's median radius, ``floor`` mm), repeatedly (a parent left terminal
-    is tested in turn). Returns (the kept branches renumbered, parents first; how many were dropped)."""
+    is tested in turn). Returns (the kept branches renumbered, parents first; how many were dropped).
+
+    A branch leaving the root has no parent: it is tested against the root's first branch (the
+    longest), at its start - unless its tip lies behind that start, along the first branch's axis,
+    by more than both the wall distance and its offset across the axis. It then continues the axis
+    the other way (the root is the deepest point, often mid-tube, and in the pulmonary arteries the
+    trunk leaves it backward), where a lobe across a flat lumen reaches no farther back than about
+    the lumen's half-width, and mostly sideways."""
     alive = {b["id"] for b in branches}
+    first = next((b["id"] for b in branches if b["parent"] < 0), None)
     changed = True
     while changed:
         changed = False
@@ -337,16 +394,23 @@ def prune_by_wall(branches: list[dict], m, geometry, relative: float = 1.0, floo
                 kids[b["parent"]] += 1
         for b in branches:
             i = b["id"]
-            if i not in alive or b["parent"] < 0 or kids[i] > 0:
+            if i not in alive or i == first or kids[i] > 0:
                 continue
-            par = branches[b["parent"]]
+            par = branches[b["parent"] if b["parent"] >= 0 else first]
             P = np.array(par["points"])
-            k = int(np.argmin(np.linalg.norm(P - np.array(b["points"][0]), axis=1)))
+            tip = np.array(b["points"][-1])
+            k = _junction_index(par, b) if b["parent"] >= 0 else 0
             r = np.array(b["radius"])
             r_tip = float(np.median(r[r > 0])) if (r > 0).any() else 0.5
             rj = max(float(np.array(par["radius"])[k]), 0.5)
-            p, _, _ = protrusion(m, geometry, P, k, np.array(b["points"][-1]), spacing=rj)
-            if p < max(relative * r_tip, floor):
+            p, across, wall = protrusion(m, geometry, P, k, tip, spacing=rj)
+            need = max(relative * r_tip, floor)
+            if b["parent"] < 0:
+                ahead = P[min(3, len(P) - 1)] - P[0]
+                n = float(np.linalg.norm(ahead))
+                if n > 0 and -((tip - P[0]) @ ahead) / n > max(wall, across):
+                    continue
+            if p < need:
                 alive.discard(i)
                 changed = True
     keep = [b for b in branches if b["id"] in alive]

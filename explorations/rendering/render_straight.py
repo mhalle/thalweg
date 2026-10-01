@@ -221,7 +221,7 @@ else:
 img = torch.where(hit[..., None], rgb, bg.expand_as(rgb)).clamp(0, 1).cpu().numpy()   # (s, u, 3)
 if STYLE == "npr":
     # INK from the depth image (sdfview's INK_GLSL, orthographic, thresholds in mm): on the nearer
-    # side of every break, 1 px plus a partial 2nd px withheld from thin features, coloured as a
+    # side of every break, 1 px plus a partial 2nd px withheld from thin features, colored as a
     # dark shade of what it borders; then the depth cue fades the far side toward the background
     dep = np.where(hit.cpu().numpy(), (W - V).cpu().numpy(), -1.0)
     def shifted(a, o):

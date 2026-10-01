@@ -52,7 +52,7 @@ TRACER_STATISTICS = {
     "components": "component_count", "component_sizes": "component_lattice_point_counts",
     "zero_crossings": "zero_crossing_count", "cell_interior_joins": "cell_interior_join_count",
     "branches_before_pruning": "branch_count_before_pruning", "branches": "branch_count",
-    "pruned_by_wall": "branch_count_pruned_by_wall",
+    "pruned_by_wall": "branch_count_pruned_by_wall", "recentered_points": "recentered_point_count",
     "max_distance_mm": "deepest_point_wall_distance_mm"}
 
 
@@ -127,12 +127,12 @@ def graph_from_tree(tree: medial.MedialTree, name: str, m: np.ndarray, geometry,
 
 def centerline_graph(store: FieldStore | str, name: str, *, part: int | None = None, graph: str = "field",
                      scale: float = medial.SCALE, const: float = medial.CONST, eps: float = medial.EPS,
-                     ridge_passes: int = 4, prune: str = "length", root: str = "inlet", margin=None,
-                     log=None) -> TubeGraph:
+                     ridge_passes: int = 4, prune: str = "length", recenter: bool = False,
+                     root: str = "inlet", margin=None, log=None) -> TubeGraph:
     """Trace structure ``name`` of a ranked store into a one-structure :class:`TubeGraph`.
 
     ``graph``: connectivity, ``"field"`` (decided by the interpolant) or ``"voxel"`` (the argmax
-    labelmap, 26-connected; comparison only). ``ridge_passes`` and ``prune``: see
+    labelmap, 26-connected; comparison only). ``ridge_passes``, ``prune`` and ``recenter``: see
     :func:`thalweg.kernel.medial.trace` (``ridge_passes=1`` reproduces the research reference; the
     default is 4). ``root``: ``"inlet"`` (the default) re-roots the traced tree at its inlet
     (:func:`inlet`); ``"deepest"`` keeps the tracer's root, its deepest point (the research
@@ -146,7 +146,7 @@ def centerline_graph(store: FieldStore | str, name: str, *, part: int | None = N
     mask = st.labelmap_mask(ref) if graph == "voxel" else None
     try:
         tree = medial.trace(m, geometry, graph=graph, scale=scale, const=const, eps=eps, mask=mask,
-                            ridge_passes=ridge_passes, prune=prune, log=log)
+                            ridge_passes=ridge_passes, prune=prune, recenter=recenter, log=log)
     except ValueError as e:
         raise ThalwegError(f"{name}: {e}") from e
     source = Source(store=str(st.path), labeling_scheme=ref.scheme, part=ref.part,
@@ -155,7 +155,7 @@ def centerline_graph(store: FieldStore | str, name: str, *, part: int | None = N
                               directions=tuple(tuple(map(float, r)) for r in geometry.directions),
                               origin=tuple(map(float, geometry.origin))))
     params = dict(connectivity=graph, cover_scale=scale, cover_constant_mm=const, cost_epsilon_mm=eps,
-                  ridge_passes=ridge_passes, prune=prune, root=root)
+                  ridge_passes=ridge_passes, prune=prune, recenter=recenter, root=root)
     nodes, edges, pos, rad, structure = graph_from_tree(tree, name, m, geometry, source, params)
     g = TubeGraph(created_by=f"thalweg {__version__}", structures=[structure], nodes=nodes, edges=edges,
                   points=Points(position=pos, radius=rad))

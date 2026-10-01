@@ -13,7 +13,8 @@ a field. Here the field is a model's per-class margin, decoded from a
 `src/thalweg/` holds:
 
 - `thalweg.kernel` - numpy/scipy only, no files or names: field sampling and sub-voxel zero
-  crossings, field connectivity and topology, the seed-free centerline tracer, cross-sections
+  crossings, field connectivity and topology, the seed-free centerline tracer (and recentering
+  on section centroids), cross-sections
   with the model's interval and non-round shape measures, spline curve geometry;
 - `thalweg.vmtk` - numpy ports of vmtk's centerline-only filters (attributes, resampling, branch
   extractor, bifurcation frames and vectors, offsets, merge, smoothing, centerline and branch
@@ -38,6 +39,8 @@ Use:
     uv run thalweg structures STORE
     uv run thalweg run STORE -o OUT/                    # graph, branch table, stations, summary, QC
     uv run thalweg centerlines STORE -s lung_arteries -o arteries.thalweg.json.gz
+    uv run thalweg centerlines STORE -s esophagus --prune wall --recenter -o esophagus.thalweg.json.gz
+                                                        # a flattened tube: no side lobes, path on the axis
     uv run thalweg table arteries.thalweg.json.gz STORE -o branches.parquet --stations stations.parquet
     uv run thalweg export arteries.thalweg.json.gz STORE -s lung_arteries --mesh arteries.vtp
 

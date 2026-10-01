@@ -230,7 +230,8 @@ class Case:
             log=None, **trace_options) -> dict:
         """The batch product for ``names``: graph, rows, stations, summary and qc (see above).
         ``branch_volumes`` adds each branch's volume (:meth:`volumes`; about a third more time).
-        ``trace_options`` go to :func:`thalweg.centerlines.centerline_graph` (ridge_passes, prune, root)."""
+        ``trace_options`` go to :func:`thalweg.centerlines.centerline_graph` (ridge_passes, prune, recenter,
+        root)."""
         g = self.trace(names, log=log, **trace_options)
         lobes = self.lobes(log=log)
         edge_lobe = {}

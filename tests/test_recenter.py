@@ -1,0 +1,142 @@
+"""Recentering (thalweg.kernel.recenter) and wall pruning at the root, on flattened and round
+phantoms (docs/validation.md §1)."""
+import sys
+from pathlib import Path
+
+import numpy as np
+from scipy.spatial import cKDTree
+
+from thalweg.kernel import medial
+from thalweg.kernel import recenter as rc
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "validation"))
+import phantom_suite as PS  # noqa: E402
+import vmtk_phantom as VP  # noqa: E402
+
+A, B, L = 4.5, 1.5, 40.0                        # a 3:1 elliptic tube along x
+
+
+def flat(oblique=False, roll=0.0):
+    f = VP.elliptic_sdf(A, B, L, roll)
+    box = (-4.0, -A - 4, -A - 4), (L + 4, A + 4, A + 4)
+    if oblique:
+        m, geo = PS.field_oblique(f, *box)
+        return m, geo, lambda p: (np.asarray(p, float) - PS.SHIFT) @ PS.Q        # world -> tube frame
+    m, geo = PS.field_of(f, *box, 0.7)
+    return m, geo, lambda p: np.asarray(p, float)
+
+
+def ends(tree):
+    deg = {nd["id"]: 0 for nd in tree.nodes}
+    for sg in tree.segments:
+        deg[sg["a"]] += 1
+        deg[sg["b"]] += 1
+    return sum(1 for v in deg.values() if v == 1)
+
+
+def off_axis(tree, frame):
+    """Distance of every traced point clear of the flat ends (1.5 semi-major axes) from the axis."""
+    P = frame(np.concatenate([np.array(sg["points"]) for sg in tree.segments]))
+    keep = (P[:, 0] > 1.5 * A) & (P[:, 0] < L - 1.5 * A)
+    return np.linalg.norm(P[keep, 1:], axis=1)
+
+
+def test_a_flat_tube_is_traced_as_one_path_on_its_axis():
+    m, geo, frame = flat()
+    before = medial.trace(m, geo, prune="wall")
+    after = medial.trace(m, geo, prune="wall", recenter=True)
+    assert ends(before) == ends(after) == 2                 # wall pruning, the root's lobes included
+    d0, d = off_axis(before, frame), off_axis(after, frame)
+    assert np.median(d0) > 0.3                              # the tracer wanders across the width
+    assert np.median(d) < 0.01 and np.percentile(d, 95) < 0.05
+    assert after.stats["recentered_points"] > 0
+    r = np.concatenate([sg["radius"] for sg in after.segments])
+    assert abs(np.median(r) - B) < 0.05                     # the inscribed radius: half the depth
+
+
+def test_a_rolled_oblique_flat_tube():
+    m, geo, frame = flat(oblique=True, roll=np.radians(35))
+    t = medial.trace(m, geo, prune="wall", recenter=True)
+    assert ends(t) == 2
+    d = off_axis(t, frame)
+    assert np.median(d) < 0.01 and np.percentile(d, 95) < 0.05
+
+
+def test_length_pruning_keeps_the_lobes_and_the_lobes_hold_the_path():
+    """With the reference spur rule a flat tube keeps its side lobes; their junctions hold the path,
+    so recentering pairs with wall pruning."""
+    m, geo, frame = flat()
+    t = medial.trace(m, geo, prune="length", recenter=True)
+    assert ends(t) > 10
+    assert np.median(off_axis(t, frame)) > 0.3
+
+
+def test_a_round_tube_barely_moves():
+    segs = [((0.0, 0.0, 0.0), (30.0, 0.0, 0.0), 2.0, 2.0)]
+    m, geo = PS.field_of(PS.chain_distance(segs), (-4, -6, -6), (34, 6, 6), 0.7)
+    a = medial.trace(m, geo, prune="wall")
+    b = medial.trace(m, geo, prune="wall", recenter=True)
+    pa = np.concatenate([sg["points"] for sg in a.segments])
+    pb = np.concatenate([sg["points"] for sg in b.segments])
+    assert len(pa) == len(pb)
+    assert np.linalg.norm(pb - pa, axis=1).max() < 0.05
+    ra = np.concatenate([sg["radius"] for sg in a.segments])
+    rb = np.concatenate([sg["radius"] for sg in b.segments])
+    assert np.abs(rb - ra).max() < 0.03
+
+
+def test_wall_pruning_keeps_a_root_branch_that_continues_the_axis():
+    """The deepest point mid-tube (a bulge), so both halves leave the root: the second half is
+    behind the first branch's start, not beside it, and stays (as the pulmonary trunk does)."""
+    segs = [((0.0, 0.0, 0.0), (20.0, 0.0, 0.0), 2.0, 4.0), ((20.0, 0.0, 0.0), (40.0, 0.0, 0.0), 4.0, 2.0)]
+    m, geo = PS.field_of(PS.chain_distance(segs), (-4, -8, -8), (44, 8, 8), 0.7)
+    t = medial.trace(m, geo, prune="wall")
+    assert sum(b["parent"] < 0 for b in t.branches) == 2
+    assert ends(t) == 2
+    assert sum(sg["length_mm"] for sg in t.segments) > 35
+
+
+def test_a_y_moves_nothing_at_its_junction():
+    """The daughters' sections near the junction are the merged lumen: held (claimed by the other
+    branch's tube, or the other axis crosses them), so the junction node stays put."""
+    segs, _ = PS.y_phantom(60)
+    pts = np.concatenate([[s[0], s[1]] for s in segs]).astype(float)
+    m, geo = PS.field_of(PS.chain_distance(segs), pts.min(0) - 7, pts.max(0) + 7, 0.7)
+    a = medial.trace(m, geo, prune="wall")
+    b = medial.trace(m, geo, prune="wall", recenter=True)
+    assert [nd["point"] for nd in a.nodes] == [nd["point"] for nd in b.nodes]
+
+
+def test_tangents_and_end_holds():
+    P = np.c_[np.linspace(0, 10, 11), np.zeros(11), np.zeros(11)]
+    T = rc.tangents(P, np.full(11, 2.0))
+    assert np.allclose(T, [1, 0, 0])
+    held = rc.end_holds(P, np.full(11, 0.5), at=[5])             # radius + 1 mm = 1.5 mm
+    assert held.tolist() == [True, True, False, False, True, True, True, False, False, True, True]
+
+
+def test_a_section_reaching_into_another_path_is_claimed():
+    segs, _ = PS.y_phantom(30)
+    pts = np.concatenate([[s[0], s[1]] for s in segs]).astype(float)
+    m, geo = PS.field_of(PS.chain_distance(segs), pts.min(0) - 7, pts.max(0) + 7, 0.7)
+    t = medial.trace(m, geo, prune="wall")
+    paths = [np.array(b["points"]) for b in t.branches]
+    radii = [np.maximum(np.array(b["radius"]), 0.5) for b in t.branches]
+    p0 = np.concatenate([p[:-1] for p in paths])
+    p1 = np.concatenate([p[1:] for p in paths])
+    r0 = np.concatenate([r[:-1] for r in radii])
+    r1 = np.concatenate([r[1:] for r in radii])
+    lab = np.concatenate([np.full(len(p) - 1, i) for i, p in enumerate(paths)])
+    tree = cKDTree(0.5 * (p0 + p1))
+    half_seg = 0.5 * np.linalg.norm(p1 - p0, axis=1).max()
+    child = next(i for i, b in enumerate(t.branches) if b["parent"] >= 0)
+    P, R = paths[child], radii[child]
+    s = np.r_[0, np.cumsum(np.linalg.norm(np.diff(P, axis=0), axis=1))]
+    T = rc.tangents(P, R)
+
+    def claimed(k):
+        xy, n1, n2, _ = rc._sections(m, geo, P[k:k + 1], T[k:k + 1], R[k:k + 1])[0]
+        return rc._claimed(P[k], xy, n1, n2, child, (p0, p1, r0, r1, lab), tree, R.max() + 3, half_seg)
+
+    assert claimed(int(np.argmin(np.abs(s - 2.0))))                 # 2 mm out: still the merged lumen
+    assert not claimed(int(np.argmin(np.abs(s - 0.6 * s[-1]))))      # well down the daughter

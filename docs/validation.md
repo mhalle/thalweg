@@ -62,7 +62,8 @@ passes) on two grids:
   - The sections are right (aspect ratio and Feret widths), so the failure is in the tracer's
     pruning, not in the field or the measures.
   - This is the first tube requirement that the vessel tuning does not meet. The fix is a
-    pruning rule relative to the wall (below).
+    pruning rule relative to the wall (below), applied at the root too (§5), plus recentering:
+    the path itself wanders across a flat width, and `--recenter` moves it onto the axis (§4).
 - **Contact is connectivity.**
   - Two tubes of one class whose walls overlap form one field component, and the tracer builds
     a ladder between them. That is correct for the field (they *are* connected), but a reader of
@@ -185,6 +186,29 @@ With the two new tracer options (`--prune wall --ridge-passes 4`):
   ends, then branches that must protrude), and cuts placed by section shape rather than a fixed
   distance. That is the next piece of tube work.
 
+**With the root rule and recentering (2026-09-30).** Wall pruning now also tests the branches
+that leave the root (§5), and `--recenter` moves the path to its sections' centroids (§4). Same
+store, `--prune wall`, then `--prune wall --recenter` (ends counts the root):
+
+| Structure | Edges | Ends | Junctions | Length | + recenter: length | Capped ends, made / attempted |
+|---|---|---|---|---|---|---|
+| Trachea | 6 | 4 | 2 | 23.3 cm | 22.8 cm | 2 / 3 |
+| Esophagus | 1 | 2 | 0 | 24.3 cm | 23.7 cm | 1 / 1 |
+| Aorta | 4 | 3 | 1 | 53.9 cm | 53.3 cm | 1 / 2 |
+| Colon | 7 | 5 | 3 | 68.8 cm | 69.4 cm | 1 / 4 |
+
+- **The esophagus is one path.** Its two remaining lobes left the root (the deepest point,
+  mid-esophagus), which the old rule never tested: 3 edges and 27.0 cm become one edge of
+  24.3 cm (an adult esophagus is ~25 cm). The colon loses one root lobe (8 → 7 edges).
+- **Recentering straightens the long tubes.** The turn between consecutive segments (95th
+  percentile) drops from 37° to 8° on the esophagus and from 35° to 7° on the descending aorta;
+  points move 0.3–0.7 mm (median), 0.9–1.8 mm (95th percentile); the radius re-measured at the
+  centroid reads 0.2–0.3 mm smaller (the tracer's points sat on the widest inscribed ball, the
+  centroid is not always there).
+- **Short, wide edges stay where they are.** The aortic-root lobes, the cecum and most short colon
+  edges hold: their sections reach past the edge's ends, or neighboring sections cross each
+  other's planes, and nothing moves. Capping is unchanged.
+
 ## 4. vmtk on a second tree, and against the truth
 
 **MSB-02664, a 57-tip subtree** (`research/vessels/vmtk_prep.py` + `vmtk_run.py`, unchanged). The
@@ -225,14 +249,14 @@ same two ends ("main path") is scored apart from all its points. Each cell is th
 the true axis, median / p95 (mm); both methods read the inscribed radius (the minor semi-axis)
 within 0.07 mm everywhere.
 
-| Tube | vmtk | thalweg, main path | thalweg, all points | thalweg tips (true 1–2) |
-|---|---|---|---|---|
-| 3 × 1.5 (2:1) | failed | 0.26 / 0.26 | 0.26 / 0.26 | 1 |
-| 3.75 × 1.5 (2.5:1) | 0.25 / 0.25 | 0.34 / 1.89 | 0.34 / 2.89 | 20 |
-| 4.5 × 1.5 (3:1) | 0.22 / 0.22 | 0.40 / 2.74 | 1.02 / 3.64 | 28 |
-| 3:1, rolled 35° | 0.11 / 0.11 | 0.23 / 2.52 | 0.97 / 3.58 | 26 |
-| 3:1, oblique | 0.17 / 0.30 | 1.00 / 1.33 | 1.14 / 3.50 | 18 |
-| 3:1, rolled and oblique | 0.30 / 0.47 | 0.36 / 1.17 | 0.48 / 3.62 | 22 |
+| Tube | vmtk | thalweg, main path | thalweg, all points | thalweg tips (true 1–2) | `--prune wall --recenter`: all points, ends |
+|---|---|---|---|---|---|
+| 3 × 1.5 (2:1) | failed | 0.26 / 0.26 | 0.26 / 0.26 | 1 | 0.00 / 0.26, 2 |
+| 3.75 × 1.5 (2.5:1) | 0.25 / 0.25 | 0.34 / 1.89 | 0.34 / 2.89 | 20 | 0.00 / 0.50, 2 |
+| 4.5 × 1.5 (3:1) | 0.22 / 0.22 | 0.40 / 2.74 | 1.02 / 3.64 | 28 | 0.00 / 1.75, 2 |
+| 3:1, rolled 35° | 0.11 / 0.11 | 0.23 / 2.52 | 0.97 / 3.58 | 26 | 0.00 / 2.11, 2 |
+| 3:1, oblique | 0.17 / 0.30 | 1.00 / 1.33 | 1.14 / 3.50 | 18 | 0.00 / 2.59, 2 |
+| 3:1, rolled and oblique | 0.30 / 0.47 | 0.36 / 1.17 | 0.48 / 3.62 | 22 | 0.00 / 2.93, 2 |
 
 - **Across a flat width the axis is weakly defined, for both methods.** The inscribed radius
   barely changes along the section's major axis, so both lines sit 0.1–0.3 mm off the middle
@@ -246,7 +270,16 @@ within 0.07 mm everywhere.
   is the side branches, not the path.
 - **So the fix is two rules, not one:** a path held to the middle of the width (vmtk's
   Voronoi-based minimal path does this), and a spur rule that does not keep branches running
-  across a flat section. Both are the tube track's open items.
+  across a flat section.
+- **Both are built (2026-09-30), as options:** `--prune wall` (now also at the root, §5) and
+  `--recenter` (`thalweg.kernel.recenter`: each point moved to its section's area centroid, three
+  rounds, nodes held). The last column is both, with four ridge passes
+  (`validation/vmtk_phantom.py compare 4 --tube`): every tube traces as its two ends, and the
+  median point lies on the axis (≤ 0.002 mm), closer than vmtk's 0.1–0.3 mm. The 95th percentile
+  is the flat ends: the tracer's end runs into a corner of the flat cut, up to 3.6 mm off the
+  axis, where vmtk's line ends at its seed. Clear of the ends by 1.5 semi-major axes the axis is
+  within 0.005 mm at the 95th percentile on all five tubes. The radius reads +0.01 to +0.04 mm.
+  On the round arc and Ys, recentering changes nothing measurable (≤ 0.007 mm).
 
 **With one pass, vmtk is more accurate on clean round tubes.** The cause is thalweg's ridge
 refinement:
@@ -274,7 +307,7 @@ prep-cut points (round-2 review):
 (mm.) The research finding "vmtk reads +0.029 mm larger" was this quantization. The MSB result
 holds in every radius band.
 
-## 5. The two tracer options, and the defaults chosen
+## 5. The tracer options, and the defaults chosen
 
 **Decided 2026-09-30:** four ridge passes are the default; length pruning stays the default,
 with `--prune wall` as an option. The research reference is `--ridge-passes 1`. Every number in
@@ -329,6 +362,38 @@ Effect on the trees:
   - On the two-tube contact phantom it deletes one whole tube's axis (3 of 4 true ends,
     39.5 mm of 60 mm). Measured from one tube's axis, the other tube's tip lies inside the merged
     wall. That matters for the self-contact requirement (colon loops that touch).
+- **At the root (added 2026-09-30).** Branches leaving the root have no parent, so the rule above
+  never tested them, and the root is the deepest point - mid-tube in a flat lumen, where lobes
+  across the width leave it. They are now tested against the root's first (longest) branch at its
+  start, unless the tip lies behind that start by more than both the wall distance and its own
+  offset across the axis: then it continues the axis the other way. The pulmonary trunk is such a
+  branch (C3N arteries: 33.7 mm behind, 4.4 mm across, wall 22.7 mm); a first version that only
+  compared with two radii removed it. Of the six lung trees only MSB veins change (one 39 mm root branch of median radius 16.6 mm, a lobe of the left atrium, goes:
+  −1 tip, −3.8 cm); the esophagus becomes one path and the colon loses one lobe (§3); the flat
+  phantoms trace as their two ends.
+
+**Recentering (`--recenter`, added 2026-09-30, off by default):**
+- **What it does:** after pruning, every point moves to the area centroid of the structure's
+  section normal to the path (`thalweg.kernel.recenter`), three rounds, the radius re-measured as
+  the inscribed ball at the new point. Radius + 1 mm around every node is held, and the shift
+  ramps up from there (≤ 0.5 mm per mm of path). A section is not trusted - its point takes the
+  shift interpolated from its neighbors - where it stays open, where another branch's axis
+  crosses it or another branch's tube claims its rim (a junction's merged lumen), where it reaches
+  past the path's end, and where it crosses a neighbor's plane (a bend tight for the section).
+- **For:**
+  - Flat tubes: every point within 0.002 mm (median) of the axis, against 0.2–1.0 mm without
+    it and vmtk's 0.1–0.3 mm (§4).
+  - Real tubes come out smoother: the esophagus's and aorta's segment turns (95th percentile)
+    drop from 35–37° to 7–8° (§3).
+  - Round vessels barely move: C3N, wall pruning, all three trees: 45–60 % of points move, the
+    median by 0.00–0.03 mm, the 95th percentile by 0.12–0.24 mm; the median radius is unchanged
+    on vessels and 0.016 mm smaller on airways; tree lengths change by under 0.5 %.
+- **Against:**
+  - It doubles the trace (C3N, three trees, wall pruning: 20.5 → 41.7 s).
+  - With length pruning it does nothing on a flat tube: the side lobes' junctions hold the path.
+    Use it with `--prune wall`.
+  - The flat ends of a phantom stay in their corners (held near the tips), and big, short edges
+    (aortic-root lobes, the cecum) do not move: their sections are not those of a tube.
 
 ## 5b. Airway walls
 
@@ -705,8 +770,11 @@ a steady inflow at the root and one resistance per outlet as placeholders.
 - **Thin-caliber ground truth.** The ~1 mm radius floor belongs to the model; checking the
   method below it needs a phantom scan or a gated high-resolution acquisition.
 - **Flat tubes.** vmtk against thalweg on flattened phantoms is measured (§4, redone with true
-  distances, rolled and oblique): the radius agrees; from 2.5:1 thalweg's path wanders up to
-  2.7 mm (95th percentile) and grows a comb of side branches. Fixing that is the tube track's work.
+  distances, rolled and oblique): the radius agrees; by default (length pruning, no recentering)
+  from 2.5:1 thalweg's path wanders up to 2.7 mm (95th percentile) and grows a comb of side
+  branches. With `--prune wall --recenter` it traces the two ends on the axis (§4). Which
+  structures should get those settings by default is open; the junction of a shallow Y in a flat
+  lumen (placed where the section splits) is not built.
 - **Off the lattice** (§1, `--oblique`): done for every phantom; sections against the true
   diameter read 1–2 % small on round tubes on both grids.
 - **Degraded input** (§5k) is checked on one phantom and one case's own labelmap, not on
