@@ -166,7 +166,8 @@ runs 436 mm to the bifurcation. But the aortic root traces as two 33 mm "tips" f
 junction. The bulb of the sinuses is wider than it is long, so the same round-lumen spur rule
 lets a lobe through. The others show the flat-lumen spur problem of §1.
 
-With the two new tracer options (`--prune wall --ridge-passes 4`):
+With the two new tracer options (`--prune wall --ridge-passes 4`), before wall pruning tested
+the root's branches (superseded by the next table: the esophagus is now one path):
 
 | Structure | Edges | Tips | Junctions | Length | Capped ends, made / attempted |
 |---|---|---|---|---|---|
@@ -175,8 +176,9 @@ With the two new tracer options (`--prune wall --ridge-passes 4`):
 | Trachea | 6 | 4 | 2 | 23.3 cm | 3 / 4 |
 | Colon | 8 | 6 | 2 | 73.5 cm | 1 / 4 |
 
-- **Wall pruning takes most of the lobes out.** The esophagus goes from 43 cm with 13 tips to
-  27 cm with 3 (an adult esophagus is ~25 cm); the colon goes from 16 tips to 6.
+- **Wall pruning takes most of the lobes out.** The esophagus went from 43 cm with 13 tips to
+  27 cm with 3 (an adult esophagus is ~25 cm; with the root rule below, one path of 24.3 cm); the
+  colon goes from 16 tips to 6.
 - **It does not remove the aortic-root lobe.** Measured across the ascending aorta, the lobe
   reaches past the parent's wall.
 - **Capping ends of large, irregular tubes mostly fails** (reported, never left open). The cut
@@ -207,9 +209,11 @@ store, `--prune wall`, then `--prune wall --recenter` (ends counts the root):
   points move 0.3–0.7 mm (median), 0.9–1.8 mm (95th percentile); the radius re-measured at the
   centroid reads 0.2–0.3 mm smaller (the tracer's points sat on the widest inscribed ball, the
   centroid is not always there).
-- **Short, wide edges stay where they are.** The aortic-root lobes, the cecum and most short colon
+- **Short, wide edges mostly stay where they are.** The aortic-root lobes, the cecum and most short colon
   edges hold: their sections reach past the edge's ends, or neighboring sections cross each
-  other's planes, and nothing moves. Capping is unchanged.
+  other's planes, and nothing moves. The 37 mm ascending-aorta edge (radius ~16 mm) does move
+  (0.23 mm median, 1.0 mm at the 95th percentile) and its turns grow (21° → 29°, 95th
+  percentile). Capping is unchanged.
 
 ## 4. vmtk on a second tree, and against the truth
 
@@ -249,7 +253,7 @@ about the axis, "oblique" puts the tube off the lattice on the anisotropic 0.62 
 grid. vmtk computes one line between the seeds; thalweg traces a tree, so its path between the
 same two ends ("main path") is scored apart from all its points. Each cell is the distance from
 the true axis, median / p95 (mm); both methods read the inscribed radius (the minor semi-axis)
-within 0.07 mm everywhere.
+within 0.075 mm everywhere.
 
 | Tube | vmtk | thalweg, main path | thalweg, all points | thalweg tips (true 1–2) | `--prune wall --recenter`: all points, ends |
 |---|---|---|---|---|---|
@@ -314,12 +318,14 @@ holds in every radius band.
 **Decided 2026-09-30:** four ridge passes are the default; length pruning stays the default,
 with `--prune wall` as an option. **Later the same day:** the flat tubes (esophagus, trachea,
 colon, small_bowel, duodenum) get `--prune wall --recenter` by default; everything else, vessels
-included, keeps length pruning without recentering (`centerlines.tube_settings`). The research reference is `--ridge-passes 1`. Every number in
-§1–§3 and in §4's first part was taken with one pass (the reference) unless it says otherwise.
+included, keeps length pruning without recentering (`centerlines.tube_settings`). The research
+reference is `--ridge-passes 1`. §2, §3's first table and §4's first part were taken with one
+pass (the reference) and the tracer's deepest point as root, unless they say otherwise; §1 uses
+the kernel's defaults (four passes, length pruning, deepest root).
 
 Effect on the trees:
 
-| Case | Tree | Reference: tips / length (cm) / radius p50 (mm) | 4 passes | Wall pruning |
+| Case | Tree | Reference: tips / length (cm) / radius p50 (mm) | 4 passes | Wall pruning (1 pass) |
 |---|---|---|---|---|
 | C3N-00704 | arteries | 537 / 1052.0 / 1.551 | 537 / 1036.0 / 1.599 | 488 / 1024.8 / 1.554 |
 | C3N-00704 | veins | 483 / 937.9 / 1.578 | 483 / 924.0 / 1.627 | 434 / 910.5 / 1.585 |
@@ -355,17 +361,18 @@ Effect on the trees:
 
 **Wall pruning (`--prune wall`):**
 - **For:**
-  - It is what makes flattened tubes usable: esophagus 13 → 3 tips, colon 16 → 6, elliptic
-    phantom 24 → 3 ends (true 2) (§3).
+  - It is what makes flattened tubes usable: esophagus 13 tips → one path, colon 16 → 6 (§3),
+    elliptic phantom 24 → 2 ends (§1).
   - It costs no time.
   - On shallow-angle round phantoms (10–45°) it removed no real side branch.
 - **Against:**
   - It removes 9–26 % of tips on vessel trees and cuts order statistics: Strahler ≥ 4 length
     −12 % (C3N arteries), −14 % (C3N veins), −20 % (MSB arteries).
   - Whether the removed tips are real short stubs is unknown: nothing here says either way.
-  - On the two-tube contact phantom it deletes one whole tube's axis (3 of 4 true ends,
-    39.5 mm of 60 mm). Measured from one tube's axis, the other tube's tip lies inside the merged
-    wall. That matters for the self-contact requirement (colon loops that touch).
+  - On the two-tube contact phantom it deletes one whole tube's axis: 2 of 4 true ends remain,
+    one path of 31.6 mm (of 60 mm) on the lattice, 38.4 mm oblique (with the root rule; it was 3
+    ends and 39.5 mm before). Measured from one tube's axis, the other tube's tip lies inside the
+    merged wall. That matters for the self-contact requirement (colon loops that touch).
 - **At the root (added 2026-09-30).** Branches leaving the root have no parent, so the rule above
   never tested them, and the root is the deepest point - mid-tube in a flat lumen, where lobes
   across the width leave it. They are now tested against the root's first (longest) branch at its
@@ -397,8 +404,9 @@ Effect on the trees:
   - Real tubes come out smoother: the esophagus's and aorta's segment turns (95th percentile)
     drop from 35–37° to 7–8° (§3).
   - Round vessels barely move: C3N, wall pruning, all three trees: 45–60 % of points move, the
-    median by 0.00–0.03 mm, the 95th percentile by 0.12–0.24 mm; the median radius is unchanged
-    on vessels and 0.016 mm smaller on airways; tree lengths change by under 0.5 %.
+    median by 0.00–0.03 mm, the 95th percentile by 0.12–0.24 mm; the median change of a point's
+    radius is 0 on vessels and −0.016 mm on airways, and the trees' reported median radius
+    (`radius_percentiles_mm.p50`) falls 0.02–0.04 mm; tree lengths change by under 0.5 %.
 - **Against:**
   - It doubles the trace (C3N, three trees, wall pruning: 20.5 → 41.7 s).
   - With length pruning it does nothing on a flat tube: the side lobes' junctions hold the path.
@@ -407,6 +415,10 @@ Effect on the trees:
     (aortic-root lobes, the cecum) do not move: their sections are not those of a tube.
   - Adjacent points can land on the same rounded centroid: zero-length steps rise slightly (C3N
     arteries: 152 → 160), as the tracer already produces them.
+  - **Touching tubes:** on the two-tube contact phantom, wall pruning has already deleted the
+    second tube, so no other branch claims the merged section, and recentering moves the
+    surviving path onto the contact plane, midway between the two axes (1.35 mm off its own;
+    without recentering it stays on its axis). Colon loops that touch can do the same.
 
 ## 5b. Airway walls
 
@@ -789,9 +801,12 @@ a steady inflow at the root and one resistance per outlet as placeholders.
   distances, rolled and oblique): the radius agrees; by default (length pruning, no recentering)
   from 2.5:1 thalweg's path wanders up to 2.7 mm (95th percentile) and grows a comb of side
   branches. With `--prune wall --recenter` it traces the two ends on the axis (§4); the flat
-  tubes get those settings by default, chosen by name. A flat lumen under another name (a
-  labelmap's label, a structure not in the list) gets the vessel settings unless asked. The
-  junction of a shallow Y in a flat lumen (placed where the section splits) is not built.
+  tubes get those settings by default, chosen by name (TotalSegmentator's, or a DICOM SEG's
+  display name such as "Esophagus" or "Small Intestine"). A flat lumen under another name (a
+  labelmap's `label_<value>`, a structure not in the list) gets the vessel settings unless asked.
+  Not built: the junction of a shallow Y in a flat lumen (placed where the section splits); a
+  rule for touching loops, which wall pruning merges and recentering then centers on the contact
+  (§5). On a DICOM SEG's staircase field the esophagus still keeps 11 tips with both settings.
 - **Off the lattice** (§1, `--oblique`): done for every phantom; sections against the true
   diameter read 1–2 % small on round tubes on both grids.
 - **Degraded input** (§5k) is checked on one phantom and one case's own labelmap, not on

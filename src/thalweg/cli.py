@@ -10,6 +10,8 @@
                    [--bifurcation-sections S.parquet] [--zero-d M.json]   at least one output
     thalweg summary GRAPH                                 structures, counts, lengths
     thalweg schema [-o FILE]                              the .thalweg.json JSON Schema
+
+Every verb that reads a STORE takes ``--sdf-inside negative|positive`` for a signed distance image.
 """
 from __future__ import annotations
 

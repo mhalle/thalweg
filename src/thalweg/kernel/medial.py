@@ -45,7 +45,7 @@ decided 2026-09-30, ``recenter`` added after):
   backward (:func:`prune_by_wall`);
 - ``recenter`` (default off here; the pipeline turns it on for flat tubes): after pruning, move
   every point to the area centroid of its cross-section (:mod:`.recenter`), holding radius + 1 mm
-  around every node. The path then lies on a flattened lumen's axis (2.5:1 and 3:1 elliptic
+  around every node. The path then lies on a flattened lumen's axis (2:1 to 3:1 elliptic
   tubes: 0.26-1.14 mm median off it -> 0.002 mm), where the tracer wanders across the width; a
   round tube barely moves. Pair it with ``prune="wall"``: the
   length rule's side lobes hold the path at their junctions.

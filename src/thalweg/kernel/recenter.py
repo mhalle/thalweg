@@ -2,7 +2,7 @@
 
 The tracer's path follows the cheapest route through the inscribed-ball distance, and in a tube
 that is not round that distance is nearly flat across the width: a flattened lumen's path wanders
-from side to side (elliptic tubes of 2.5:1 and 3:1: 0.26-1.14 mm median off the axis over all
+from side to side (elliptic tubes of 2:1 to 3:1: 0.26-1.14 mm median off the axis over all
 points, 2.9-3.6 mm at the 95th percentile with the side lobes). The ridge refinement cannot fix
 it - it moves a point at most 0.5 mm, to the largest inscribed ball, and across a flat lumen
 every ball is about as large.

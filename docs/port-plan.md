@@ -264,10 +264,13 @@ thalweg table arteries.thalweg.json.gz STORE -o branches.parquet [--stations sta
 thalweg run STORE -o OUT/ [-s NAME ...] [--step MM] [--no-stations] [--branch-volumes]
             [--ridge-passes N] [--prune ...] [--[no-]recenter] [--root ...]
                                                # graph, branches, stations, summary.json, qc.json
-thalweg export arteries.thalweg.json.gz STORE -s lung_arteries [--mesh M.vtp [--cap-kinds ...] [--refine N] [--curvature] [--distance-to-centerlines] [--flow-extensions RATIO [--extension-transition T]]] [--vmtk-centerlines C.vtp [--vmtk-exact]] [--swc T.swc] [--markups M.mrk.json] [--wall-maps W.npz [--wall-map-step MM]] [--bifurcation-sections S.parquet [--distance-spheres N]]
+thalweg export arteries.thalweg.json.gz STORE -s lung_arteries [--mesh M.vtp [--cap-kinds ...] [--refine N] [--curvature] [--distance-to-centerlines] [--flow-extensions RATIO [--extension-transition T]]] [--vmtk-centerlines C.vtp [--vmtk-exact]] [--swc T.swc] [--markups M.mrk.json] [--wall-maps W.npz [--wall-map-step MM]] [--bifurcation-sections S.parquet [--distance-spheres N]] [--zero-d M.json [--inflow Q] [--outlet-resistance R]]
 thalweg summary arteries.thalweg.json.gz
 thalweg schema [-o FILE]
 ```
+
+Every verb that reads a STORE also takes `--sdf-inside negative|positive` (a signed distance
+image's sign inside the structure; ITK's negative by default).
 
 vmtk's grouping on the graph (`branching.annotate`) is a library call; no verb writes it into
 the graph yet.
