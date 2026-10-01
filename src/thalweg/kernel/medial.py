@@ -392,10 +392,16 @@ def protrusion(m, geometry, parent_points, k: int, tip, spacing: float, stations
     return du - w, du, w
 
 
-def prune_by_wall(branches: list[dict], m, geometry, relative: float = 1.0, floor: float = 1.0):
+def prune_by_wall(branches: list[dict], m, geometry, relative: float = 1.0, floor: float = 1.0,
+                  ancestors: bool = True):
     """Drop terminal branches whose tip does not reach beyond the parent's wall by
     max(``relative`` x the branch's median radius, ``floor`` mm), repeatedly (a parent left terminal
     is tested in turn). Returns (the kept branches renumbered, parents first; how many were dropped).
+
+    A parent too short to hold a station 3-4 of its radii from the junction on either side gives
+    no wall to measure against; with ``ancestors`` (the default) the tip is then measured against
+    the parent's parent where the parent leaves it, and so on up (without it such a branch stays,
+    and so does its parent).
 
     A branch leaving the root has no parent: it is tested against the root's first branch (the
     longest), at its start - unless its tip lies behind that start, along the first branch's axis,
@@ -424,6 +430,16 @@ def prune_by_wall(branches: list[dict], m, geometry, relative: float = 1.0, floo
             r_tip = float(np.median(r[r > 0])) if (r > 0).any() else 0.5
             rj = max(float(np.array(par["radius"])[k]), 0.5)
             p, across, wall = protrusion(m, geometry, P, k, tip, spacing=rj, skip_turns=b["parent"] < 0)
+            child = par
+            while (np.isinf(p) and wall == 0.0 and across > 0 and ancestors and child["parent"] >= 0):
+                # no station on the parent (too short for 3-4 radii either way): measure against the
+                # parent's own parent, where the parent leaves it - a lobe's sub-lobe is judged
+                # against the axis the lobe left, not left standing because the lobe is short
+                up = branches[child["parent"]]
+                kk = _junction_index(up, child)
+                rr = max(float(np.array(up["radius"])[kk]), 0.5)
+                p, across, wall = protrusion(m, geometry, np.array(up["points"]), kk, tip, spacing=rr)
+                child = up
             need = max(relative * r_tip, floor)
             if b["parent"] < 0:
                 ahead = P[min(3, len(P) - 1)] - P[0]

@@ -26,7 +26,13 @@ neighbors, when:
 - it reaches past the path's end (its half-width exceeds the arc length to either end: a pouch or
   a cap, not a tube);
 - it crosses the plane of the nearest point ``NEIGHBOR_MM`` along either way: the planes fold
-  inside the lumen (a bend tight for the section's size), and the centroid is not the axis.
+  inside the lumen (a bend tight for the section's size), and the centroid is not the axis;
+- its centroid is much nearer the wall than the point was before recentering (under
+  ``SHALLOWEST`` of that distance; measured against the start, so rounds cannot creep): the
+  section is two touching tubes' merged lumen and the centroid the waist between them (a convex
+  section's centroid is never that shallow). Such a point stays where it is - it does not take
+  an interpolated shift, which would only move it part of the way to the waist - and an
+  interpolated shift elsewhere is held to the same depth rule.
 
 The caller's ``holds`` do not move (the tracer holds radius + 1 mm around every node), and the
 total shift ramps up from them at most ``RAMP`` mm per mm of path, so the path leaves a node
@@ -52,6 +58,7 @@ SECTION_PIXELS = 41               # samples across a section window
 SECTION_CHUNK = 512               # sections sampled per call
 NEIGHBOR_MM = 0.25                # sections must not cross the planes of the points this far along
 SETTLED_MM = 0.01                 # a point whose neighborhood moved less than this last round stays
+SHALLOWEST = 0.75                 # a move may not leave a point nearer the wall than this share
 RAMP = 0.5                        # the largest shift per mm of path from a held point (27 degrees)
 RIM_POINTS = 32                   # rim samples tested against the other paths' tubes
 WIDE = 1.5                        # a section reaching beyond this many radii takes a longer tangent
@@ -206,6 +213,7 @@ def recenter(m: np.ndarray, geometry, paths: list[np.ndarray], radii: list[np.nd
     start = [p.copy() for p in P]
     moved = [np.zeros(len(p), bool) for p in P]
     last = [np.full(len(p), np.inf) for p in P]          # each point's shift in the previous round
+    depth0 = [distance.query(p, workers=-1)[0] if len(p) else np.zeros(0) for p in P]
     for _ in range(int(iterations)):
         p0 = np.concatenate([p[:-1] for p in P if len(p) > 1] or [np.zeros((0, 3))])
         p1 = np.concatenate([p[1:] for p in P if len(p) > 1] or [np.zeros((0, 3))])
@@ -226,6 +234,7 @@ def recenter(m: np.ndarray, geometry, paths: list[np.ndarray], radii: list[np.nd
             reach = r_.copy()
             T = tangents(p, reach)
             s_ = _arc(p)
+            depth = depth0[i]                             # each point's distance to the wall, before
             # a point whose neighborhood (two tangent reaches) did not move last round has settled
             busy = np.nonzero(last[i] > SETTLED_MM)[0]
             near = np.zeros(len(p), bool)
@@ -276,6 +285,10 @@ def recenter(m: np.ndarray, geometry, paths: list[np.ndarray], radii: list[np.nd
                 if j < len(p) and ((rim - p[j]) @ T[j] >= 0).any():
                     continue
                 _, c = _polygon_area_centroid(xy)
+                q = p[k] + c[0] * n1 + c[1] * n2
+                if distance.query(q)[0] < SHALLOWEST * depth[k]:
+                    shiftk[k] = 0.0                       # a waist between two touching tubes: stay put,
+                    continue                              # and pass no interpolated shift either
                 shiftk[k] = c[0] * n1 + c[1] * n2
             known = ~np.isnan(shiftk[:, 0])
             if not known.any():
@@ -293,6 +306,8 @@ def recenter(m: np.ndarray, geometry, paths: list[np.ndarray], radii: list[np.nd
                 shiftk = Q - p
             go = np.linalg.norm(shiftk, axis=1) > 0
             go[go] = sample(m, geometry, Q[go]) > 0
+            if go.any():                                  # interpolated shifts must not go shallow either
+                go[go] = distance.query(Q[go], workers=-1)[0] >= SHALLOWEST * depth[go]
             Q[~go] = p[~go]
             if go.any():
                 shift = max(shift, float(np.linalg.norm(Q[go] - p[go], axis=1).max()))

@@ -197,13 +197,13 @@ store, `--prune wall`, then `--prune wall --recenter` (ends counts the root):
 | Trachea | 6 | 4 | 2 | 23.3 cm | 22.8 cm | 2 / 3 |
 | Esophagus | 1 | 2 | 0 | 24.3 cm | 23.7 cm | 1 / 1 |
 | Aorta | 4 | 3 | 1 | 53.9 cm | 53.3 cm | 1 / 2 |
-| Colon | 8 | 6 | 3 | 73.5 cm | 74.0 cm | 1 / 5 |
+| Colon | 4 | 4 | 1 | 67.2 cm | 67.9 cm | 1 / 3 |
 
 - **The esophagus is one path.** Its two remaining lobes (16 and 14 mm, lateral bulges) left the
   root - the deepest point, about 9 mm above the lower end - which the old rule never tested:
-  3 edges and 27.0 cm become one edge of 24.3 cm (an adult esophagus is ~25 cm). The colon is
-  unchanged: its root branches pass as continuations or are measured where the first branch
-  turns (§5).
+  3 edges and 27.0 cm become one edge of 24.3 cm (an adult esophagus is ~25 cm). The colon's
+  root branches pass as continuations or are measured where the first branch turns (§5); its row
+  is retaken with the ancestor fallback of 2026-10-01 (§5), which drops a 6.3 cm side chain.
 - **Recentering straightens the long tubes.** The turn between consecutive segments (95th
   percentile) drops from 37° to 8° on the esophagus and from 35° to 7° on the descending aorta;
   points move 0.3–0.7 mm (median), 0.9–1.8 mm (95th percentile); the radius re-measured at the
@@ -330,9 +330,9 @@ Effect on the trees:
 | C3N-00704 | arteries | 537 / 1052.0 / 1.551 | 537 / 1036.0 / 1.599 | 488 / 1024.8 / 1.554 |
 | C3N-00704 | veins | 483 / 937.9 / 1.578 | 483 / 924.0 / 1.627 | 434 / 910.5 / 1.585 |
 | C3N-00704 | airways | 133 / 343.7 / 1.167 | 133 / 339.2 / 1.224 | 115 / 333.3 / 1.167 |
-| MSB-02664 | arteries | 298 / 706.9 / 1.655 | 298 / 697.9 / 1.704 | 240 / 666.8 / 1.657 |
+| MSB-02664 | arteries | 298 / 706.9 / 1.655 | 298 / 697.9 / 1.704 | 238 / 665.7 / 1.658 |
 | MSB-02664 | veins | 237 / 536.4 / 1.632 | 237 / 529.6 / 1.679 | 205 / 514.7 / 1.634 |
-| MSB-02664 | airways | 82 / 186.4 / 1.345 | 82 / 183.9 / 1.403 | 61 / 171.1 / 1.355 |
+| MSB-02664 | airways | 82 / 186.4 / 1.345 | 82 / 183.9 / 1.403 | 59 / 168.8 / 1.349 |
 
 **Runtime** (C3N arteries; the four combinations alternated in one process, three repeats; load
 3.5–6.4):
@@ -389,6 +389,14 @@ Effect on the trees:
   unfiltered (filtering them keeps lobes the flat phantoms need pruned).
 - **Effect:** the six lung trees, the trachea, aorta and colon are unchanged; the esophagus
   becomes one path (§3); the flat phantoms trace as their two ends.
+- **A parent too short to measure against (2026-10-01).** Stations sit 3-4 of the parent's
+  radii from the junction; a lobe's sub-lobe, whose parent (the lobe) is shorter than that, read
+  no wall, stayed, and kept the lobe too. Such a tip is now measured against the parent's parent
+  where the parent leaves it. Effect: C3N's three trees, the torso's trachea, esophagus, aorta
+  and duodenum unchanged; MSB arteries lose a 7 + 4 mm chain (238 tips, one pass, in the table
+  above), MSB airways a 14 + 10 mm chain of radius 3-4 mm running alongside the trachea, its tip
+  2.6 mm outside the trachea's wall (59 tips); the torso colon loses 6.3 cm of side chain; the
+  NLST DICOM SEG's esophagus goes from 7 terminal branches to 5 and its colon from 14 to 12.
 
 **Recentering (`--recenter`, added 2026-09-30, on by default for the flat tubes only):**
 - **What it does:** after pruning, every point moves to the area centroid of the structure's
@@ -416,9 +424,13 @@ Effect on the trees:
   - Adjacent points can land on the same rounded centroid: zero-length steps rise slightly (C3N
     arteries: 152 → 160), as the tracer already produces them.
   - **Touching tubes:** on the two-tube contact phantom, wall pruning has already deleted the
-    second tube, so no other branch claims the merged section, and recentering moves the
-    surviving path onto the contact plane, midway between the two axes (1.35 mm off its own;
-    without recentering it stays on its axis). Colon loops that touch can do the same.
+    second tube, so no other branch claims the merged section, and recentering moved the
+    surviving path onto the contact plane, midway between the two axes (1.35 mm off its own).
+    Fixed 2026-10-01: the merged section's centroid is the waist, much nearer the wall than the
+    point was (a convex section's centroid never is), so a move that would leave a point under
+    75 % of its distance to the wall is refused and the point stays. The path now stays on its
+    axis (lattice and oblique); the flat phantoms and the torso tubes move exactly as before. The
+    second tube is still lost to wall pruning (below).
 
 ## 5b. Airway walls
 
@@ -805,8 +817,10 @@ a steady inflow at the root and one resistance per outlet as placeholders.
   display name such as "Esophagus" or "Small Intestine"). A flat lumen under another name (a
   labelmap's `label_<value>`, a structure not in the list) gets the vessel settings unless asked.
   Not built: the junction of a shallow Y in a flat lumen (placed where the section splits); a
-  rule for touching loops, which wall pruning merges and recentering then centers on the contact
-  (§5). On a DICOM SEG's staircase field the esophagus still keeps 11 tips with both settings.
+  rule for touching loops, which wall pruning merges into one (the second tube is lost; §5;
+  recentering no longer pulls the path onto the contact). The NLST DICOM SEG's esophagus keeps 7
+  tips (36.9 cm) with both settings: its side branches protrude beyond the wall by more than their
+  own radius. It is another patient than the model store's, so whether they are real is open.
 - **Off the lattice** (§1, `--oblique`): done for every phantom; sections against the true
   diameter read 1–2 % small on round tubes on both grids.
 - **Degraded input** (§5k) is checked on one phantom and one case's own labelmap, not on

@@ -273,3 +273,36 @@ def test_rerooting_merges_the_deepest_point_when_it_lies_along_one_path(monkeypa
     P = g.edge_points(g.edges[0])
     assert np.linalg.norm(P[0] - np.array(g.nodes[g.edges[0].start_node].position)) < 1e-9
     assert np.linalg.norm(P[-1] - np.array(g.nodes[g.edges[0].end_node].position)) < 1e-9
+
+
+def test_touching_tubes_are_not_recentered_onto_their_contact():
+    """Two parallel tubes whose walls overlap: wall pruning keeps one, and the sections of its path
+    are the merged lumen, whose centroid is the waist between them. Moving there would leave the
+    path far shallower than it was, so it stays on its axis (the round-10 review found it moved
+    to the contact plane)."""
+    segs, _ = PS.contact()
+    pts = np.concatenate([[s[0], s[1]] for s in segs]).astype(float)
+    f = PS.chain_distance(segs)
+    for oblique in (False, True):
+        lo, hi = pts.min(0) - 5.5, pts.max(0) + 5.5
+        m, geo = PS.field_oblique(f, lo, hi) if oblique else PS.field_of(f, lo, hi, 0.7)
+        t = medial.trace(m, geo, prune="wall", recenter=True)
+        P = np.concatenate([np.array(sg["points"]) for sg in t.segments])
+        P = (P - PS.SHIFT) @ PS.Q if oblique else P
+        mid = (P[:, 2] > 4) & (P[:, 2] < 26)
+        assert abs(np.median(P[mid, 0])) < 0.05, oblique
+
+
+def test_a_sub_lobe_of_a_short_lobe_is_measured_against_the_axis_the_lobe_left():
+    """A lobe too short to hold a station 3-4 radii from its junction gave its sub-lobe no wall to
+    be measured against: both stayed. Now the sub-lobe's tip is measured against the main axis."""
+    segs = [((0.0, 0.0, 0.0), (40.0, 0.0, 0.0), 3.0, 3.0)]
+    m, geo = PS.field_of(PS.chain_distance(segs), (-4, -7, -7), (44, 7, 7), 0.7)
+    line = lambda a, b, n: np.linspace(a, b, n).tolist()                    # noqa: E731
+    main = dict(id=0, parent=-1, points=line([0, 0, 0], [40, 0, 0], 81), radius=[3.0] * 81)
+    lobe = dict(id=1, parent=0, points=line([20, 0, 0], [20, 2, 0], 5), radius=[3.0] * 5)
+    sub = dict(id=2, parent=1, points=line([20, 2, 0], [24, 2.5, 0], 9), radius=[2.0] * 9)
+    kept, dropped = medial.prune_by_wall([main, lobe, sub], m, geo, ancestors=False)
+    assert dropped == 0                                     # the old behavior: nothing to measure
+    kept, dropped = medial.prune_by_wall([main, lobe, sub], m, geo)
+    assert dropped == 2 and [b["id"] for b in kept] == [0]
