@@ -10,7 +10,8 @@ way: sample it at ``WallMap.wall_points()``.
 Two conventions:
 
 - :func:`edge_wall_map`: thalweg's. Stations every ``step`` mm on the edge's smoothed path
-  (:func:`thalweg.kernel.sections.stations`), arc length from the edge's start, angle from the
+  (the branch table's, :func:`thalweg.measure.smoothing`), arc length along the edge from its
+  start (never beyond the edge's ``length_mm``), angle from the
   station's parallel-transport normal n1 toward n2 (a frame carried along the edge without twist;
   its zero is arbitrary per edge);
 - :func:`group_wall_map`: vmtk's. Stations at the points of a branch group's longest cell,
@@ -74,8 +75,11 @@ def edge_wall_map(graph: TubeGraph, edge: int, m: np.ndarray, geometry, step: fl
     p, r = graph.edge_points(edge), graph.edge_radius(edge)
     if len(p) < 4:
         raise ThalwegError(f"edge {edge} has {len(p)} samples; a wall map needs at least 4")
-    st = sections.stations(p, np.where(r > 0, r, 0.5), step=step)
-    return _cast(m, geometry, st.centers, st.n1, st.n2, st.radius, st.s, angles(angle_count),
+    from .measure import smoothing
+    e = graph.edges[edge] if isinstance(edge, int) else edge
+    path = sections.SmoothPath(p, np.where(r > 0, r, 0.5), *smoothing(graph, e.structure))
+    st = path.stations(step)
+    return _cast(m, geometry, st.centers, st.n1, st.n2, st.radius, path.along(st.s), angles(angle_count),
                  reach_factor, reach_extra, ray_step)
 
 

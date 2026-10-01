@@ -49,7 +49,7 @@ def test_small_vessel_fraction():
     s = small_vessel_volume_fraction(g, "t")
     vol = [1 * np.pi * 9 * 10, 2 * np.pi * 4 * 10, 4 * np.pi * 1 * 10]
     assert abs(s["small_vessel_volume_fraction"] - vol[2] / sum(vol)) < 1e-3
-    assert abs(s["volume_mm3"] - sum(vol)) < 0.1
+    assert abs(s["inscribed_tube_volume_mm3"] - sum(vol)) < 0.1
 
 
 def test_orientation_entropy_extremes():

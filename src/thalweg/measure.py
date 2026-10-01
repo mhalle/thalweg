@@ -13,8 +13,13 @@ nodes) :func:`branch_table` reports:
   field cross-sections every ``step`` mm the section area at the model's boundary with the
   model's own interval (``area_low_mm2`` at margin +2 logits, ``area_high_mm2`` at -2), the
   equivalent diameter, the minimum and maximum caliper widths and the aspect ratio: medians over
-  the stations whose center lies inside the structure (``station_count``; stations whose center
-  falls outside are counted in ``outside_station_count`` and left out of every median);
+  the stations whose center lies inside the structure and whose contour closes
+  (``station_count``; a station whose center falls outside is counted in
+  ``outside_station_count``, one whose contour stays open after the window was doubled twice in
+  ``open_station_count``, and both are left out of every median). The stations lie on the
+  edge's smoothed path: within ~15 % of the radius of the traced points, or within ~2 % on a
+  recentered structure (:data:`RECENTERED_SMOOTHING`); a station's ``arc_length_mm`` is its
+  position along the edge (:meth:`thalweg.kernel.geometry.SmoothPath.along`);
 - **shape**, from thalweg's spline (:mod:`thalweg.kernel.geometry`): distance metric,
   sum-of-angles metric, inflection count metric, curvature (mean, max), mean absolute torsion,
   over the edge's interior - one radius clear of each end, where the traced path hooks into the
@@ -60,6 +65,18 @@ from .kernel import sections as S
 from .kernel.geometry import SmoothPath, direction_at
 
 LOW, HIGH = 2.0, -2.0            # margin levels for the interval: the small and the large area
+# the station spline's deviation budget (fraction of the radius, floor mm): the tracer's lattice
+# path is smoothed to 15 % of the radius; a recentered path already lies on the sections' centroids
+# and is followed closely (the round-10 review found the default budget moved its stations
+# 0.6-1.2 mm back off the axis)
+SMOOTHING = (0.15, 0.05)
+RECENTERED_SMOOTHING = (0.02, 0.01)
+SECTION_WIDENINGS = 2            # an open section's window is doubled up to this many times
+
+
+def smoothing(graph: TubeGraph, structure: str) -> tuple[float, float]:
+    """The station spline's (relative, floor) for ``structure``: see :data:`RECENTERED_SMOOTHING`."""
+    return RECENTERED_SMOOTHING if graph.structure(structure).parameters.get("recenter") else SMOOTHING
 
 
 def strahler(graph: TubeGraph, structure: str, tree: Tree | None = None) -> dict[int, int | None]:
@@ -134,6 +151,7 @@ def branch_table(graph: TubeGraph, structure: str, margin: np.ndarray | None = N
     nodes = {nd.id: nd for nd in graph.nodes}
     order = strahler(graph, structure, tree)
     depth = bifurcation_depth(graph, structure, tree)
+    budget = smoothing(graph, structure)
     rows = []
     for eid in sorted(tree.order):
         e = graph.edges[eid]
@@ -149,9 +167,10 @@ def branch_table(graph: TubeGraph, structure: str, margin: np.ndarray | None = N
                    radius_min_mm=float(pos.min()) if len(pos) else None,
                    radius_max_mm=float(pos.max()) if len(pos) else None)
         try:
-            path = SmoothPath(p, rr)
+            path = SmoothPath(p, rr)                     # shape: the tracer's budget, whatever the path
+            spath = path if budget == SMOOTHING else SmoothPath(p, rr, *budget)   # sections
         except (ValueError, TypeError):
-            path = None
+            path = spath = None
         r0, r1 = float(rr[0]), float(rr[-1])
         interior = (path.length - r0 - r1) if path is not None else 0.0
         reliable = (path is not None and e.length_mm >= max(4.0 * (row["radius_mean_mm"] or 0.5), 3.0)
@@ -172,7 +191,7 @@ def branch_table(graph: TubeGraph, structure: str, margin: np.ndarray | None = N
                        torsion_mean_absolute_per_mm=None)
         row.update(_branching(graph, tree, e))
         if margin is not None:
-            row.update(_sections(path, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels, outer,
+            row.update(_sections(spath, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels, outer,
                                  stations_out))
         rows.append(row)
     return rows
@@ -229,7 +248,8 @@ def _wall(img_outer, g, lumen: dict) -> dict:
 
 def _sections(path, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels, outer, stations_out) -> dict:
     keys = SECTION_KEYS + (WALL_KEYS if outer is not None else ())
-    empty = {k: None for k in keys} | {"station_count": 0, "outside_station_count": 0}
+    empty = {k: None for k in keys} | {"station_count": 0, "outside_station_count": 0,
+                                        "open_station_count": 0}
     if path is None:
         return empty
     st = path.stations(step)
@@ -237,17 +257,24 @@ def _sections(path, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels,
     guard_b = (r[-1] + 1.0) if b_kind == "junction" else 0.0
     L = st.s[-1] if len(st.s) else 0.0
     vals = {k: [] for k in keys}
-    outside = 0
+    outside = open_ = 0
+    along = path.along(st.s) if len(st.s) else st.s
     for i in range(len(st.s)):
         if st.s[i] < guard_a or st.s[i] > L - guard_b:
             continue
         half = S.half_width(st.radius[i])
-        pixel = max(S.PIXEL, 2 * half / max_pixels)
-        img, g = S.section_image(margin, geometry, st.centers[i], st.n1[i], st.n2[i], half, pixel)
-        d = S.describe(img, g, 0.0)
+        for _ in range(SECTION_WIDENINGS + 1):           # widen the window until the contour closes
+            pixel = max(S.PIXEL, 2 * half / max_pixels)
+            img, g = S.section_image(margin, geometry, st.centers[i], st.n1[i], st.n2[i], half, pixel)
+            d = S.describe(img, g, 0.0)
+            if d["area"] == 0.0 or d["closed"]:
+                break
+            half *= 2.0
         if d["area"] == 0.0:
             outside += 1
             continue
+        if not d["closed"]:                              # still open: a station, not a median
+            open_ += 1
         areas = S.pixel_areas(img, pixel, (HIGH, 0.0, LOW))
         rec = dict(area_mm2=d["area"], area_low_mm2=float(areas[2]), area_high_mm2=float(areas[0]),
                    equivalent_diameter_mm=d["equivalent_diameter"], min_feret_mm=d["min_feret"],
@@ -256,10 +283,10 @@ def _sections(path, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels,
             img_o, _ = S.section_image(outer, geometry, st.centers[i], st.n1[i], st.n2[i], half, pixel)
             rec.update(_wall(img_o, g, d))
         for k in keys:
-            if rec[k] is not None:
+            if rec[k] is not None and d["closed"]:
                 vals[k].append(rec[k])
         if stations_out is not None:
-            stations_out.append(dict(structure=e.structure, edge=e.id, arc_length_mm=float(st.s[i]),
+            stations_out.append(dict(structure=e.structure, edge=e.id, arc_length_mm=float(along[i]),
                                      position_x_mm=float(st.centers[i, 0]),
                                      position_y_mm=float(st.centers[i, 1]),
                                      position_z_mm=float(st.centers[i, 2]),
@@ -273,6 +300,7 @@ def _sections(path, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels,
         if out["wall_station_count"] < MIN_WALL_STATIONS:
             out.update({k: None for k in WALL_KEYS})
     out["outside_station_count"] = outside
+    out["open_station_count"] = open_
     return out
 
 

@@ -173,7 +173,9 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
 ## Beside it
 
 - **Branch table** (`thalweg table … -o branches.parquet`, or `thalweg run`): one row per edge,
-  defined in `src/thalweg/measure.py`. `thalweg run` adds, where the store allows:
+  defined in `src/thalweg/measure.py`. Section medians cover the stations whose contour closes
+  (`station_count`); `outside_station_count` and `open_station_count` count the others.
+  `thalweg run` adds, where the store allows:
   - `lobe_name`, `lobe_length_fraction` (a lung store; above);
   - for an airway whose wall the model labels: `wall_area_mm2`, `wall_area_percent`,
     `wall_thickness_mm`, `internal_perimeter_mm` (medians over the edge's stations) and
@@ -193,7 +195,8 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
   Columns a structure does not have are null in its rows.
 - **Station profile** (`--stations stations.parquet`, or `thalweg run`): one row per
   cross-section, every `--step` mm (default 1) along each edge's interior:
-  - `structure`, `edge`, `arc_length_mm` (from the edge's start);
+  - `structure`, `edge`, `arc_length_mm` (along the edge from its start; at most its
+    `length_mm`);
   - `position_x_mm`, `position_y_mm`, `position_z_mm` (LPS, the section's center on the path);
   - `traced_radius_mm` (the graph's radius there);
   - `area_mm2`, with `area_low_mm2` and `area_high_mm2` (the areas inside the margin's +2 and
@@ -207,11 +210,16 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
   - `strahler_order`: per order, `edge_count` and `length_mm`; `unordered`: the same for edges that
     lead only to truncated ends and so have no order;
   - `sectioned_branch_count`: edges with at least one measured section;
-  - `coarse_slices` (see `qc.json`), and a `warning` string when it is true;
+  - `coarse_slices` (see `qc.json`); `untraced_lattice_point_share`, the share of the
+    structure's lattice points in pieces the field does not connect to the traced one (only the
+    largest piece is traced); and a `warning` string when the slices are coarse or that share is
+    over 10 % (the warnings joined by "; ");
   - `tree_statistics` (`thalweg.statistics`):
     - `horton`: `bifurcation_ratio`, `length_ratio`, `diameter_ratio`, and `orders`, per
       Strahler order `stream_count`, `mean_length_mm`, `mean_diameter_mm`;
-    - `volume_mm3`, `small_vessel_volume_fraction`, `small_area_mm2` (the threshold, 5);
+    - `inscribed_tube_volume_mm3` (the sum of pi r^2 ds with the traced inscribed radius: the
+      structure's volume for round vessels, well short of it for a flat lumen - compare
+      `partition_volume_mm3`), `small_vessel_volume_fraction`, `small_area_threshold_mm2` (5);
     - `orientation_entropy`;
   - `pi10` (airways with a labeled wall): `pi10_mm`, `slope`, `wall_station_count` (stations
     with a wall measure) out of `station_count`, `internal_perimeter_range_mm`, and
@@ -263,7 +271,8 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
   3 mm long with at least 4 samples, the wall's distance from the centerline at every station and angle, ray-cast from
   the field (`thalweg.wallmap`). One `.npz`:
   - `structure`, `edges` (the edge ids), `angle_rad` (72 angles in [-π, π), shared);
-  - per edge `edge_<id>_arc_length_mm` (S,), from the edge's start along its smoothed path;
+  - per edge `edge_<id>_arc_length_mm` (S,), along the edge from its start (at most its
+    `length_mm`; the stations lie on its smoothed path);
     `edge_<id>_radius_mm` (S, 72), NaN where a ray found no wall; `edge_<id>_center_mm` (S, 3),
     the stations, LPS.
 

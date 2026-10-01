@@ -101,6 +101,9 @@ def summarize(graph: TubeGraph, structure: str, rows: list[dict] | None = None) 
     return out
 
 
+UNTRACED_WARNING_SHARE = 0.1          # warn when this share of a structure is in untraced pieces
+
+
 @dataclass
 class Case:
     """An open store and what has been decoded from it (see the module docstring)."""
@@ -265,11 +268,20 @@ class Case:
             if s.name in edge_lobe:
                 sm["lobes"] = lobes_mod.lobe_summary(g, s.name, edge_lobe[s.name],
                                                      lobes_mod.lobe_volumes(lobes))
+            sizes = s.statistics.get("component_lattice_point_counts") or []
+            sm["untraced_lattice_point_share"] = round(sum(sizes[1:]) / max(sum(sizes), 1), 5)
+            warnings = []
             if coarse:
-                sm["warning"] = ("coarse slices: the model drops thin vessels here, so tip counts, lengths "
-                                 "and order statistics are not comparable with thin-slice cases")
+                warnings.append("coarse slices: the model drops thin vessels here, so tip counts, lengths "
+                                "and order statistics are not comparable with thin-slice cases")
+            if sm["untraced_lattice_point_share"] > UNTRACED_WARNING_SHARE:
+                warnings.append(f"{sm['untraced_lattice_point_share']:.0%} of the structure lies in pieces "
+                                "the field does not connect to the traced one; only the largest is traced")
+            if warnings:
+                sm["warning"] = "; ".join(warnings)
                 if log:
-                    log(f"WARNING {s.name}: {sm['warning']}")
+                    for w in warnings:
+                        log(f"WARNING {s.name}: {w}")
             summary[s.name] = sm
         qc = dict(thalweg_version=__version__, store=str(self.store.path),
                   labeling_scheme=self.store.labeling_scheme, acquisition=acquisition,

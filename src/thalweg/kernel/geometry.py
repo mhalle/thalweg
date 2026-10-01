@@ -95,6 +95,14 @@ class SmoothPath:
         self.arc = np.r_[0, np.cumsum(np.linalg.norm(np.diff(self.fine, axis=0), axis=1))]
         self.length = float(self.arc[-1])
 
+    def along(self, s) -> np.ndarray:
+        """Arc lengths on the spline -> arc lengths along the input polyline (mm): the spline's
+        parameter is the polyline's normalized arc length, so a station's position along the edge
+        is reported in the edge's own length (the spline itself can run a little longer or
+        shorter)."""
+        poly = float(np.sum(np.linalg.norm(np.diff(self.points, axis=0), axis=1)))
+        return np.interp(np.asarray(s, float), self.arc, self.u) * poly
+
     def stations(self, step: float = 0.5) -> Stations:
         """Stations every ``step`` mm from the start (none on a path shorter than two steps' worth
         of samples: a frame needs a tangent from at least two points)."""

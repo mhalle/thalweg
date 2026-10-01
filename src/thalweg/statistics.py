@@ -9,9 +9,12 @@ All are read from the graph alone (positions, traced radii, the tree), per struc
   ``bifurcation_ratio`` R_b (N_k / N_k+1), ``length_ratio`` R_l (L_k+1 / L_k), ``diameter_ratio``
   R_d (D_k+1 / D_k). Orders with no stream, and edges without an order (they lead only to
   truncated ends), are left out; fewer than three populated orders gives None.
-- **Small-vessel volume fraction.** Volume is the sum over centerline segments of pi r^2 ds (r the
-  mean traced radius of the segment's ends). ``small_vessel_volume_fraction`` is the share of it
-  in segments whose cross-section pi r^2 is under ``small_area_mm2`` (default 5 mm^2: the "BV5"
+- **Small-vessel volume fraction.** ``inscribed_tube_volume_mm3`` is the sum over centerline
+  segments of pi r^2 ds (r the mean traced radius of the segment's ends): the volume of the
+  inscribed tube, close to the structure's own for round vessels, well short of it for a flat
+  lumen (the inscribed radius is half its depth; the esophagus reads 58 % of its partition volume).
+  ``small_vessel_volume_fraction`` is the share of it in segments whose cross-section pi r^2 is
+  under ``small_area_threshold_mm2`` (default 5 mm^2: the "BV5"
   of pulmonary vascular pruning studies). The model's radius floor (~1 mm, area ~3 mm^2) sits just
   below that threshold, so this fraction depends on the model as much as on the anatomy.
 - **Orientation entropy.** The entropy of the centerline's direction distribution (undirected,
@@ -88,7 +91,8 @@ def horton(graph: TubeGraph, structure: str) -> dict:
                 diameter_ratio=_ratio(orders, diameter, increasing=True), orders=table)
 
 
-def small_vessel_volume_fraction(graph: TubeGraph, structure: str, small_area_mm2: float = 5.0) -> dict:
+def small_vessel_volume_fraction(graph: TubeGraph, structure: str,
+                                 small_area_threshold_mm2: float = 5.0) -> dict:
     total = small = 0.0
     for e in graph.structure_edges(structure):
         seg, _, rm = graph.edge_segments(e)
@@ -96,10 +100,10 @@ def small_vessel_volume_fraction(graph: TubeGraph, structure: str, small_area_mm
         area = np.pi * rm[ok] ** 2
         vol = area * seg[ok]
         total += float(vol.sum())
-        small += float(vol[area < small_area_mm2].sum())
-    return dict(volume_mm3=round(total, 2),
+        small += float(vol[area < small_area_threshold_mm2].sum())
+    return dict(inscribed_tube_volume_mm3=round(total, 2),
                 small_vessel_volume_fraction=round(small / total, 4) if total else None,
-                small_area_mm2=small_area_mm2)
+                small_area_threshold_mm2=small_area_threshold_mm2)
 
 
 def orientation_entropy(graph: TubeGraph, structure: str) -> float | None:

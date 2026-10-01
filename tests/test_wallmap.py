@@ -41,7 +41,8 @@ def test_edge_wall_map_of_a_tube_and_a_y(tmp_path):
     w = edge_wall_map(g, e.id, m, geo, step=1.0, angle_count=24)
     assert w.radius_mm.shape == (len(w.arc_length_mm), 24) and len(w.angle_rad) == 24
     assert w.angle_rad[0] == -np.pi and np.all(np.diff(w.arc_length_mm) > 0)
-    mid = (w.arc_length_mm > 5) & (w.arc_length_mm < w.arc_length_mm[-1] - 5)
+    assert w.arc_length_mm[-1] <= e.length_mm + 1e-9          # positions along the edge itself
+    mid = (w.arc_length_mm > 6) & (w.arc_length_mm < w.arc_length_mm[-1] - 6)
     # the traced line lies within 0.1 mm of the axis, so the radius varies that much around it;
     # its mean over the angles, and the wall points themselves, are the cylinder's
     assert np.abs(w.radius_mm[mid] - 2.5).max() < 0.15 and not ostium(w)[mid].any()

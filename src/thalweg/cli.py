@@ -252,7 +252,8 @@ def run(store, output, names, step, no_stations, branch_volumes, quiet, ridge_pa
     for n, q in res["qc"]["structures"].items():
         log(f"{n}: {res['summary'][n]['edge_count']} branches, {q['length_mm'] / 10:.1f} cm, "
             f"{q['truncated_end_count']} truncated ends, "
-            f"{q['dropped_components']['component_count']} pieces dropped, "
+            f"{q['dropped_components']['component_count']} pieces dropped "
+            f"({q['dropped_components']['lattice_point_share']:.1%} of the structure), "
             f"{q['length_outside_field_mm']:.1f} mm outside")
     log(f"wrote {out}")
 

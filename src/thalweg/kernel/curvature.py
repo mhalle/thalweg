@@ -13,7 +13,9 @@ takes the curvature of the fitted quadric's level set at the point
 (research/vessels/curvature.py: 1.02-1.04 x the truth on oblique tube and sphere phantoms, and
 about six times less spread than vmtk's mesh curvature across reconstructions of one scan).
 
-The fit smooths over its 2.8 mm window: where the curvature changes within it - a saddle, a
+The window is 2.8 mm, or three voxels (the cube root of the voxel volume) on coarser grids, where
+2.8 mm holds too few unclipped samples (on a 1.5 mm grid most of a trachea's wall read NaN). The
+fit smooths over it: where the curvature changes within it - a saddle, a
 bifurcation's crotch - it reads the window's average (the inner equator of a torus of radii 3 and
 2, H = -0.25, reads -0.09). ``clip`` must be the store's own clip value: samples at it are left
 out, and a wrong value lets plateau samples into the fit.
@@ -26,14 +28,23 @@ from scipy.spatial import cKDTree
 from .field import to_index
 
 QUADRIC_RADIUS = 2.8
+VOXELS = 3.0
 MIN_SAMPLES = 12
 CHUNK = 2048
 
 
+def fit_radius(geometry) -> float:
+    """The quadric fit's window: QUADRIC_RADIUS, or three voxels where that is larger."""
+    voxel = abs(float(np.linalg.det(np.asarray(geometry.directions, float)))) ** (1.0 / 3.0)
+    return max(QUADRIC_RADIUS, VOXELS * voxel)
+
+
 def mean_curvature(m: np.ndarray, geometry, points, clip: float = 8.0,
-                   radius: float = QUADRIC_RADIUS) -> np.ndarray:
+                   radius: float | None = None) -> np.ndarray:
     """Mean curvature (1/mm, vtkCurvatures' sign) of the margin's level set through each world point
-    (see the module docstring). NaN where fewer than 12 unclipped samples lie within ``radius``."""
+    (see the module docstring). NaN where fewer than 12 unclipped samples lie within ``radius``
+    (default :func:`fit_radius`)."""
+    radius = fit_radius(geometry) if radius is None else float(radius)
     P = np.asarray(points, dtype=np.float64).reshape(-1, 3)
     out = np.full(len(P), np.nan)
     if not len(P):

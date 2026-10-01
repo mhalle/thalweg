@@ -120,3 +120,16 @@ def test_straightened_axes_follow_the_frames_and_the_window():
     assert (far.image == -99.0).all()
     with pytest.raises(Exception, match="cannot be straightened"):
         straighten(x, geo, np.zeros((10, 3)), np.ones(10))
+
+
+def test_the_fit_window_grows_on_coarse_grids():
+    """2.8 mm on the lung grids it was tuned on; three voxels on a 1.5 mm grid, where 2.8 mm left
+    most of a trachea's wall without a fit (the round-10 review)."""
+    from rankfield.geometry import Geometry
+    from thalweg.kernel.curvature import QUADRIC_RADIUS, fit_radius
+
+    def grid(*s):
+        return Geometry(shape=(2, 2, 2), directions=((s[0], 0, 0), (0, s[1], 0), (0, 0, s[2])),
+                        origin=(0, 0, 0))
+    assert fit_radius(grid(0.7, 0.7, 1.0)) == QUADRIC_RADIUS == fit_radius(grid(0.7, 0.7, 0.7))
+    assert fit_radius(grid(1.5, 1.5, 1.5)) == 4.5
