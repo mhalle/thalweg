@@ -19,7 +19,7 @@ from .graph import Edge, Grid, Node, Points, Provenance, Source, Structure, Tube
 from .kernel import medial
 from .kernel.field import to_index
 from .errors import ThalwegError
-from .store import FieldStore, open_store
+from .store import FieldStore, canonical_name, open_store
 
 TRUNCATION_VOXELS = 1.5
 # structures whose lumen is often flattened (TotalSegmentator's names): ``prune="auto"`` and
@@ -31,8 +31,9 @@ FLAT_TUBES = frozenset({"esophagus", "trachea", "colon", "small_bowel", "duodenu
 def tube_settings(name: str, prune: str = "auto", recenter: bool | None = None) -> tuple[str, bool]:
     """The tracer's ``(prune, recenter)`` for structure ``name``: an explicit value is kept;
     ``"auto"`` / None become ``("wall", True)`` for :data:`FLAT_TUBES`, ``("length", False)``
-    otherwise."""
-    flat = name in FLAT_TUBES
+    otherwise. The name is compared as :func:`thalweg.store.canonical_name` spells it, so a DICOM
+    SEG's "Esophagus" or "Small Intestine" counts; a labelmap's ``label_<value>`` never does."""
+    flat = canonical_name(name) in FLAT_TUBES
     if prune == "auto":
         prune = "wall" if flat else "length"
     if recenter is None:

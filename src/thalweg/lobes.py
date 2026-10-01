@@ -26,6 +26,7 @@ import numpy as np
 from .errors import ThalwegError
 from .graph import TubeGraph
 from .kernel.field import sample
+from .store import canonical_name
 
 LOBES = {1: "lung_upper_lobe_left", 2: "lung_lower_lobe_left", 3: "lung_upper_lobe_right",
          4: "lung_middle_lobe_right", 5: "lung_lower_lobe_right"}
@@ -45,7 +46,7 @@ def lobe_fields(store) -> LobeFields:
         refs = [store.ref_by_name_or_value(LOBES[k]) for k in LOBES]
     except ThalwegError:
         raise ThalwegError(f"{store.path.name} names no lung lobes (by name or as label_10-14)") from None
-    by_value = [r.name != LOBES[k] for k, r in zip(LOBES, refs)]
+    by_value = [canonical_name(r.name) != LOBES[k] for k, r in zip(LOBES, refs)]
     if any(by_value) and not all(by_value):
         raise ThalwegError(f"{store.path.name} names some lung lobes and not others")
     named_by = "value (misnamed store)" if all(by_value) else "name"

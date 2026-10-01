@@ -24,13 +24,35 @@ from .errors import ThalwegError
 
 
 class _Group(click.Group):
-    """Every verb: a ThalwegError (a request thalweg cannot satisfy) is a one-line error, not a trace."""
+    """Every verb: a ThalwegError (a request thalweg cannot satisfy), a file that cannot be read or
+    written, or a zip that is not one, is a one-line error, not a trace."""
 
     def invoke(self, ctx):
+        import zipfile
         try:
             return super().invoke(ctx)
         except ThalwegError as e:
             raise click.ClickException(str(e)) from None
+        except zipfile.BadZipFile as e:
+            raise click.ClickException(f"not a readable zip: {e}") from None
+        except OSError as e:
+            where = f": {e.filename}" if getattr(e, "filename", None) else ""
+            raise click.ClickException(f"{e.strerror or e}{where}") from None
+
+
+def _writable(*paths) -> None:
+    """Refuse, before any work, an output whose folder does not exist."""
+    from pathlib import Path
+    for p in paths:
+        if p is not None and not Path(p).expanduser().resolve().parent.is_dir():
+            raise click.UsageError(f"{p}: its folder does not exist")
+
+
+def _sdf_option(f):
+    return click.option("--sdf-inside", type=click.Choice(["negative", "positive"]), default="negative",
+                        show_default=True,
+                        help="For a signed distance image: the sign inside the structure (ITK's convention "
+                             "is negative). Ignored for stores, labelmaps and DICOM SEG.")(f)
 
 
 def _method_options(f):
@@ -63,10 +85,11 @@ def main():
 
 @main.command()
 @click.argument("store", type=click.Path(exists=True))
-def structures(store):
+@_sdf_option
+def structures(store, sdf_inside):
     """List the structures a ranked store names, with the part each lives in."""
     from .store import open_store
-    st = open_store(store)
+    st = open_store(store, sdf_inside=sdf_inside)
     click.echo(f"{st.path.name}: labeling scheme {st.labeling_scheme}, parts {st.part_indices}")
     for s in sorted(st.structures, key=lambda s: (s.part, s.label_value)):
         click.echo(f"  part {s.part}  value {s.label_value:4d}  {s.name}")
@@ -84,7 +107,8 @@ def structures(store):
               help="Connectivity: decided by the field, or the 26-connected labelmap (comparison only).")
 @click.option("-q", "--quiet", is_flag=True, help="No progress messages.")
 @_method_options
-def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, recenter, root):
+@_sdf_option
+def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, recenter, root, sdf_inside):
     """Trace seed-free centerline trees of STORE's structures into one graph file.
 
     Only the largest connected piece of each structure is traced; the others are listed in the
@@ -99,8 +123,9 @@ def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, r
 
     if len(set(names)) != len(names):
         raise click.UsageError(f"a structure is named twice: {', '.join(names)}")
+    _writable(output)
     try:
-        st = open_store(store)
+        st = open_store(store, sdf_inside=sdf_inside)
         graphs = []
         for n in names:
             log(f"{n}: decoding and tracing")
@@ -130,7 +155,8 @@ def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, r
               help="Also write the per-station section profile here (.parquet).")
 @click.option("--step", type=click.FloatRange(min=0, min_open=True), default=1.0, show_default=True,
               help="Section spacing along each branch, mm.")
-def table(graph, store, output, names, stations, step):
+@_sdf_option
+def table(graph, store, output, names, stations, step, sdf_inside):
     """Measure every branch of GRAPH's structures in STORE's field: one row per branch (Parquet;
     needs pyarrow, the `tables` extra). Column definitions: thalweg.measure (lobe columns:
     thalweg.lobes). The bronchoarterial pairing columns are written by `thalweg run` only."""
@@ -140,12 +166,13 @@ def table(graph, store, output, names, stations, step):
     from .lobes import annotate, lobe_fields, lobe_rows
     from .measure import branch_table, write_table
     from .store import open_store
+    _writable(output, stations)
     g = TubeGraph.read(graph)
     missing = [n for n in names if n not in {s.name for s in g.structures}]
     if missing:
         raise ThalwegError(f"{graph} has no structure {', '.join(missing)}; it has "
                            f"{', '.join(s.name for s in g.structures)}")
-    st = open_store(store)
+    st = open_store(store, sdf_inside=sdf_inside)
     case = Case(st)
     try:
         lobes = lobe_fields(st)
@@ -185,8 +212,9 @@ def table(graph, store, output, names, stations, step):
               help="Add each branch's volume (the branch partition of the field; about a third more time).")
 @click.option("-q", "--quiet", is_flag=True, help="No progress messages.")
 @_method_options
+@_sdf_option
 def run(store, output, names, step, no_stations, branch_volumes, quiet, ridge_passes, prune, recenter,
-        root):
+        root, sdf_inside):
     """The batch product for one case: graph.thalweg.json.gz, branches.parquet, stations.parquet,
     summary.json and qc.json in OUTPUT.
 
@@ -207,7 +235,7 @@ def run(store, output, names, step, no_stations, branch_volumes, quiet, ridge_pa
         raise click.UsageError(f"a structure is named twice: {', '.join(names)}")
     out = Path(output)
     try:
-        case = Case.open(store)
+        case = Case.open(store, sdf_inside=sdf_inside)
         for n in names:
             case.store.ref(n)                                  # every structure exists, before any output
         res = case.run(names, step=step, stations=not no_stations, branch_volumes=branch_volumes, log=log,
@@ -286,10 +314,11 @@ def _cap_kinds(ctx, param, value):
               help="Wall maps r(arc length, angle) of every edge, ray-cast from the field (.npz).")
 @click.option("--wall-map-step", type=click.FloatRange(min=0, min_open=True), default=0.5, show_default=True,
               help="Station spacing of the wall maps, mm.")
+@_sdf_option
 def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, swc, markups, curvature,
            with_distance, extension_ratio,
            extension_transition, zero_d_out, inflow, outlet_resistance, sections_out, distance_spheres,
-           wall_maps_out, wall_map_step):
+           wall_maps_out, wall_map_step, sdf_inside):
     """Export one structure: a capped surface for CFD, vmtk-compatible centerlines, SWC, Slicer
     markups and/or wall maps (give at least one output)."""
     from .graph import TubeGraph
@@ -300,35 +329,46 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
     if not (mesh or vmtk_out or swc or markups or wall_maps_out or sections_out or zero_d_out):
         raise click.UsageError("nothing to export: give --mesh, --vmtk-centerlines, --swc, --markups, "
                                "--bifurcation-sections, --wall-maps and/or --zero-d")
+    _writable(mesh, vmtk_out, swc, markups, wall_maps_out, sections_out, zero_d_out)
     g = TubeGraph.read(graph)
     s = g.structure(name)
-    if zero_d_out:
+    field = {}
+
+    def margin():                                # decoded once, checked against the graph once
+        if not field:
+            from .centerlines import check_source
+            from .store import open_store
+            st = open_store(store, sdf_inside=sdf_inside)
+            m, geo, ref = st.margin(name, s.source.part)
+            check_source(s, geo, ref)
+            field.update(m=m, geo=geo, store=st)
+        return field["m"], field["geo"]
+
+    def zero_d():
         from .solver import write_zero_d_model, zero_d_model
         model = zero_d_model(g, name, inflow=inflow, outlet_resistance=outlet_resistance)
         write_zero_d_model(model, zero_d_out)
         click.echo(f"{zero_d_out}: svZeroDSolver input, {len(model['vessels'])} vessels, "
                    f"{len(model['junctions'])} junctions, {len(model['boundary_conditions']) - 1} outlets "
                    "(placeholder boundary conditions)", err=True)
-    if sections_out:
+
+    def sections():
         from .branching import bifurcation_sections, vmtk_branching
-        from .centerlines import check_source
         from .measure import write_table
-        from .store import open_store
-        m, geo, ref = open_store(store).margin(name, s.source.part)
-        check_source(s, geo, ref)
+        m, geo = margin()
         b = vmtk_branching(g, name, vmtk_compatible=vmtk_exact)
         rows = bifurcation_sections(b, m, geo, distance_spheres, vmtk_compatible=vmtk_exact)
-        if not rows:
-            raise ThalwegError(f"{name}: vmtk's branching finds no bifurcation to section")
+        if not rows:                             # a single tube: nothing to section, not a failure
+            click.echo(f"{sections_out}: not written - vmtk's branching finds no bifurcation in {name}",
+                       err=True)
+            return
         write_table(rows, sections_out)
         closed = sum(r["closed"] for r in rows)
         click.echo(f"{sections_out}: {len(rows)} bifurcation sections ({closed} closed)", err=True)
-    if wall_maps_out:
-        from .centerlines import check_source
-        from .store import open_store
+
+    def walls():
         from .wallmap import ostium, outside_stations, wall_maps, write_wall_maps
-        m, geo, ref = open_store(store).margin(name, s.source.part)
-        check_source(s, geo, ref)
+        m, geo = margin()
         maps = wall_maps(g, name, m, geo, step=wall_map_step)
         write_wall_maps(maps, wall_maps_out, name)
         rays = sum(w.radius_mm.size for w in maps.values())
@@ -336,27 +376,29 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
         open_ = sum(int((ostium(w) & ~outside_stations(w)[:, None]).sum()) for w in maps.values())
         click.echo(f"{wall_maps_out}: {len(maps)} edges, {rays} rays, {open_ / max(rays, 1):.1%} through "
                    f"an ostium, {lost} stations outside the structure", err=True)
-    if mesh:
-        from .centerlines import check_source
+
+    def surface():
+        import numpy as np
         from .export import capped_surface, write_vtp_mesh
-        from .store import open_store
-        m, geo, ref = open_store(store).margin(name, s.source.part)
-        check_source(s, geo, ref)
+        m, geo = margin()
         msh = capped_surface(g, name, m, geo, kinds=cap_kinds, refine=refine)
         hits = None
         if extension_ratio is not None:
             from .export import extension_collisions, flow_extensions
             msh = flow_extensions(msh, ratio=extension_ratio, transition=extension_transition)
             hits = extension_collisions(msh, m, geo)
-        import numpy as np
         tube = np.zeros(len(msh.vertices), bool)                  # vertices of the flow extensions
         for e in msh.extensions.values():
             tube[e["vertices"][0]:e["vertices"][1]] = True
         if curvature:
             from .kernel.curvature import mean_curvature
             h = np.full(len(msh.vertices), np.nan)
-            h[~tube] = mean_curvature(m, geo, msh.vertices[~tube], clip=open_store(store).clip(s.source.part))
+            h[~tube] = mean_curvature(m, geo, msh.vertices[~tube], clip=field["store"].clip(s.source.part))
             msh.point_data["MeanCurvature"] = h                 # the extensions are not the field's surface
+            undefined = float(np.isnan(h[~tube]).mean()) if (~tube).any() else 0.0
+            if undefined > 0.05:
+                click.echo(f"  mean curvature undefined at {undefined:.0%} of the wall's vertices (too few "
+                           "field samples within the fit radius)", err=True)
         if with_distance:
             from .partition import distance_to_centerlines
             dist, rad = distance_to_centerlines(msh.vertices, g, name)
@@ -374,7 +416,8 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
                        err=True)
         for sk in msh.skipped:
             click.echo(f"  not capped: {sk}", err=True)
-    if vmtk_out:
+
+    def vmtk_centerlines():
         from .adapters import to_vmtk
         from .export import write_vtp_centerlines
         from .vmtk import VMTK_FLAGS, centerline_attributes, extract_branches
@@ -391,14 +434,32 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
             raise ThalwegError(f"{name}: vmtk's branch extraction failed: {e}") from e
         write_vtp_centerlines(split, vmtk_out)
         click.echo(f"{vmtk_out}: {split.n_cells} cells in vmtk's groups", err=True)
-    if swc:
+
+    def write_swc_():
         from .export import write_swc
         write_swc(g, name, swc)
         click.echo(f"{swc}: SWC", err=True)
-    if markups:
+
+    def write_markups_():
         from .export import write_slicer_markups
         write_slicer_markups(g, name, markups)
         click.echo(f"{markups}: Slicer markups", err=True)
+
+    # each output on its own: one that cannot be made does not stop the others
+    steps = [(zero_d_out, zero_d), (sections_out, sections), (wall_maps_out, walls), (mesh, surface),
+             (vmtk_out, vmtk_centerlines), (swc, write_swc_), (markups, write_markups_)]
+    failed = []
+    for out, step in steps:
+        if not out:
+            continue
+        try:
+            step()
+        except ThalwegError as e:
+            click.echo(f"{out}: not written - {e}", err=True)
+            failed.append(out)
+    if failed:
+        raise click.ClickException(f"{len(failed)} of {sum(bool(o) for o, _ in steps)} outputs not written: "
+                                   + ", ".join(map(str, failed)))
 
 
 @main.command()

@@ -37,7 +37,7 @@ def y_phantom():
 @pytest.fixture
 def files(y_phantom, tmp_path, monkeypatch):
     m, geo, g = y_phantom
-    monkeypatch.setattr("thalweg.store.open_store", lambda path: _Store(m, geo))
+    monkeypatch.setattr("thalweg.store.open_store", lambda path, **kw: _Store(m, geo))
     graph = g.write(tmp_path / "y.thalweg.json")
     store = tmp_path / "store.zip"
     store.write_bytes(b"")                                  # the argument must exist; the stand-in reads it
@@ -94,7 +94,7 @@ def test_export_refuses_unknown_cap_kinds(files):
     assert r.exit_code != 0 and "--cap-kinds" in r.output
 
 
-def test_export_of_a_root_only_structure_is_a_one_line_error(tmp_path):
+def test_export_of_a_root_only_structure_is_a_reported_failure(tmp_path):
     g = TubeGraph(structures=[Structure(name="r", roots=[0], method="test")],
                   nodes=[Node(id=0, kind="root", position=(0.0, 0.0, 0.0), structure="r")])
     graph = g.write(tmp_path / "r.thalweg.json")
@@ -102,8 +102,37 @@ def test_export_of_a_root_only_structure_is_a_one_line_error(tmp_path):
     store.write_bytes(b"")
     r = _run("export", graph, store, "-s", "r", "--vmtk-centerlines", tmp_path / "c.vtp")
     assert r.exit_code == 1 and isinstance(r.exception, SystemExit)          # a ClickException, no trace
-    assert r.output.startswith("Error:") and "no edges" in r.output
-    assert len(r.output.strip().splitlines()) == 1
+    lines = r.output.strip().splitlines()                    # the output's reason, then the verdict
+    assert len(lines) == 2 and "not written" in lines[0] and "no edges" in lines[0]
+    assert lines[1].startswith("Error: 1 of 1 outputs not written")
+
+
+def test_export_keeps_going_past_an_output_it_cannot_make(files, tmp_path):
+    """A single tube has no bifurcation: the sections are skipped with a notice and the other outputs
+    are still written (the round-10 review found the whole export aborted)."""
+    import numpy as np
+    from thalweg.graph import Edge, Points, Provenance
+    g = TubeGraph(structures=[Structure(name="t", roots=[0], method="test")],
+                  nodes=[Node(id=0, kind="root", position=(0.0, 0.0, 0.0), structure="t"),
+                         Node(id=1, kind="tip", position=(10.0, 0.0, 0.0), structure="t")],
+                  edges=[Edge(id=0, structure="t", start_node=0, end_node=1, point_range=(0, 11),
+                              length_mm=10.0, provenance=Provenance(method="field"))],
+                  points=Points(position=[(float(x), 0.0, 0.0) for x in np.linspace(0, 10, 11)],
+                                radius=[1.0] * 11))
+    graph = g.write(tmp_path / "t.thalweg.json")
+    _, store, _ = files
+    r = _run("export", graph, store, "-s", "t", "--bifurcation-sections", tmp_path / "s.parquet",
+             "--swc", tmp_path / "t.swc", "--markups", tmp_path / "t.mrk.json",
+             "--zero-d", tmp_path / "t.json")
+    assert r.exit_code == 0, r.output
+    assert "no bifurcation" in r.output and not (tmp_path / "s.parquet").exists()
+    assert all((tmp_path / f).exists() for f in ("t.swc", "t.mrk.json", "t.json"))
+
+
+def test_an_output_folder_that_does_not_exist_is_refused_before_work(files, tmp_path):
+    graph, store, _ = files
+    r = _run("export", graph, store, "-s", "y", "--swc", tmp_path / "nope" / "x.swc")
+    assert r.exit_code == 2 and "folder does not exist" in r.output
 
 
 def test_export_unknown_structure_is_a_one_line_error(files):

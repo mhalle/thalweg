@@ -36,6 +36,35 @@ class StructureRef:
 
 
 # TotalSegmentator `total` / `total_fast` label values of the crop-stage classes thalweg reads
+# other spellings of TotalSegmentator's names, after canonical_name (a DICOM SEG written by
+# TotalSegmentator labels its segments with their SNOMED display names)
+ALIASES = {"small_intestine": "small_bowel",
+           "left_upper_lobe_of_lung": "lung_upper_lobe_left",
+           "left_lower_lobe_of_lung": "lung_lower_lobe_left",
+           "right_upper_lobe_of_lung": "lung_upper_lobe_right",
+           "middle_lobe_of_right_lung": "lung_middle_lobe_right",
+           "right_lower_lobe_of_lung": "lung_lower_lobe_right"}
+
+
+def canonical_name(name: str) -> str:
+    """A structure name as TotalSegmentator spells it: case folded, every run of other characters an
+    underscore, then :data:`ALIASES` (``"Small Intestine"`` -> ``small_bowel``, ``"Left Upper lobe
+    of lung"`` -> ``lung_upper_lobe_left``)."""
+    import re
+    key = re.sub(r"[^0-9a-z]+", "_", str(name).casefold()).strip("_")
+    return ALIASES.get(key, key)
+
+
+def matching(structures, name: str, part: int | None = None) -> list:
+    """The structures called ``name`` (in ``part``): by exact name, else by :func:`canonical_name`."""
+    inpart = [s for s in structures if part is None or s.part == part]
+    exact = [s for s in inpart if s.name == name]
+    if exact:
+        return exact
+    key = canonical_name(name)
+    return [s for s in inpart if canonical_name(s.name) == key]
+
+
 TOTAL_VALUES = {"lung_upper_lobe_left": 10, "lung_lower_lobe_left": 11, "lung_upper_lobe_right": 12,
                 "lung_middle_lobe_right": 13, "lung_lower_lobe_right": 14, "heart": 51, "pulmonary_vein": 53}
 
@@ -75,7 +104,7 @@ class FieldStore:
     def _structures(self) -> list[StructureRef]:
         out = []
         for s in self.seg.get("segments", []):
-            if s.get("members") or s.get("role") == "background":
+            if s.get("members") or s.get("role") == "background" or s.get("background"):
                 continue
             v = s.get("label_value", s.get("label_values"))
             if isinstance(v, list):
@@ -117,7 +146,7 @@ class FieldStore:
         return self._fields[part]
 
     def ref(self, name: str, part: int | None = None) -> StructureRef:
-        cands = [s for s in self.structures if s.name == name and (part is None or s.part == part)]
+        cands = matching(self.structures, name, part)
         if not cands:
             raise ThalwegError(f"{self.path.name} has no structure {name!r}"
                                + (f" in part {part}" if part is not None else "")
@@ -132,7 +161,7 @@ class FieldStore:
         is named ``label_<value>`` - by its TotalSegmentator value (default: :data:`TOTAL_VALUES`).
         Raises ThalwegError if neither."""
         value = TOTAL_VALUES[name] if value is None else value
-        if any(s.name == name for s in self.structures):
+        if matching(self.structures, name):
             return self.ref(name)
         cand = [s for s in self.structures if s.name == f"label_{value}" and s.label_value == value]
         if not cand:
@@ -169,15 +198,16 @@ class FieldStore:
         return float(self.field(part).meta["clip"])
 
 
-def open_store(path):
+def open_store(path, sdf_inside: str = "negative"):
     """A ranked store (:class:`FieldStore`), or - for a NIfTI, NRRD or MetaImage file - a labelmap
-    or signed distance image read in degraded mode (:class:`thalweg.volume.VolumeStore`)."""
+    or signed distance image read in degraded mode (:class:`thalweg.volume.VolumeStore`; a distance
+    image is negative inside by default, ``sdf_inside="positive"`` for the other convention)."""
     from .volume import VolumeStore, dicom_directory, is_volume
     if hasattr(path, "margin") and hasattr(path, "structures"):     # already open
         return path
     path = Path(path).expanduser()
     if is_volume(path):
-        return VolumeStore(path)
+        return VolumeStore(path, sdf_inside=sdf_inside)
     if dicom_directory(path):
         raise ThalwegError(f"{path} is a directory of DICOM files: thalweg reads a DICOM SEG file, a "
                            "labelmap or distance image (NIfTI, NRRD, MetaImage), or a ranked store")

@@ -226,3 +226,21 @@ def test_a_pass_through_root_is_counted_once():
     shared = 1 if len(roots) == 2 and root_moved else 0                 # listed in both branches
     assert t.stats["recentered_points"] == int((np.linalg.norm(P1 - P0, axis=1) > 0).sum()) - shared
     assert t.stats["deepest_point"] == before.branches[0]["points"][0]
+
+
+def test_names_are_matched_as_totalsegmentator_spells_them():
+    """A DICOM SEG written by TotalSegmentator uses display names (the round-10 review found its
+    esophagus traced with the vessel settings, and its lobes not found)."""
+    from thalweg.centerlines import tube_settings
+    from thalweg.store import StructureRef, canonical_name, matching
+    assert canonical_name("Esophagus") == "esophagus"
+    assert canonical_name("Small Intestine") == "small_bowel"
+    assert canonical_name("Middle lobe of right lung") == "lung_middle_lobe_right"
+    assert tube_settings("Esophagus") == ("wall", True) and tube_settings("Small Intestine") == ("wall", True)
+    assert tube_settings("label_35") == ("length", False)
+    refs = [StructureRef("Esophagus", 0, 35, "x"), StructureRef("esophagus", 1, 15, "x"),
+            StructureRef("Left Upper lobe of lung", 0, 13, "x")]
+    assert matching(refs, "esophagus") == [refs[1]]                       # an exact name wins
+    assert matching(refs, "ESOPHAGUS") == refs[:2]
+    assert matching(refs, "lung_upper_lobe_left") == [refs[2]]
+    assert matching(refs, "esophagus", part=0) == [refs[0]]

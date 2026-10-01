@@ -103,8 +103,29 @@ def test_slicer_segment_names_and_a_distance_image(tmp_path):
     m, _, ref = st.margin("slab")
     assert m[5, 5, 10] == 8.0 and m[5, 5, 0] == -8.0 and m[5, 5, 13] == 0.0         # the wall at x = 13
     assert st.margin("slab")[0] is m and SLOPE == 10.0                           # decoded once
-    flipped = VolumeStore(tmp_path / "slab.nii.gz", sdf_inside="positive").margin("slab")[0]
-    assert flipped[5, 5, 10] == -8.0 and ref.scheme == "degraded:sdf"
+    assert ref.scheme == "degraded:sdf"
+    # read with the wrong sign, the inside is the background: it covers most of the border, refused
+    with pytest.raises(ThalwegError, match="negative inside"):
+        VolumeStore(tmp_path / "slab.nii.gz", sdf_inside="positive").margin("slab")
+    sitk.WriteImage(_image((-sdf).astype(np.float32), (1, 1, 1), (0, 0, 0)), str(tmp_path / "pos.nii.gz"))
+    m = VolumeStore(tmp_path / "pos.nii.gz", sdf_inside="positive").margin("pos")[0]
+    assert m[5, 5, 10] == 8.0 and m[5, 5, 0] == -8.0
+
+
+def test_a_float_labelmap_and_a_distance_image_with_holes(tmp_path):
+    """0/1 stored as float32 is a labelmap (whole numbers, never negative); a NaN distance is outside."""
+    arr = np.zeros((10, 10, 10), np.float32)
+    arr[3:7, 3:7, :] = 1.0
+    sitk.WriteImage(_image(arr, (1, 1, 1), (0, 0, 0)), str(tmp_path / "f.nii.gz"))
+    st = open_store(tmp_path / "f.nii.gz")
+    assert st.kind == "labelmap" and st.names == ["label_1"]
+    assert (st.margin("label_1")[0] > 0).sum() == 160
+    x = np.arange(20.0)
+    sdf = (np.abs(x[:, None, None] - 10.0) * np.ones((20, 20, 20)) - 3.0).astype(np.float32)
+    sdf[9:12, 5] = np.nan                                     # a hole inside the slab
+    sitk.WriteImage(_image(sdf, (1, 1, 1), (0, 0, 0)), str(tmp_path / "h.nii.gz"))
+    m = open_store(tmp_path / "h.nii.gz").margin("h")[0]
+    assert np.isfinite(m).all() and (m > 0).sum() == 5 * 400 - 3 * 20 and m.min() == -8.0
 
 
 def test_bad_inputs_are_clear_errors(tmp_path):
@@ -214,6 +235,11 @@ def test_a_real_idc_seg():
     assert centroid("Spleen")[0] > 30 > -30 > centroid("Liver")[0]
     g = centerline_graph(st, "Aorta")
     assert sum(e.length_mm for e in g.edges) > 300 and sum(n.kind == "tip" for n in g.nodes) == 1
+    # TotalSegmentator's display names resolve: lobes by name, the esophagus as a flat tube
+    from thalweg.lobes import lobe_fields
+    assert lobe_fields(st).named_by == "name"
+    p = centerline_graph(st, "esophagus").structures[0].parameters
+    assert (p["prune"], p["recenter"]) == ("wall", True)
 
 
 def test_signed_distance_is_exact_across_a_coarse_axis():

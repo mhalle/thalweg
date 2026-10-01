@@ -139,6 +139,21 @@ def _mask_margin(mask: np.ndarray, geometry) -> np.ndarray:
     return out
 
 
+def _check_inside(inside: np.ndarray, name: str, sdf_inside: str) -> None:
+    """Refuse a distance image read with the wrong sign: an inside that is empty, or that covers most
+    of the image's border (a structure seldom does; the background always does)."""
+    other = "positive" if sdf_inside == "negative" else "negative"
+    hint = f"is the distance {other} inside? (sdf_inside / --sdf-inside {other})"
+    if not inside.any():
+        raise ThalwegError(f"{name}: no voxel is inside, read as {sdf_inside} inside; {hint}")
+    faces = ([inside[i] for i in (0, -1)] + [inside[:, i] for i in (0, -1)]
+             + [inside[:, :, i] for i in (0, -1)])
+    border = float(np.mean(np.concatenate([f.ravel() for f in faces])))
+    if border > 0.5:
+        raise ThalwegError(f"{name}: read as {sdf_inside} inside, the inside covers {border:.0%} of the "
+                           f"image's border; {hint}")
+
+
 class VolumeStore:
     """A labelmap, signed distance image or DICOM SEG with ``FieldStore``'s interface (see the
     module docstring). ``names``: label value (segment number) -> structure name, overriding the
@@ -169,7 +184,11 @@ class VolumeStore:
             raise ThalwegError(f"{self.path.name}: a single-component 3-D image is needed")
         self.array = sitk.GetArrayFromImage(img)
         self._geometry = _geometry(img)
-        if np.issubdtype(self.array.dtype, np.integer):
+        a = self.array
+        if (not np.issubdtype(a.dtype, np.integer) and np.isfinite(a).all() and a.min() >= 0
+                and np.array_equal(a, np.round(a))):
+            self.array = a.astype(np.int64)            # a labelmap stored as floats: never negative,
+        if np.issubdtype(self.array.dtype, np.integer):    # whole numbers (a distance image has both signs)
             self.kind = "labelmap"
             file_names = self._segment_names(img)
             values = [int(v) for v in np.unique(self.array) if v != 0]
@@ -247,16 +266,22 @@ class VolumeStore:
         return sorted(s.name for s in self.structures)
 
     def ref(self, name: str, part: int | None = None) -> StructureRef:
-        for s in self.structures:
-            if s.name == name and part in (None, 0):
-                return s
-        raise ThalwegError(f"{self.path.name} has no structure {name!r}; it names: {', '.join(self.names)}")
+        from .store import matching
+        found = matching(self.structures, name) if part in (None, 0) else []
+        if found:
+            return found[0]
+        where = f" in part {part} (an image has only part 0)" if part not in (None, 0) else ""
+        names = ", ".join(self.names) or "nothing (no label in the image)"
+        raise ThalwegError(f"{self.path.name} has no structure {name!r}{where}; it names: {names}")
 
     def ref_by_name_or_value(self, name: str, value: int | None = None) -> StructureRef:
+        from .store import matching
         value = TOTAL_VALUES.get(name) if value is None else value
+        found = matching(self.structures, name)
+        if found:
+            return found[0]
         for s in self.structures:
-            by_value = self.kind == "labelmap" and s.name == f"label_{value}" and s.label_value == value
-            if s.name == name or by_value:
+            if self.kind == "labelmap" and s.name == f"label_{value}" and s.label_value == value:
                 return s
         raise ThalwegError(f"{self.path.name} has no class {name!r} (nor label_{value})")
 
@@ -287,5 +312,7 @@ class VolumeStore:
             else:
                 sdf = self.array.astype(np.float32)
                 d = -sdf if self.sdf_inside == "negative" else sdf
+                d = np.where(np.isfinite(d), d, -np.inf)           # NaN or inf: no distance, outside
+                _check_inside(d > 0, self.path.name, self.sdf_inside)
                 self._margins[ref.label_value] = np.clip(SLOPE * d, -CLIP, CLIP).astype(np.float32)
         return self._margins[ref.label_value], self._geometry, ref
