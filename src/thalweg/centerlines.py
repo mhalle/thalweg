@@ -134,7 +134,8 @@ def graph_from_tree(tree: medial.MedialTree, name: str, m: np.ndarray, geometry,
                  junction_count=sum(nd.kind == "junction" for nd in nodes),
                  joint_count=sum(nd.kind == "joint" for nd in nodes),
                  edge_count_joined_to_start_node=connected,
-                 deepest_point=[float(v) for v in nodes[roots[0] - node_offset].position] if roots else None,
+                 deepest_point=stats.get("deepest_point") or (
+                     [float(v) for v in nodes[roots[0] - node_offset].position] if roots else None),
                  length_mm=round(float(sum(e.length_mm for e in edges)), 3))
     structure = Structure(name=name, source=source, roots=roots, method="thalweg.trace",
                           parameters=parameters, statistics=stats)

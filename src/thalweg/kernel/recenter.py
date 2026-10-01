@@ -2,9 +2,10 @@
 
 The tracer's path follows the cheapest route through the inscribed-ball distance, and in a tube
 that is not round that distance is nearly flat across the width: a flattened lumen's path wanders
-from side to side (elliptic tubes of 2.5:1 and 3:1: 0.3-0.4 mm median, 2-3 mm at the 95th
-percentile off the axis). The ridge refinement cannot fix it - it moves a point at most 0.5 mm, to
-the largest inscribed ball, and across a flat lumen every ball is about as large.
+from side to side (elliptic tubes of 2.5:1 and 3:1: 0.26-1.14 mm median off the axis over all
+points, 2.9-3.6 mm at the 95th percentile with the side lobes). The ridge refinement cannot fix
+it - it moves a point at most 0.5 mm, to the largest inscribed ball, and across a flat lumen
+every ball is about as large.
 
 :func:`recenter` moves each point to the area centroid of the structure's section on the plane
 normal to the path there, and repeats (the tangent changes as the path straightens; three rounds
@@ -16,7 +17,8 @@ lateral wander tilts neighboring planes into each other across its width.
 A section is not trusted, and its point takes the shift interpolated along the path from its
 neighbors, when:
 
-- it stays open at a window of ``MAX_HALF_RADII`` radii;
+- it stays open at a window of ``MAX_HALF_RADII`` radii (the path's median radius, or the local
+  one where larger);
 - it is the junction's merged lumen: another path's axis crosses the plane inside it, or another
   path's tube claims part of its rim (a rim point whose tube function |x - c|^2 - r^2 is lower for
   that path, the partition's rule) - this extends the hold at a shallow junction, where the
@@ -124,17 +126,21 @@ def _closed(xy, g, pixel) -> bool:
     return bool(xy.min() > g[0] + 0.5 * pixel and xy.max() < g[-1] - 0.5 * pixel)
 
 
-def _sections(m, geometry, P, T, r) -> list:
+def _sections(m, geometry, P, T, r, scale=None) -> list:
     """For each point, the closed section contour around it on the plane normal to its tangent, in
     (n1, n2) mm, with the frame and the window's half-width - or None if the center is outside or
     the contour stays open at the widest window. The first window (2r + 1 mm, ``SECTION_PIXELS``
-    across) is sampled for every point in one call; a wider one, at the same pixel size, only where
-    that stays open."""
+    across) is sampled for every point in one call; a wider one, at the same pixel size and
+    doubling up to ``MAX_HALF_RADII`` x ``scale`` + 1 mm, only where that stays open. ``scale``
+    (default ``r``): the radius the widest window is measured in - the caller passes the path's
+    median, since the local inscribed radius is smallest where a path has wandered toward the
+    narrow edge of a flat lumen."""
     out = [None] * len(P)
     if not len(P):
         return out
     n1, n2 = _frames(T)
     half = 2.0 * r + 1.0
+    widest = MAX_HALF_RADII * (r if scale is None else np.maximum(r, scale)) + 1.0
     unit = np.linspace(-1.0, 1.0, SECTION_PIXELS)
     U, V = np.meshgrid(unit, unit, indexing="ij")
     imgs = np.empty((len(P), *U.shape), np.float32)
@@ -152,8 +158,9 @@ def _sections(m, geometry, P, T, r) -> list:
         if _closed(got[0], g, pixel):
             out[k] = (got[0][:-1], n1[k], n2[k], half[k])
             continue
-        h = 2.0 * half[k]
-        while h <= MAX_HALF_RADII * r[k] + 1.0:              # wider windows, one at a time
+        h = half[k]
+        while h < widest[k]:                                 # wider windows, one at a time
+            h = min(2.0 * h, widest[k])
             img, g = section_image(m, geometry, P[k], n1[k], n2[k], h, pixel)
             got = center_contour(img, g, 0.0)
             if got is None:
@@ -161,7 +168,6 @@ def _sections(m, geometry, P, T, r) -> list:
             if _closed(got[0], g, float(g[1] - g[0])):
                 out[k] = (got[0][:-1], n1[k], n2[k], h)
                 break
-            h *= 2.0
     return out
 
 
@@ -231,7 +237,8 @@ def recenter(m: np.ndarray, geometry, paths: list[np.ndarray], radii: list[np.nd
                 np.add.at(cover, hi, -1)
                 near = np.cumsum(cover)[:-1] > 0
             ks = np.nonzero(~holds[i] & near)[0]
-            got = _sections(m, geometry, p[ks], T[ks], r_[ks])
+            scale = float(np.median(r_))
+            got = _sections(m, geometry, p[ks], T[ks], r_[ks], scale)
             found = {int(k): g for k, g in zip(ks, got) if g is not None}
             wide = np.array([k for k, g in found.items()
                              if np.linalg.norm(g[0], axis=1).max() > WIDE * r_[k]], np.int64)
@@ -239,15 +246,16 @@ def recenter(m: np.ndarray, geometry, paths: list[np.ndarray], radii: list[np.nd
                 for k in wide:
                     reach[k] = np.linalg.norm(found[k][0], axis=1).max()
                 T = tangents(p, reach)
-                for k, g in zip(wide, _sections(m, geometry, p[wide], T[wide], r_[wide])):
+                for k, g in zip(wide, _sections(m, geometry, p[wide], T[wide], r_[wide], scale)):
                     if g is None:
                         del found[int(k)]
                     else:
                         found[int(k)] = g
             for k in list(found):
-                xy, n1, n2, half = found[k]
+                xy, n1, n2, _ = found[k]
                 if tree is not None:
-                    hits = _axis_crossings(p[k], T[k], n1, n2, half + half_seg, (p0, p1, lab), tree, i)
+                    e = float(np.linalg.norm(xy, axis=1).max())          # may reach a window corner
+                    hits = _axis_crossings(p[k], T[k], n1, n2, e + half_seg, (p0, p1, lab), tree, i)
                     if any(_inside(xy, h) for h in hits) or _claimed(
                             p[k], xy, n1, n2, i, (p0, p1, r0, r1, lab), tree, rmax, half_seg):
                         del found[k]

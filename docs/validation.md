@@ -195,11 +195,13 @@ store, `--prune wall`, then `--prune wall --recenter` (ends counts the root):
 | Trachea | 6 | 4 | 2 | 23.3 cm | 22.8 cm | 2 / 3 |
 | Esophagus | 1 | 2 | 0 | 24.3 cm | 23.7 cm | 1 / 1 |
 | Aorta | 4 | 3 | 1 | 53.9 cm | 53.3 cm | 1 / 2 |
-| Colon | 7 | 5 | 3 | 68.8 cm | 69.4 cm | 1 / 4 |
+| Colon | 8 | 6 | 3 | 73.5 cm | 74.0 cm | 1 / 5 |
 
-- **The esophagus is one path.** Its two remaining lobes left the root (the deepest point,
-  mid-esophagus), which the old rule never tested: 3 edges and 27.0 cm become one edge of
-  24.3 cm (an adult esophagus is ~25 cm). The colon loses one root lobe (8 → 7 edges).
+- **The esophagus is one path.** Its two remaining lobes (16 and 14 mm, lateral bulges) left the
+  root - the deepest point, about 9 mm above the lower end - which the old rule never tested:
+  3 edges and 27.0 cm become one edge of 24.3 cm (an adult esophagus is ~25 cm). The colon is
+  unchanged: its root branches pass as continuations or are measured where the first branch
+  turns (§5).
 - **Recentering straightens the long tubes.** The turn between consecutive segments (95th
   percentile) drops from 37° to 8° on the esophagus and from 35° to 7° on the descending aorta;
   points move 0.3–0.7 mm (median), 0.9–1.8 mm (95th percentile); the radius re-measured at the
@@ -278,7 +280,7 @@ within 0.07 mm everywhere.
   median point lies on the axis (≤ 0.002 mm), closer than vmtk's 0.1–0.3 mm. The 95th percentile
   is the flat ends: the tracer's end runs into a corner of the flat cut, up to 3.6 mm off the
   axis, where vmtk's line ends at its seed. Clear of the ends by 1.5 semi-major axes the axis is
-  within 0.005 mm at the 95th percentile on all five tubes. The radius reads +0.01 to +0.04 mm.
+  within 0.005 mm at the 95th percentile on all six tubes. The radius reads +0.01 to +0.04 mm.
   On the round arc and Ys, recentering changes nothing measurable (≤ 0.007 mm).
 
 **With one pass, vmtk is more accurate on clean round tubes.** The cause is thalweg's ridge
@@ -370,9 +372,16 @@ Effect on the trees:
   start, unless the tip lies behind that start by more than both the wall distance and its own
   offset across the axis: then it continues the axis the other way. The pulmonary trunk is such a
   branch (C3N arteries: 33.7 mm behind, 4.4 mm across, wall 22.7 mm); a first version that only
-  compared with two radii removed it. Of the six lung trees only MSB veins change (one 39 mm root branch of median radius 16.6 mm, a lobe of the left atrium, goes:
-  −1 tip, −3.8 cm); the esophagus becomes one path and the colon loses one lobe (§3); the flat
-  phantoms trace as their two ends.
+  compared with two radii removed it.
+- **At the root the stations are one-sided**, 3-4 root radii down the first branch. If that
+  branch turns there, a ray across the root's axis runs down the turned leg and reads no wall,
+  and a real side branch was pruned (the round-9 review's phantom: a first branch bending 90°
+  20 mm from an 8 mm root ball cost a 30 mm side branch). Stations where the first branch runs
+  more than 30° off its direction at the root (chords over two spacings either way) are now
+  skipped, and with none left the branch stays. Non-root branches keep the two-sided stations
+  unfiltered (filtering them keeps lobes the flat phantoms need pruned).
+- **Effect:** the six lung trees, the trachea, aorta and colon are unchanged; the esophagus
+  becomes one path (§3); the flat phantoms trace as their two ends.
 
 **Recentering (`--recenter`, added 2026-09-30, on by default for the flat tubes only):**
 - **What it does:** after pruning, every point moves to the area centroid of the structure's
@@ -383,8 +392,8 @@ Effect on the trees:
   crosses it or another branch's tube claims its rim (a junction's merged lumen), where it reaches
   past the path's end, and where it crosses a neighbor's plane (a bend tight for the section).
 - **For:**
-  - Flat tubes: every point within 0.002 mm (median) of the axis, against 0.2–1.0 mm without
-    it and vmtk's 0.1–0.3 mm (§4).
+  - Flat tubes: every point within 0.002 mm (median) of the axis, against 0.26–1.14 mm without
+    it (all points, length pruning) and vmtk's 0.1–0.3 mm (§4); a 6:1 tube too.
   - Real tubes come out smoother: the esophagus's and aorta's segment turns (95th percentile)
     drop from 35–37° to 7–8° (§3).
   - Round vessels barely move: C3N, wall pruning, all three trees: 45–60 % of points move, the
@@ -396,6 +405,8 @@ Effect on the trees:
     Use it with `--prune wall`.
   - The flat ends of a phantom stay in their corners (held near the tips), and big, short edges
     (aortic-root lobes, the cecum) do not move: their sections are not those of a tube.
+  - Adjacent points can land on the same rounded centroid: zero-length steps rise slightly (C3N
+    arteries: 152 → 160), as the tracer already produces them.
 
 ## 5b. Airway walls
 

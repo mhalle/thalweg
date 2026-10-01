@@ -16,9 +16,9 @@ import vmtk_phantom as VP  # noqa: E402
 A, B, L = 4.5, 1.5, 40.0                        # a 3:1 elliptic tube along x
 
 
-def flat(oblique=False, roll=0.0):
-    f = VP.elliptic_sdf(A, B, L, roll)
-    box = (-4.0, -A - 4, -A - 4), (L + 4, A + 4, A + 4)
+def flat(oblique=False, roll=0.0, a=A):
+    f = VP.elliptic_sdf(a, B, L, roll)
+    box = (-4.0, -a - 4, -a - 4), (L + 4, a + 4, a + 4)
     if oblique:
         m, geo = PS.field_oblique(f, *box)
         return m, geo, lambda p: (np.asarray(p, float) - PS.SHIFT) @ PS.Q        # world -> tube frame
@@ -97,8 +97,8 @@ def test_wall_pruning_keeps_a_root_branch_that_continues_the_axis():
 
 
 def test_a_y_moves_nothing_at_its_junction():
-    """The daughters' sections near the junction are the merged lumen: held (claimed by the other
-    branch's tube, or the other axis crosses them), so the junction node stays put."""
+    """The nodes are held: junction and tips stay put (the merged-lumen rejection itself is
+    pinned by test_a_section_reaching_into_another_path_is_claimed)."""
     segs, _ = PS.y_phantom(60)
     pts = np.concatenate([[s[0], s[1]] for s in segs]).astype(float)
     m, geo = PS.field_of(PS.chain_distance(segs), pts.min(0) - 7, pts.max(0) + 7, 0.7)
@@ -176,3 +176,53 @@ def test_centerline_graph_records_the_settings_it_used(monkeypatch):
     assert (p["prune"], p["recenter"]) == ("length", False)
     with pytest.raises(ThalwegError):
         centerline_graph(Store(), "vessel", margin=(m, geo, Ref()), prune="spurs")
+
+
+def test_a_six_to_one_tube_is_recentered_too():
+    """The window grows to MAX_HALF_RADII path radii: a 9 x 1.5 mm section closes in it."""
+    m, geo, frame = flat(a=9.0)
+    t = medial.trace(m, geo, prune="wall", recenter=True)
+    assert t.stats["recentered_points"] > 20
+    P = frame(np.concatenate([np.array(sg["points"]) for sg in t.segments]))
+    keep = (P[:, 0] > 1.5 * 9.0) & (P[:, 0] < L - 1.5 * 9.0)
+    assert np.median(np.linalg.norm(P[keep, 1:], axis=1)) < 0.01
+
+
+def test_the_shift_ramps_up_from_held_points():
+    m, geo, frame = flat()
+    X = cKDTree(medial.crossings(m, geo))
+    s = np.arange(6.0, 34.0, 0.7)
+    P = np.c_[s, np.full(len(s), 1.0), np.zeros(len(s))]               # 1 mm off the axis, inside
+    held = np.zeros(len(s), bool)
+    held[:3] = True
+    Q, R, moved = rc.recenter(m, geo, [P], [np.full(len(s), 1.5)], [held], X)
+    shift = np.linalg.norm(Q[0] - P, axis=1)
+    gap = np.maximum(s - s[2], 0.0)
+    assert np.all(shift <= rc.RAMP * gap + 1e-9)
+    assert np.all(shift[:3] == 0) and moved[0][5:].all()
+    far = gap > 2.5 / rc.RAMP
+    assert np.abs(Q[0][far, 1]).max() < 0.02                           # on the axis beyond the ramp
+
+
+def test_wall_pruning_keeps_a_root_branch_when_the_first_branch_turns():
+    """The first root branch turns 20 mm out; a ray across the root's axis from there would run
+    down the turned leg and read no wall, so those stations are skipped and the side branch stays."""
+    segs = [((0, 0, 0), (0.01, 0, 0), 8.0, 8.0), ((0, 0, 0), (20, 0, 0), 5.0, 5.0),
+            ((20, 0, 0), (20, 80, 0), 5.0, 5.0), ((0, 0, 0), (-5, 30, 0), 3.5, 3.5)]
+    m, geo = PS.field_of(PS.chain_distance(segs), (-20, -14, -14), (30, 88, 14), 0.7)
+    a = medial.trace(m, geo, prune="length")
+    b = medial.trace(m, geo, prune="wall")
+    assert ends(a) == ends(b) == 2
+
+
+def test_a_pass_through_root_is_counted_once():
+    m, geo, frame = flat(oblique=True, roll=np.radians(35))
+    t = medial.trace(m, geo, prune="wall", recenter=True)
+    before = medial.trace(m, geo, prune="wall")
+    P0 = np.concatenate([np.array(b["points"]) for b in before.branches])
+    P1 = np.concatenate([np.array(b["points"]) for b in t.branches])
+    roots = [b for b in t.branches if b["parent"] < 0]
+    root_moved = not np.allclose(roots[0]["points"][0], before.branches[0]["points"][0])
+    shared = 1 if len(roots) == 2 and root_moved else 0                 # listed in both branches
+    assert t.stats["recentered_points"] == int((np.linalg.norm(P1 - P0, axis=1) > 0).sum()) - shared
+    assert t.stats["deepest_point"] == before.branches[0]["points"][0]

@@ -43,10 +43,11 @@ decided 2026-09-30, ``recenter`` added after):
   width survive as branches (an elliptic tube of 3 x 1.2 mm traced as 24 ends, an esophagus as 13).
   Branches leaving the root are tested against its first branch, unless they continue its axis
   backward (:func:`prune_by_wall`);
-- ``recenter`` (default off): after pruning, move every point to the area centroid of its
-  cross-section (:mod:`.recenter`), holding radius + 1 mm around every node. The path then lies on
-  a flattened lumen's axis (3:1 elliptic tubes: 0.3-1.0 mm median off it -> 0.002 mm), where the
-  tracer wanders across the width; a round tube barely moves. Pair it with ``prune="wall"``: the
+- ``recenter`` (default off here; the pipeline turns it on for flat tubes): after pruning, move
+  every point to the area centroid of its cross-section (:mod:`.recenter`), holding radius + 1 mm
+  around every node. The path then lies on a flattened lumen's axis (2.5:1 and 3:1 elliptic
+  tubes: 0.26-1.14 mm median off it -> 0.002 mm), where the tracer wanders across the width; a
+  round tube barely moves. Pair it with ``prune="wall"``: the
   length rule's side lobes hold the path at their junctions.
 """
 from __future__ import annotations
@@ -63,6 +64,7 @@ from . import recenter as _rc
 from .topology import OFFSETS, components, field_edges, voxel_edges
 
 SCALE, CONST, EPS = 1.5, 1.0, 0.1
+STATION_COS = np.cos(np.radians(30.0))     # wall-pruning stations must run within 30 deg of the junction
 
 
 @dataclass
@@ -245,6 +247,8 @@ def trace(m: np.ndarray, geometry, graph: str = "field", scale: float = SCALE, c
         say(f"wall pruning dropped {dropped} terminal branches")
         stats["pruned_by_wall"] = dropped
     if recenter:
+        if out:                                         # where the tracer started, before any move
+            stats["deepest_point"] = [float(v) for v in out[0]["points"][0]]
         out, n_moved = recenter_branches(out, m, geometry, xtree)
         say(f"recentered {n_moved} points")
         stats["recentered_points"] = n_moved
@@ -284,9 +288,10 @@ def recenter_branches(branches: list[dict], m, geometry, xtree) -> tuple[list[di
         paths[b], radii[b], holds[b] = paths[b][:1], radii[b][:1], np.ones(1, bool)
     P, R, moved = _rc.recenter(m, geometry, paths, radii, holds, xtree)
     if through:
-        P[b], R[b], moved[b] = P[a][:nb][::-1], R[a][:nb][::-1], moved[a][:nb]
-        P[a], R[a], moved[a] = P[a][nb - 1:], R[a][nb - 1:], moved[a][nb - 1:]
-        moved[a][0] = False                             # the shared root point, counted once
+        both = moved[a]
+        P[b], R[b], moved[b] = P[a][:nb][::-1], R[a][:nb][::-1], both[:nb][::-1].copy()
+        P[a], R[a], moved[a] = P[a][nb - 1:], R[a][nb - 1:], both[nb - 1:].copy()
+        moved[a][0] = False                             # the shared root point, counted once (in b)
     out = [dict(b_, points=np.round(p, 3).tolist(), radius=np.round(r, 3).tolist())
            for b_, p, r in zip(branches, P, R)]
     return out, int(sum(int(v.sum()) for v in moved))
@@ -342,14 +347,20 @@ def _ray_to_wall(m, geometry, origin, u, step: float = 0.1, max_mm: float = 60.0
     return float(t[out[0]]) if len(out) else max_mm
 
 
-def protrusion(m, geometry, parent_points, k: int, tip, spacing: float, stations=(-4, -3, 3, 4)):
+def protrusion(m, geometry, parent_points, k: int, tip, spacing: float, stations=(-4, -3, 3, 4),
+               skip_turns: bool = False):
     """How far ``tip`` lies beyond the parent's wall, measured across the parent's axis at point k.
 
     The direction u is the tip's offset from the junction with the parent's tangent removed; the
     wall is the median ray length from the parent's axis along u at a few stations ``spacing`` mm
     apart on both sides of the junction (clear of the junction itself). Returns (protrusion, the
     tip's offset across the axis, the wall distance); a tip straight along the parent returns
-    +inf (nothing to prune)."""
+    +inf (nothing to prune). With ``skip_turns``, a station where the parent's direction (the
+    chord over two spacings either way) is more than 30° from that direction at the junction is
+    skipped: a ray across the junction's axis would run down the turned parent and read no wall.
+    With no station left there is nothing to measure against, and the branch stays (+inf).
+    :func:`prune_by_wall` asks for it at the root, where all the stations lie on one side, a few
+    root radii down the first branch."""
     P = np.asarray(parent_points, float)
     s = np.r_[0, np.cumsum(np.linalg.norm(np.diff(P, axis=0), axis=1))]
     a, b = P[max(k - 3, 0)], P[min(k + 3, len(P) - 1)]
@@ -360,12 +371,21 @@ def protrusion(m, geometry, parent_points, k: int, tip, spacing: float, stations
     if du < 1e-6:
         return np.inf, 0.0, 0.0
     u /= du
+    def at(sj):
+        return np.array([np.interp(sj, s, P[:, c]) for c in range(3)])
+
+    def chord(sj):                          # the parent's direction over two spacings either way
+        t = at(min(sj + 2 * spacing, s[-1])) - at(max(sj - 2 * spacing, 0.0))
+        return t / max(float(np.linalg.norm(t)), 1e-12)
+
+    here = chord(s[k])
     walls = []
     for st in stations:
         sj = s[k] + st * spacing
         if 0 <= sj <= s[-1]:
-            o = np.array([np.interp(sj, s, P[:, c]) for c in range(3)])
-            walls.append(_ray_to_wall(m, geometry, o, u))
+            if skip_turns and abs(chord(sj) @ here) < STATION_COS:
+                continue                    # the parent turns there: a ray along u would run down it
+            walls.append(_ray_to_wall(m, geometry, at(sj), u))
     if not walls:
         return np.inf, du, 0.0
     w = float(np.median(walls))
@@ -403,7 +423,7 @@ def prune_by_wall(branches: list[dict], m, geometry, relative: float = 1.0, floo
             r = np.array(b["radius"])
             r_tip = float(np.median(r[r > 0])) if (r > 0).any() else 0.5
             rj = max(float(np.array(par["radius"])[k]), 0.5)
-            p, across, wall = protrusion(m, geometry, P, k, tip, spacing=rj)
+            p, across, wall = protrusion(m, geometry, P, k, tip, spacing=rj, skip_turns=b["parent"] < 0)
             need = max(relative * r_tip, floor)
             if b["parent"] < 0:
                 ahead = P[min(3, len(P) - 1)] - P[0]
