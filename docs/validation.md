@@ -351,7 +351,7 @@ Effect on the trees:
     store's 1.0 × 0.7 × 0.7 grid, and the suite's thin phantom's radius error goes from 0.069 to
     0.090 mm.
   - C3N arteries' `length_outside_field_mm` goes from 2.2 to 4.0 mm, and one junction pair merges
-    (1065 → 1064 edges).
+    (1065 → 1064 edges, rooted at the deepest point as in §2).
 
 **Wall pruning (`--prune wall`):**
 - **For:**
@@ -566,8 +566,11 @@ branch-clipper rule without the surface (`thalweg.vmtk.partition`).
 
   | Tree | Lattice points inside | Labeled (traced piece) | Edges with volume | Partition volume | Σ π r² ds along the centerlines | Time |
   |---|---|---|---|---|---|---|
-  | arteries | 305,946 | 303,418 | 1059 of 1064 | 150.4 ml | 176.2 ml | 18–23 s |
-  | airways | 83,974 | 83,652 | 265 of 265 | 41.5 ml | 42.8 ml | 1.4–1.8 s |
+  | arteries | 305,946 | 303,418 | 1058 of 1063 | 150.4 ml | 176.2 ml | 18–23 s |
+  | airways | 83,974 | 83,652 | 264 of 264 | 41.5 ml | 42.8 ml | 1.4–1.8 s |
+
+  (Edge counts retaken 2026-10-01: re-rooting at the inlet no longer leaves the tracer's deepest
+  point as a node splitting the pulmonary trunk and the trachea in two; one edge fewer each.)
 
   The labeled points are exactly the tracer's piece (`traced_lattice_point_count`): pieces are
   told apart by the field's own connectivity, as the tracer does it.

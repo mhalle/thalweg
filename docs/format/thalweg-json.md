@@ -54,7 +54,9 @@ migration; 1.0 will be the first stable version.
     which need not be an end: the arteries' deepest point lies inside the pulmonary trunk (the
     research reference). `statistics.deepest_point` records the tracer's start either way, and
     `statistics.inlet_end_width_mm` beside `widest_end_width_mm` how the inlet was chosen: an end
-    running off the field is preferred only when it is at least half as wide as the widest end;
+    running off the field is preferred only when it is at least half as wide as the widest end.
+    Where the deepest point lies along one path (two edges meet there), re-rooting merges those two
+    edges: it is not a node of the graph;
   - `junction`: degree 3 or more;
   - `tip`: a free end, degree 1;
   - `truncated`: an end where the structure runs off the edge of the source field, degree 1.

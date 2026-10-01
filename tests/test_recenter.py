@@ -244,3 +244,32 @@ def test_names_are_matched_as_totalsegmentator_spells_them():
     assert matching(refs, "ESOPHAGUS") == refs[:2]
     assert matching(refs, "lung_upper_lobe_left") == [refs[2]]
     assert matching(refs, "esophagus", part=0) == [refs[0]]
+
+
+def test_rerooting_merges_the_deepest_point_when_it_lies_along_one_path(monkeypatch):
+    """The round-10 review found the tracer's deepest point left as a joint after re-rooting,
+    splitting the pulmonary trunk and the trachea into two edges each."""
+    from thalweg import centerlines
+    from thalweg.centerlines import centerline_graph
+    monkeypatch.setattr(centerlines, "open_store", lambda s: s)
+
+    class Ref:
+        scheme, part, label_value = "test", None, None
+
+    class Store:
+        path = "memory"
+        structures = []
+
+    segs = [((0.0, 0.0, 0.0), (20.0, 0.0, 0.0), 2.0, 4.0), ((20.0, 0.0, 0.0), (40.0, 0.0, 0.0), 4.0, 2.0)]
+    m, geo = PS.field_of(PS.chain_distance(segs), (-4, -8, -8), (44, 8, 8), 0.7)
+    deep = centerline_graph(Store(), "t", margin=(m, geo, Ref()), root="deepest")
+    assert len(deep.edges) == 2                                  # two branches leave the deepest point
+    g = centerline_graph(Store(), "t", margin=(m, geo, Ref()))
+    assert len(g.edges) == 1 and not any(nd.kind == "joint" for nd in g.nodes)
+    assert abs(g.edges[0].length_mm - sum(e.length_mm for e in deep.edges)) < 1e-9
+    st = g.structures[0].statistics
+    assert st["edge_count"] == 1 and st["joint_count"] == 0
+    assert st["deepest_point"] == deep.structures[0].statistics["deepest_point"]
+    P = g.edge_points(g.edges[0])
+    assert np.linalg.norm(P[0] - np.array(g.nodes[g.edges[0].start_node].position)) < 1e-9
+    assert np.linalg.norm(P[-1] - np.array(g.nodes[g.edges[0].end_node].position)) < 1e-9

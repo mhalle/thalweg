@@ -184,9 +184,13 @@ def centerline_graph(store: FieldStore | str, name: str, *, part: int | None = N
                   points=Points(position=pos, radius=rad))
     if root == "inlet" and g.edges:
         n = inlet(g, name)
+        old = g.structure(name).roots[0]
+        g = reroot(g, name, n)
+        if g.nodes[old].kind == "joint":                   # the deepest point mid-path: not a node
+            g = merge_joint(g, old)
+            n = g.structure(name).roots[0]
         deg = g.degree()
         widths = [end_width(g, nd.id) for nd in g.nodes if deg[nd.id] == 1]
-        g = reroot(g, name, n)
         st = g.structures[0]
         stats = dict(st.statistics, inlet_end_width_mm=round(end_width(g, n), 4),
                      widest_end_width_mm=round(max(widths), 4) if widths else None)
@@ -341,6 +345,55 @@ def reroot(graph: TubeGraph, structure: str, node: int) -> TubeGraph:
         structures.append(s)
     return graph.model_copy(update={"nodes": nodes, "edges": edges, "structures": structures,
                                     "points": Points(position=pos, radius=rad, columns=cols)})
+
+
+def merge_joint(graph: TubeGraph, node: int) -> TubeGraph:
+    """The graph without the degree-2 node ``node``: its two edges become one (the samples joined
+    at the node, lengths added), and node and edge ids are renumbered to stay positions. The merged
+    edge keeps the first edge's id, provenance, tracer branch and attributes (the second's are
+    added where the first has none). A tree re-rooted at its inlet leaves the tracer's deepest point
+    as such a node - a point along one path, not a branching."""
+    into = [e for e in graph.edges if e.end_node == node]
+    out = [e for e in graph.edges if e.start_node == node]
+    if len(into) != 1 or len(out) != 1:
+        raise ThalwegError(f"node {node} is not a joint (one edge in, one out)")
+    a, b = into[0], out[0]
+    pos, rad = graph.points.position, graph.points.radius
+    cols = graph.points.columns
+    new_pos, new_rad = [], []
+    new_cols = {k: [] for k in cols}
+    edges = []
+    for e in graph.edges:
+        if e.id == b.id:
+            continue
+        rows = list(range(*e.point_range)) + (list(range(b.point_range[0] + 1, b.point_range[1]))
+                                              if e.id == a.id else [])
+        start = len(new_pos)
+        new_pos += [pos[i] for i in rows]
+        new_rad += [rad[i] for i in rows]
+        for k, v in cols.items():
+            new_cols[k] += [v[i] for i in rows]
+        upd = {"point_range": (start, len(new_pos))}
+        if e.id == a.id:
+            upd.update(end_node=b.end_node, length_mm=a.length_mm + b.length_mm,
+                       attributes={**b.attributes, **a.attributes})
+        edges.append(e.model_copy(update=upd))
+    nid = {nd.id: i for i, nd in enumerate(n for n in graph.nodes if n.id != node)}
+    eid = {e.id: i for i, e in enumerate(edges)}
+    nodes = [nd.model_copy(update={"id": nid[nd.id]}) for nd in graph.nodes if nd.id != node]
+    edges = [e.model_copy(update={"id": eid[e.id], "start_node": nid[e.start_node],
+                                  "end_node": nid[e.end_node]}) for e in edges]
+    structures = []
+    for st in graph.structures:
+        upd = {"roots": [nid[r] for r in st.roots]}
+        if st.name == a.structure:
+            mine = [nd for nd in nodes if nd.structure == st.name]
+            upd["statistics"] = dict(st.statistics,
+                                     edge_count=sum(e.structure == st.name for e in edges),
+                                     joint_count=sum(nd.kind == "joint" for nd in mine))
+        structures.append(st.model_copy(update=upd))
+    return graph.model_copy(update={"nodes": nodes, "edges": edges, "structures": structures,
+                                    "points": Points(position=new_pos, radius=new_rad, columns=new_cols)})
 
 
 INTERVAL_LOGITS = 2.0
