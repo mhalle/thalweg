@@ -296,3 +296,16 @@ def test_open_store_says_what_it_cannot_read(tmp_path):
     finally:
         if old is not None:
             _os.environ["HOME"] = old
+
+
+def test_copied_names_of_an_older_cascade_store_are_placeholders():
+    """haversack before 0.13 named a crop stage's first values after the final task's classes
+    (C3N-00704's spleen was "lung_airways" in part 0): those become label_<value>."""
+    from thalweg.store import StructureRef, _unname_copies
+    refs = [StructureRef("lung_airways", 0, 1), StructureRef("lung_arteries", 0, 3),
+            StructureRef("label_5", 0, 5), StructureRef("lung_airways", 1, 1),
+            StructureRef("lung_arteries", 1, 3)]
+    got = _unname_copies(refs)
+    assert [r.name for r in got] == ["label_1", "label_3", "label_5", "lung_airways", "lung_arteries"]
+    honest = [StructureRef("liver", 0, 5), StructureRef("label_6", 0, 6), StructureRef("liver_vessels", 1, 1)]
+    assert _unname_copies(honest) == honest                     # a real crop-stage name stays

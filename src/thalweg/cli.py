@@ -11,7 +11,8 @@
     thalweg summary GRAPH                                 structures, counts, lengths
     thalweg schema [-o FILE]                              the .thalweg.json JSON Schema
 
-Every verb that reads a STORE takes ``--sdf-inside negative|positive`` for a signed distance image.
+Every verb that reads a STORE takes ``--sdf-inside negative|positive`` (a signed distance image) and
+``--label VALUE=NAME`` (an image's or DICOM SEG's label names).
 """
 from __future__ import annotations
 
@@ -50,7 +51,21 @@ def _writable(*paths) -> None:
             raise click.UsageError(f"{p}: its folder does not exist")
 
 
-def _sdf_option(f):
+def _labels(ctx, param, value) -> dict[int, str]:
+    out = {}
+    for item in value:
+        v, sep, name = item.partition("=")
+        if not sep or not v.strip().lstrip("-").isdigit() or not name.strip():
+            raise click.BadParameter(f"{item!r}: give VALUE=NAME, e.g. 3=lung_arteries")
+        out[int(v)] = name.strip()
+    return out
+
+
+def _input_options(f):
+    f = click.option("--label", "labels", multiple=True, callback=_labels, metavar="VALUE=NAME",
+                     help="For a labelmap or DICOM SEG: name label VALUE (segment number) NAME instead of "
+                          "the file's name or label_<VALUE> (repeatable). Ranked stores name their own "
+                          "classes.")(f)
     return click.option("--sdf-inside", type=click.Choice(["negative", "positive"]), default="negative",
                         show_default=True,
                         help="For a signed distance image: the sign inside the structure (ITK's convention "
@@ -87,11 +102,11 @@ def main():
 
 @main.command()
 @click.argument("store", type=click.Path(exists=True))
-@_sdf_option
-def structures(store, sdf_inside):
+@_input_options
+def structures(store, sdf_inside, labels):
     """List the structures a ranked store names, with the part each lives in."""
     from .store import open_store
-    st = open_store(store, sdf_inside=sdf_inside)
+    st = open_store(store, sdf_inside=sdf_inside, names=labels)
     click.echo(f"{st.path.name}: labeling scheme {st.labeling_scheme}, parts {st.part_indices}")
     for s in sorted(st.structures, key=lambda s: (s.part, s.label_value)):
         click.echo(f"  part {s.part}  value {s.label_value:4d}  {s.name}")
@@ -109,8 +124,9 @@ def structures(store, sdf_inside):
               help="Connectivity: decided by the field, or the 26-connected labelmap (comparison only).")
 @click.option("-q", "--quiet", is_flag=True, help="No progress messages.")
 @_method_options
-@_sdf_option
-def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, recenter, root, sdf_inside):
+@_input_options
+def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, recenter, root, sdf_inside,
+                labels):
     """Trace seed-free centerline trees of STORE's structures into one graph file.
 
     Only the largest connected piece of each structure is traced; the others are listed in the
@@ -127,7 +143,7 @@ def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, r
         raise click.UsageError(f"a structure is named twice: {', '.join(names)}")
     _writable(output)
     try:
-        st = open_store(store, sdf_inside=sdf_inside)
+        st = open_store(store, sdf_inside=sdf_inside, names=labels)
         graphs = []
         for n in names:
             log(f"{n}: decoding and tracing")
@@ -157,8 +173,8 @@ def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, r
               help="Also write the per-station section profile here (.parquet).")
 @click.option("--step", type=click.FloatRange(min=0, min_open=True), default=1.0, show_default=True,
               help="Section spacing along each branch, mm.")
-@_sdf_option
-def table(graph, store, output, names, stations, step, sdf_inside):
+@_input_options
+def table(graph, store, output, names, stations, step, sdf_inside, labels):
     """Measure every branch of GRAPH's structures in STORE's field: one row per branch (Parquet;
     needs pyarrow, the `tables` extra). Column definitions: thalweg.measure (lobe columns:
     thalweg.lobes). The bronchoarterial pairing columns are written by `thalweg run` only."""
@@ -174,7 +190,7 @@ def table(graph, store, output, names, stations, step, sdf_inside):
     if missing:
         raise ThalwegError(f"{graph} has no structure {', '.join(missing)}; it has "
                            f"{', '.join(s.name for s in g.structures)}")
-    st = open_store(store, sdf_inside=sdf_inside)
+    st = open_store(store, sdf_inside=sdf_inside, names=labels)
     case = Case(st)
     try:
         lobes = lobe_fields(st)
@@ -214,9 +230,9 @@ def table(graph, store, output, names, stations, step, sdf_inside):
               help="Add each branch's volume (the branch partition of the field; about a third more time).")
 @click.option("-q", "--quiet", is_flag=True, help="No progress messages.")
 @_method_options
-@_sdf_option
+@_input_options
 def run(store, output, names, step, no_stations, branch_volumes, quiet, ridge_passes, prune, recenter,
-        root, sdf_inside):
+        root, sdf_inside, labels):
     """The batch product for one case: graph.thalweg.json.gz, branches.parquet, stations.parquet,
     summary.json and qc.json in OUTPUT.
 
@@ -237,7 +253,7 @@ def run(store, output, names, step, no_stations, branch_volumes, quiet, ridge_pa
         raise click.UsageError(f"a structure is named twice: {', '.join(names)}")
     out = Path(output)
     try:
-        case = Case.open(store, sdf_inside=sdf_inside)
+        case = Case.open(store, sdf_inside=sdf_inside, names=labels)
         for n in names:
             case.store.ref(n)                                  # every structure exists, before any output
         res = case.run(names, step=step, stations=not no_stations, branch_volumes=branch_volumes, log=log,
@@ -317,11 +333,11 @@ def _cap_kinds(ctx, param, value):
               help="Wall maps r(arc length, angle) of every edge, ray-cast from the field (.npz).")
 @click.option("--wall-map-step", type=click.FloatRange(min=0, min_open=True), default=0.5, show_default=True,
               help="Station spacing of the wall maps, mm.")
-@_sdf_option
+@_input_options
 def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, swc, markups, curvature,
            with_distance, extension_ratio,
            extension_transition, zero_d_out, inflow, outlet_resistance, sections_out, distance_spheres,
-           wall_maps_out, wall_map_step, sdf_inside):
+           wall_maps_out, wall_map_step, sdf_inside, labels):
     """Export one structure: a capped surface for CFD, vmtk-compatible centerlines, SWC, Slicer
     markups and/or wall maps (give at least one output)."""
     from .graph import TubeGraph
@@ -354,7 +370,7 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
         if not field:
             from .centerlines import check_source
             from .store import open_store
-            st = open_store(store, sdf_inside=sdf_inside)
+            st = open_store(store, sdf_inside=sdf_inside, names=labels)
             m, geo, ref = st.margin(name, s.source.part)
             check_source(s, geo, ref)
             field.update(m=m, geo=geo, store=st)

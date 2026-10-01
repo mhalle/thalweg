@@ -173,3 +173,17 @@ def test_free_form_values_are_written_as_json_holds_them(tmp_path):
 def test_the_schema_requires_what_the_reader_requires():
     from thalweg.graph import json_schema
     assert {"format", "version"} <= set(json_schema()["required"])
+
+
+def test_two_graphs_of_one_name_combine_after_a_rename():
+    from thalweg.centerlines import rename
+    from thalweg.errors import ThalwegError
+    a, b = y_graph("label_1"), y_graph("label_1")
+    with pytest.raises(ThalwegError, match="rename"):
+        combine([a, b])
+    g = combine([a, rename(b, "label_1", "veins")])
+    assert [s.name for s in g.structures] == ["label_1", "veins"]
+    assert {e.structure for e in g.edges} == {"label_1", "veins"}
+    assert len(g.structure_edges("veins")) == len(b.edges)
+    with pytest.raises(ThalwegError):
+        rename(g, "veins", "label_1")

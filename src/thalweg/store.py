@@ -69,6 +69,40 @@ TOTAL_VALUES = {"lung_upper_lobe_left": 10, "lung_lower_lobe_left": 11, "lung_up
                 "lung_middle_lobe_right": 13, "lung_lower_lobe_right": 14, "heart": 51, "pulmonary_vein": 53}
 
 
+def _listing(names: list[str], most: int = 30) -> str:
+    """Names for a message: the real ones first, at most ``most``, and how many placeholders more."""
+    real = [n for n in names if not n.startswith("label_")]
+    held = [n for n in names if n.startswith("label_")]
+    shown = (real + held)[:most]
+    more = len(names) - len(shown)
+    return ", ".join(shown) + (f" and {more} more" if more else "")
+
+
+def _placeholder(ref) -> bool:
+    return ref.name == f"label_{ref.label_value}"
+
+
+def _unname_copies(refs: list[StructureRef]) -> list[StructureRef]:
+    """Undo a naming defect of cascade stores written by older haversack: an earlier stage's part
+    took the final task's names for the label values the final task names, and ``label_<value>``
+    for the rest (C3N-00704's crop stage calls its spleen "lung_airways"). A part whose every
+    named class is also a class of the last part, with the same label value, and that has
+    ``label_<value>`` placeholders, carries such copies: they are renamed ``label_<value>`` too,
+    so a name finds the class it means (and ``--part 0`` cannot trace the spleen as airways)."""
+    parts = sorted({r.part for r in refs})
+    if len(parts) < 2:
+        return refs
+    last = {(r.name, r.label_value) for r in refs if r.part == parts[-1]}
+    out = list(refs)
+    for p in parts[:-1]:
+        mine = [r for r in refs if r.part == p]
+        named = [r for r in mine if not _placeholder(r)]
+        if named and len(named) < len(mine) and all((r.name, r.label_value) in last for r in named):
+            out = [StructureRef(f"label_{r.label_value}", r.part, r.label_value, r.scheme)
+                   if r.part == p and not _placeholder(r) else r for r in out]
+    return out
+
+
 class FieldStore:
     """An open ranked store. ``structures`` lists every (name, part, label value) it names."""
 
@@ -120,7 +154,7 @@ class FieldStore:
             if part is None:
                 continue
             out.append(StructureRef(str(s["name"]), part, int(v), scheme))
-        return out
+        return _unname_copies(out)
 
     @property
     def names(self) -> list[str]:
@@ -148,9 +182,14 @@ class FieldStore:
     def ref(self, name: str, part: int | None = None) -> StructureRef:
         cands = matching(self.structures, name, part)
         if not cands:
-            raise ThalwegError(f"{self.path.name} has no structure {name!r}"
-                               + (f" in part {part}" if part is not None else "")
-                               + f"; it names: {', '.join(self.names)}")
+            if part is not None:
+                elsewhere = sorted({s.part for s in matching(self.structures, name)})
+                where = f" (it is in part {', '.join(map(str, elsewhere))})" if elsewhere else ""
+                names = sorted({s.name for s in self.structures if s.part == part})
+                raise ThalwegError(f"{self.path.name} has no structure {name!r} in part {part}{where}; "
+                                   f"part {part} names: {_listing(names)}")
+            raise ThalwegError(f"{self.path.name} has no structure {name!r}; "
+                               f"it names: {_listing(self.names)}")
         if len(cands) == 1:
             return cands[0]
         vol = [abs(np.linalg.det(np.asarray(self.geometry(s.part).directions, float))) for s in cands]
@@ -198,23 +237,28 @@ class FieldStore:
         return float(self.field(part).meta["clip"])
 
 
-def open_store(path, sdf_inside: str = "negative"):
+def open_store(path, sdf_inside: str = "negative", names: dict[int, str] | None = None):
     """A ranked store (:class:`FieldStore`), or - for a NIfTI, NRRD or MetaImage file - a labelmap
     or signed distance image read in degraded mode (:class:`thalweg.volume.VolumeStore`; a distance
-    image is negative inside by default, ``sdf_inside="positive"`` for the other convention)."""
+    image is negative inside by default, ``sdf_inside="positive"`` for the other convention).
+    ``names``: label value (segment number) -> structure name, for an image or DICOM SEG only (a
+    ranked store names its own classes)."""
     from .volume import VolumeStore, dicom_directory, is_volume, seg_files
     if hasattr(path, "margin") and hasattr(path, "structures"):     # already open
         return path
     path = Path(path).expanduser()
     if is_volume(path):
-        return VolumeStore(path, sdf_inside=sdf_inside)
+        return VolumeStore(path, names=names, sdf_inside=sdf_inside)
     if dicom_directory(path):
         segs = seg_files(path)
         if len(segs) == 1:                                       # a folder holding one SEG (IDC's layout)
-            return VolumeStore(segs[0], sdf_inside=sdf_inside)
+            return VolumeStore(segs[0], names=names, sdf_inside=sdf_inside)
         raise ThalwegError(f"{path} is a directory of DICOM files: thalweg reads a DICOM SEG file, a "
                            "labelmap or distance image (NIfTI, NRRD, MetaImage), or a ranked store")
     if path.is_file() and not path.name.lower().endswith(".zip"):
         raise ThalwegError(f"{path.name} is not a ranked store, a NIfTI, NRRD or MetaImage image, "
                            "or a DICOM file")
+    if names:
+        raise ThalwegError(f"{path.name} is a ranked store, which names its own classes; label names "
+                           "(--label) apply to images and DICOM SEG only")
     return FieldStore(path)

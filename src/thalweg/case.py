@@ -116,8 +116,8 @@ class Case:
     lobe_error: str | None = None
 
     @classmethod
-    def open(cls, path, sdf_inside: str = "negative") -> "Case":
-        return cls(open_store(path, sdf_inside=sdf_inside))
+    def open(cls, path, sdf_inside: str = "negative", names: dict[int, str] | None = None) -> "Case":
+        return cls(open_store(path, sdf_inside=sdf_inside, names=names))
 
     def margin(self, name: str, part: int | None = None):
         """``(margin, geometry, ref)`` of a structure, decoded once per (name, resolved part)."""

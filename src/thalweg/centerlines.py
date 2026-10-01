@@ -219,10 +219,25 @@ def combine(graphs: list[TubeGraph]) -> TubeGraph:
         rad.extend(g.points.radius)
         for s in g.structures:
             if any(s.name == t.name for t in structures):
-                raise ThalwegError(f"structure {s.name!r} appears twice")
+                raise ThalwegError(f"structure {s.name!r} appears twice; give one another name first "
+                                   "(rename, or --label VALUE=NAME when tracing an image)")
             structures.append(s.model_copy(update={"roots": [nmap[r] for r in s.roots]}))
     return TubeGraph(created_by=f"thalweg {__version__}", structures=structures, nodes=nodes, edges=edges,
                      points=Points(position=pos, radius=rad, columns=cols))
+
+
+def rename(graph: TubeGraph, old: str, new: str) -> TubeGraph:
+    """The graph with structure ``old`` called ``new`` (its nodes and edges too), e.g. to
+    :func:`combine` two labelmaps' ``label_1``. Commands that read the field again (``table``,
+    ``export``) look the structure up by name in its source: give that source the same name
+    (``VolumeStore(names=...)``, ``--label VALUE=NAME``)."""
+    graph.structure(old)                                         # ThalwegError if absent
+    if old != new and any(s.name == new for s in graph.structures):
+        raise ThalwegError(f"structure {new!r} exists already")
+    return graph.model_copy(update={
+        "structures": [s.model_copy(update={"name": new}) if s.name == old else s for s in graph.structures],
+        "nodes": [n.model_copy(update={"structure": new}) if n.structure == old else n for n in graph.nodes],
+        "edges": [e.model_copy(update={"structure": new}) if e.structure == old else e for e in graph.edges]})
 
 
 def check_source(structure, geometry, ref) -> None:
