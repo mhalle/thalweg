@@ -19,7 +19,7 @@ Per airway edge (:func:`airway_rows`):
   summary gives the ratio's median over them too. (Pairing constrained to follow the trees was
   tried and is not used: it halves the paired share, makes the sharing of artery edges worse and
   does not move the ratio; docs/validation.md §5c);
-- ``paired_sample_fraction``: the share of its samples that found a partner, and
+- ``paired_sample_share``: the share of its samples that found a partner, and
   ``paired_sample_count``, how many did (a ratio resting on a handful is weak);
 - ``bronchus_to_artery_ratio``: the median over paired samples of the airway's lumen diameter over
   the partner artery's diameter (both the traced, ridge-refined inscribed diameters). This is the
@@ -143,10 +143,10 @@ def airway_rows(graph: TubeGraph, airway: str, artery: str, rows: list[dict], **
             ratio = float(np.median(ra[both] / rv[both]))
             by_edge[r["edge"]] = ratio
             r.update(paired_artery_edge=int(ids[np.argmax(counts)]),
-                     paired_sample_fraction=float(both.sum() / n), paired_sample_count=int(both.sum()),
+                     paired_sample_share=float(both.sum() / n), paired_sample_count=int(both.sum()),
                      bronchus_to_artery_ratio=ratio)
         else:
-            r.update(paired_artery_edge=None, paired_sample_fraction=0.0 if n else None,
+            r.update(paired_artery_edge=None, paired_sample_share=0.0 if n else None,
                      paired_sample_count=0, bronchus_to_artery_ratio=None)
     fits = consistency(graph, airway, artery, {r["edge"]: r["paired_artery_edge"] for r in rows})
     for r in rows:

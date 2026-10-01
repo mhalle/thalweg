@@ -327,8 +327,21 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
     from .graph import TubeGraph
     if (extension_ratio is not None or curvature or with_distance) and not mesh:
         raise click.UsageError("--flow-extensions, --curvature and --distance-to-centerlines need --mesh")
-    if extension_ratio is None and extension_transition != 0.25:
-        raise click.UsageError("--extension-transition needs --flow-extensions")
+    from click.core import ParameterSource
+    ctx = click.get_current_context()
+    given = {k for k in ctx.params if ctx.get_parameter_source(k) == ParameterSource.COMMANDLINE}
+    needs = {"extension_transition": ("--extension-transition", extension_ratio is not None,
+                                      "--flow-extensions"),
+             "cap_kinds": ("--cap-kinds", bool(mesh), "--mesh"), "refine": ("--refine", bool(mesh), "--mesh"),
+             "inflow": ("--inflow", bool(zero_d_out), "--zero-d"),
+             "outlet_resistance": ("--outlet-resistance", bool(zero_d_out), "--zero-d"),
+             "distance_spheres": ("--distance-spheres", bool(sections_out), "--bifurcation-sections"),
+             "wall_map_step": ("--wall-map-step", bool(wall_maps_out), "--wall-maps"),
+             "vmtk_exact": ("--vmtk-exact", bool(vmtk_out or sections_out),
+                            "--vmtk-centerlines or --bifurcation-sections")}
+    for k, (flag, ok, what) in needs.items():
+        if k in given and not ok:
+            raise click.UsageError(f"{flag} needs {what}")
     if not (mesh or vmtk_out or swc or markups or wall_maps_out or sections_out or zero_d_out):
         raise click.UsageError("nothing to export: give --mesh, --vmtk-centerlines, --swc, --markups, "
                                "--bifurcation-sections, --wall-maps and/or --zero-d")
@@ -366,7 +379,7 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
                        err=True)
             return
         write_table(rows, sections_out)
-        closed = sum(r["closed"] for r in rows)
+        closed = sum(r["contour_closed"] for r in rows)
         click.echo(f"{sections_out}: {len(rows)} bifurcation sections ({closed} closed)", err=True)
 
     def walls():

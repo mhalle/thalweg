@@ -48,7 +48,7 @@ def test_nothing_within_reach_leaves_the_branch_unpaired():
     g = _doc({"air": [(_line([0, 0, 0], [0, 0, 30]), 1.0)], "art": [(_line([20, 0, 0], [20, 0, 30]), 2.0)]})
     rows = [dict(edge=0)]
     s = airway_rows(g, "air", "art", rows)
-    assert rows[0]["bronchus_to_artery_ratio"] is None and rows[0]["paired_sample_fraction"] == 0.0
+    assert rows[0]["bronchus_to_artery_ratio"] is None and rows[0]["paired_sample_share"] == 0.0
     assert s["paired_branch_count"] == 0 and s["bronchus_to_artery_ratio_median"] is None
 
 
@@ -62,7 +62,7 @@ def test_the_reported_artery_edge_holds_most_of_the_paired_samples():
     airway_rows(g, "air", "art", rows)
     r = rows[0]
     assert r["paired_artery_edge"] == 1                             # not the minority edge (2)
-    assert r["paired_sample_count"] == 41 and r["paired_sample_fraction"] == 1.0
+    assert r["paired_sample_count"] == 41 and r["paired_sample_share"] == 1.0
     assert abs(r["bronchus_to_artery_ratio"] - 0.5) < 1e-12        # the median sample sits on edge 1
 
 
@@ -71,9 +71,9 @@ def test_part_of_a_branch_out_of_reach_lowers_the_paired_fraction():
               "art": [(_line([4, 0, 0], [4, 0, 20], 21), 2.0)]})
     rows = [dict(edge=0)]
     s = airway_rows(g, "air", "art", rows)
-    assert 0.5 < rows[0]["paired_sample_fraction"] < 0.75                  # 20 mm beside it, plus the reach
-    assert rows[0]["paired_sample_count"] == round(rows[0]["paired_sample_fraction"] * 41)
-    assert abs(s["paired_sample_share"] - rows[0]["paired_sample_fraction"]) < 1e-12
+    assert 0.5 < rows[0]["paired_sample_share"] < 0.75                  # 20 mm beside it, plus the reach
+    assert rows[0]["paired_sample_count"] == round(rows[0]["paired_sample_share"] * 41)
+    assert abs(s["paired_sample_share"] - rows[0]["paired_sample_share"]) < 1e-12
 
 
 def test_a_missing_structure_is_an_error():

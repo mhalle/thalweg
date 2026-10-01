@@ -43,7 +43,9 @@ migration; 1.0 will be the first stable version.
     sections' area centroids) as used - by default `wall` and `true` for the flat tubes
     (esophagus, trachea, colon, small_bowel, duodenum), `length` and `false` otherwise - and
     `root` (`inlet`, the default, or `deepest`).
-  - `statistics` records counts from the tracer and the graph (below).
+  - `statistics` records counts from the tracer and the graph (below). In `parameters`,
+    `statistics`, `attributes` and point `columns`, a number that is not finite is written as
+    null.
 - **Nodes** have one of these kinds:
   - `root`: where the tree starts. By default (`parameters.root: "inlet"`) this is the
     structure's inlet: the widest end running off the field (a trachea, a trunk leaving the crop)
@@ -183,7 +185,7 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
     `thalweg table` writes these too;
   - for an airway traced with the arteries: `paired_artery_edge` (the nearest parallel artery
     edge, not a verified companion), `paired_artery_consistent` (whether that edge fits the two
-    trees), `paired_sample_fraction`, `paired_sample_count`,
+    trees), `paired_sample_share`, `paired_sample_count`,
     `bronchus_to_artery_ratio` (`thalweg.pairing`). `thalweg run` only.
 
   - with `--branch-volumes`: `volume_mm3`, the edge's share of the structure's volume. Every
@@ -199,7 +201,7 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
     `length_mm`);
   - `position_x_mm`, `position_y_mm`, `position_z_mm` (LPS, the section's center on the path);
   - `traced_radius_mm` (the graph's radius there);
-  - `area_mm2`, with `area_low_mm2` and `area_high_mm2` (the areas inside the margin's +2 and
+  - `area_mm2`, with `area_lower_mm2` and `area_upper_mm2` (the areas inside the margin's +2 and
     -2 logit contours);
   - `equivalent_diameter_mm`, `perimeter_mm`, `min_feret_mm`, `max_feret_mm`, `aspect_ratio`,
     `centroid_offset_mm`, `contour_closed`;
@@ -261,9 +263,9 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
   bifurcations, one row per adjacent branch group, cut from the field (`thalweg.branching`):
   `group`, `bifurcation_group` (vmtk's group ids, from the structure's vmtk branching),
   `orientation` (`upstream`: the parent; `downstream`: a daughter), `distance_spheres`,
-  `point_{x,y,z}_mm`, `normal_{x,y,z}`, `area_mm2` with `area_low_mm2` / `area_high_mm2`,
+  `position_{x,y,z}_mm`, `normal_{x,y,z}`, `area_mm2` with `area_lower_mm2` / `area_upper_mm2`,
   vmtk's `min_size_mm`, `max_size_mm` and `shape`, `equivalent_diameter_mm`, `min_feret_mm`,
-  `max_feret_mm`, `aspect_ratio`, and `closed`. A section that also crosses a neighboring branch,
+  `max_feret_mm`, `aspect_ratio`, and `contour_closed`. A section that also crosses a neighboring branch,
   or whose point lies outside the structure, is not closed and has no sizes (null): they would
   measure the section window. `--vmtk-exact` places the sections with
   vmtk's defects.

@@ -150,3 +150,26 @@ def test_structure_helpers():
     assert r.tolist() == [-1.0, -1.0]                          # each segment has an end without a radius
     seg, mid, r = g.edge_segments(1)
     assert seg.tolist() == [3.0] and mid.tolist() == [[5, 0, 1.5]] and r.tolist() == [3.0]
+
+
+def test_free_form_values_are_written_as_json_holds_them(tmp_path):
+    """numpy numbers in statistics raised a serialization error; a NaN became null unannounced
+    (the round-10 review). Both are now plain: numbers, and null for what is not finite."""
+    import gzip
+
+    from thalweg.errors import ThalwegError
+    from thalweg.graph import Structure
+    stats = dict(n=np.int64(3), x=np.float32(0.5), bad=float("nan"), arr=np.arange(2),
+                 nested={"y": np.float64(1.5)})
+    g = TubeGraph(structures=[Structure(name="a", method="test", statistics=stats)])
+    st = TubeGraph.read(g.write(tmp_path / "a.thalweg.json")).structures[0].statistics
+    assert st == {"n": 3, "x": 0.5, "bad": None, "arr": [0, 1], "nested": {"y": 1.5}}
+    (tmp_path / "b.json").write_bytes(gzip.compress((tmp_path / "a.thalweg.json").read_bytes()))
+    assert TubeGraph.read(tmp_path / "b.json").structures[0].name == "a"          # gzip by its content
+    with pytest.raises(ThalwegError, match="thalweg.json"):
+        g.write(tmp_path / "a.vtp")
+
+
+def test_the_schema_requires_what_the_reader_requires():
+    from thalweg.graph import json_schema
+    assert {"format", "version"} <= set(json_schema()["required"])

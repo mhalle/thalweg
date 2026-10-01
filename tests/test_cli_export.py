@@ -169,3 +169,14 @@ def test_export_mesh_of_the_case_airways_within_budget(vessels_data, tmp_path):
     d = mesh_defects(V, F)
     assert d["boundary_edges"] == d["nonmanifold_vertices"] == d["repeated_directed_edges"] == 0
     assert d["signed_volume_mm3"] > 0
+
+
+def test_an_option_without_its_output_is_refused(files):
+    """--inflow without --zero-d (and the like) did nothing, silently (the round-10 review)."""
+    graph, store, d = files
+    for extra, want in ((["--swc", d / "x.swc", "--inflow", "2"], "--zero-d"),
+                        (["--swc", d / "x.swc", "--cap-kinds", "tip"], "--mesh"),
+                        (["--swc", d / "x.swc", "--distance-spheres", "2"], "--bifurcation-sections"),
+                        (["--swc", d / "x.swc", "--vmtk-exact"], "--vmtk-centerlines")):
+        r = _run("export", graph, store, "-s", "y", *extra)
+        assert r.exit_code == 2 and want in r.output, (extra, r.output)

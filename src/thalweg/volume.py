@@ -68,6 +68,27 @@ def is_volume(path) -> bool:
     return any(name.endswith(s) for s in SUFFIXES) or is_dicom(path)
 
 
+def seg_files(path) -> list[Path]:
+    """The DICOM SEG files directly in a directory (by SOP class; read without pixel data)."""
+    p = Path(path).expanduser()
+    if not p.is_dir():
+        return []
+    out = []
+    for f in sorted(p.iterdir()):
+        if f.is_file() and is_dicom(f):
+            try:
+                import pydicom
+            except ImportError:                    # without the `dicom` extra no SEG can be read anyway
+                return []
+            try:
+                head = pydicom.dcmread(str(f), stop_before_pixels=True)
+            except Exception:                      # noqa: BLE001 - an unreadable file is not a SEG
+                continue
+            if str(head.get("SOPClassUID", "")) in SEG_SOP_CLASSES:
+                out.append(f)
+    return out
+
+
 def dicom_directory(path) -> bool:
     """A directory holding DICOM files (an image series, which thalweg does not read)."""
     p = Path(path).expanduser()

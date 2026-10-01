@@ -228,6 +228,7 @@ def test_a_real_idc_seg():
     from thalweg.centerlines import centerline_graph
     st = open_store(files[0])
     assert st.kind == "dicom-seg" and len(st.names) == 80 and "Pulmonary artery" in st.names
+    assert open_store(files[0].parent).names == st.names              # the folder IDC puts it in
     geo = st.geometry(0)
 
     def centroid(name):

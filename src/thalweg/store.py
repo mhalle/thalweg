@@ -202,13 +202,16 @@ def open_store(path, sdf_inside: str = "negative"):
     """A ranked store (:class:`FieldStore`), or - for a NIfTI, NRRD or MetaImage file - a labelmap
     or signed distance image read in degraded mode (:class:`thalweg.volume.VolumeStore`; a distance
     image is negative inside by default, ``sdf_inside="positive"`` for the other convention)."""
-    from .volume import VolumeStore, dicom_directory, is_volume
+    from .volume import VolumeStore, dicom_directory, is_volume, seg_files
     if hasattr(path, "margin") and hasattr(path, "structures"):     # already open
         return path
     path = Path(path).expanduser()
     if is_volume(path):
         return VolumeStore(path, sdf_inside=sdf_inside)
     if dicom_directory(path):
+        segs = seg_files(path)
+        if len(segs) == 1:                                       # a folder holding one SEG (IDC's layout)
+            return VolumeStore(segs[0], sdf_inside=sdf_inside)
         raise ThalwegError(f"{path} is a directory of DICOM files: thalweg reads a DICOM SEG file, a "
                            "labelmap or distance image (NIfTI, NRRD, MetaImage), or a ranked store")
     if path.is_file() and not path.name.lower().endswith(".zip"):

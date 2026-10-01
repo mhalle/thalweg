@@ -94,14 +94,14 @@ def test_field_sections_match_vmtks_surface_sections(phantom, phantom_oracle):
         assert len(rows) == len(z["cd__BifurcationSectionArea"])
         for k, row in enumerate(rows):
             assert row["distance_spheres"] == n and row["orientation"] in ("upstream", "downstream")
-            if not row["closed"]:
+            if not row["contour_closed"]:
                 assert z["cd__BifurcationSectionClosed"][k] == 0 and row["area_mm2"] is None
                 continue
-            assert row["area_low_mm2"] < row["area_mm2"] < row["area_high_mm2"]
+            assert row["area_lower_mm2"] < row["area_mm2"] < row["area_upper_mm2"]
             assert row["area_mm2"] == pytest.approx(z["cd__BifurcationSectionArea"][k], rel=3e-3)
             assert row["min_size_mm"] == pytest.approx(z["cd__BifurcationSectionMinSize"][k], abs=0.03)
             assert row["max_size_mm"] == pytest.approx(z["cd__BifurcationSectionMaxSize"][k], abs=0.03)
-        assert sum(r["closed"] for r in rows) >= 9
+        assert sum(r["contour_closed"] for r in rows) >= 9
 
 
 def test_a_walk_that_leaves_the_group_gives_no_section(phantom):
@@ -129,9 +129,10 @@ def test_sections_of_the_y_phantom_from_its_graph():
     assert len(rows) == 3 and [r["orientation"] for r in rows].count("upstream") == 1
     areas = sorted(r["area_mm2"] for r in rows)
     want = sorted(np.pi * np.array([3.0, 2.2, 1.8]) ** 2)
-    assert all(r["closed"] and r["shape"] > 0.9 for r in rows)
+    assert all(r["contour_closed"] and r["shape"] > 0.9 for r in rows)
     assert np.allclose(areas, want, rtol=0.08)
     for r in rows:
         normal = np.array([r["normal_x"], r["normal_y"], r["normal_z"]])
         assert abs(np.linalg.norm(normal) - 1) < 1e-9
-        assert r["min_size_mm"] <= r["max_size_mm"] and r["area_low_mm2"] < r["area_mm2"] < r["area_high_mm2"]
+        assert r["min_size_mm"] <= r["max_size_mm"]
+        assert r["area_lower_mm2"] < r["area_mm2"] < r["area_upper_mm2"]

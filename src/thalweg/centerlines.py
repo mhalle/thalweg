@@ -33,6 +33,8 @@ def tube_settings(name: str, prune: str = "auto", recenter: bool | None = None) 
     ``"auto"`` / None become ``("wall", True)`` for :data:`FLAT_TUBES`, ``("length", False)``
     otherwise. The name is compared as :func:`thalweg.store.canonical_name` spells it, so a DICOM
     SEG's "Esophagus" or "Small Intestine" counts; a labelmap's ``label_<value>`` never does."""
+    if recenter is not None and not isinstance(recenter, (bool, np.bool_)):
+        raise ThalwegError(f"recenter must be True, False or None; got {recenter!r}")
     flat = canonical_name(name) in FLAT_TUBES
     if prune == "auto":
         prune = "wall" if flat else "length"

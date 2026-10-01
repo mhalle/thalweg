@@ -192,7 +192,7 @@ def trace(m: np.ndarray, geometry, graph: str = "field", scale: float = SCALE, c
     stats = dict(traced_lattice_points=int(N), lattice_points=int(len(idx_all)), components=int(ncomp),
                  component_sizes=sorted((int(s) for s in sizes), reverse=True), zero_crossings=int(len(X)),
                  cell_interior_joins=int(tun), branches_before_pruning=len(branches),
-                 max_distance_mm=float(d.max()))
+                 max_distance_mm=round(float(d.max()), 4))
     if not alive:                                                       # nothing beyond the root's cover
         say("no branch: the structure is its root's cover")
         r0, q0 = inscribed_radius(world[[root]], xtree, inside, passes=ridge_passes)

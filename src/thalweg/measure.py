@@ -11,7 +11,7 @@ nodes) :func:`branch_table` reports:
   and parents ignore it);
 - **size**: length along the traced path, chord, the traced radius (mean, min, max), and from
   field cross-sections every ``step`` mm the section area at the model's boundary with the
-  model's own interval (``area_low_mm2`` at margin +2 logits, ``area_high_mm2`` at -2), the
+  model's own interval (``area_lower_mm2`` at margin +2 logits, ``area_upper_mm2`` at -2), the
   equivalent diameter, the minimum and maximum caliper widths and the aspect ratio: medians over
   the stations whose center lies inside the structure and whose contour closes
   (``station_count``; a station whose center falls outside is counted in
@@ -227,7 +227,7 @@ def _branching(graph: TubeGraph, tree: Tree, e) -> dict:
                 sibling_angle_deg=min(sib) if sib else None, angle_reliable=bool(ok))
 
 
-SECTION_KEYS = ("area_mm2", "area_low_mm2", "area_high_mm2", "equivalent_diameter_mm", "min_feret_mm",
+SECTION_KEYS = ("area_mm2", "area_lower_mm2", "area_upper_mm2", "equivalent_diameter_mm", "min_feret_mm",
                 "max_feret_mm", "aspect_ratio")
 
 
@@ -276,7 +276,7 @@ def _sections(path, p, r, e, a_kind, b_kind, margin, geometry, step, max_pixels,
         if not d["closed"]:                              # still open: a station, not a median
             open_ += 1
         areas = S.pixel_areas(img, pixel, (HIGH, 0.0, LOW))
-        rec = dict(area_mm2=d["area"], area_low_mm2=float(areas[2]), area_high_mm2=float(areas[0]),
+        rec = dict(area_mm2=d["area"], area_lower_mm2=float(areas[2]), area_upper_mm2=float(areas[0]),
                    equivalent_diameter_mm=d["equivalent_diameter"], min_feret_mm=d["min_feret"],
                    max_feret_mm=d["max_feret"], aspect_ratio=d["aspect_ratio"])
         if outer is not None:
@@ -345,4 +345,8 @@ def write_table(rows: list[dict], path) -> None:
     keys: dict[str, None] = {}
     for r in rows:
         keys.update(dict.fromkeys(r))
+    if not rows:                                 # no rows still makes a table a reader can open
+        pq.write_table(pa.table({"structure": pa.array([], pa.string()), "edge": pa.array([], pa.int64())}),
+                       path)
+        return
     pq.write_table(pa.Table.from_pylist([{k: r.get(k) for k in keys} for r in rows]), path)

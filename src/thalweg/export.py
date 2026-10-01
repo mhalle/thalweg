@@ -719,7 +719,7 @@ def boundary_reference_system(mesh: Mesh, k: int, vmtk_vertex_mean: bool = False
                 perimeter_mm=float(w.sum()))
 
 
-def flow_extensions(mesh: Mesh, ratio: float = 5.0, transition: float = 0.25, caps=None,
+def flow_extensions(mesh: Mesh, ratio: float = 10.0, transition: float = 0.25, caps=None,
                     check: bool = True) -> Mesh:
     """The mesh with a flow extension at its caps (vmtk's ``vmtkflowextensions``, boundary-normal
     mode with adaptive length): each cap is replaced by a tube along its normal, ``ratio`` x the

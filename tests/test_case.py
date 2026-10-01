@@ -165,7 +165,7 @@ def test_the_other_verbs_run_end_to_end(vessels_data, tmp_path):
     pq = pytest.importorskip("pyarrow.parquet")
     sections = pq.read_table(tmp_path / "s.parquet").to_pylist()
     assert len(sections) > 100 and all(x["distance_spheres"] == 2 for x in sections)
-    assert sum(x["closed"] for x in sections) > 0.7 * len(sections)
+    assert sum(x["contour_closed"] for x in sections) > 0.7 * len(sections)
     z = np.load(maps)
     assert len(z["edges"]) > 100 and len(z["angle_rad"]) == 72
     steps = np.concatenate([np.diff(z[f"edge_{int(e)}_arc_length_mm"]) for e in z["edges"]])

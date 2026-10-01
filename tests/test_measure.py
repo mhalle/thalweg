@@ -43,7 +43,7 @@ def test_areas_match_the_tubes(y):
         true = np.pi * TRUE_R[name] ** 2
         assert abs(r["area_mm2"] - true) / true < 0.03, (name, r["area_mm2"], true)
         # the model's interval brackets the boundary area: +2 logits smaller, -2 larger
-        assert r["area_low_mm2"] < r["area_mm2"] < r["area_high_mm2"]
+        assert r["area_lower_mm2"] < r["area_mm2"] < r["area_upper_mm2"]
         assert r["aspect_ratio"] > 0.97
 
 

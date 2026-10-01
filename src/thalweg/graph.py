@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from .errors import ThalwegError
 
@@ -59,8 +59,29 @@ NodeKind = Literal["root", "junction", "tip", "truncated", "joint"]
 DEGREE = {"tip": (1, 1), "truncated": (1, 1), "joint": (2, 2), "junction": (3, None)}
 
 
+def plain(value):
+    """A value as JSON holds it: numpy scalars and arrays become Python numbers and lists, and a
+    number that is not finite becomes None (null: undefined), in nested dicts and lists too."""
+    if isinstance(value, dict):
+        return {k: plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [plain(v) for v in value]
+    if isinstance(value, np.ndarray):
+        return plain(value.tolist())
+    if isinstance(value, np.generic):
+        value = value.item()
+    if isinstance(value, float) and not np.isfinite(value):
+        return None
+    return value
+
+
 class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    @field_validator("attributes", "parameters", "statistics", "columns", mode="before", check_fields=False)
+    @classmethod
+    def _plain(cls, v):
+        return plain(v) if isinstance(v, dict) else v
 
 
 class Grid(_Model):
@@ -317,6 +338,8 @@ class TubeGraph(_Model):
         validated again first, so a model changed in place after construction cannot write a file
         that :meth:`read` would refuse."""
         path = Path(path)
+        if not (path.name.endswith(".json") or path.name.endswith(".json.gz")):
+            raise ThalwegError(f"{path.name}: a graph is written as .thalweg.json or .thalweg.json.gz")
         try:
             type(self).model_validate(self.model_dump())
         except ValidationError as e:
@@ -333,7 +356,8 @@ class TubeGraph(_Model):
     def read(cls, path) -> "TubeGraph":
         path = Path(path)
         try:
-            raw = gzip.decompress(path.read_bytes()) if path.suffix == ".gz" else path.read_bytes()
+            raw = path.read_bytes()
+            raw = gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw      # gzipped, whatever its name
             doc = json.loads(raw)
         except (OSError, ValueError) as e:
             raise ThalwegError(f"cannot read {path}: {e}") from e
@@ -355,4 +379,5 @@ def json_schema() -> dict:
     s = TubeGraph.model_json_schema()
     s["$schema"] = "https://json-schema.org/draft/2020-12/schema"
     s["title"] = f"thalweg tube graph, format {FORMAT_VERSION}"
+    s["required"] = sorted(set(s.get("required", [])) | {"format", "version"})     # read() needs them
     return s

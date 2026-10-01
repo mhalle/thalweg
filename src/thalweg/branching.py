@@ -226,11 +226,11 @@ def bifurcation_sections(b: Branching, margin: np.ndarray, geometry, number_of_d
 
     - ``group``, ``bifurcation_group`` (vmtk ids in ``b.split``), ``orientation`` (``upstream``: the
       parent, ``downstream``: a daughter), ``distance_spheres``;
-    - ``point_x_mm`` .. ``point_z_mm``, ``normal_x`` .. ``normal_z``: the plane (LPS);
-    - ``area_mm2`` (level 0), ``area_low_mm2`` / ``area_high_mm2`` (+2 / -2 logits);
+    - ``position_x_mm`` .. ``position_z_mm``, ``normal_x`` .. ``normal_z``: the plane (LPS);
+    - ``area_mm2`` (level 0), ``area_lower_mm2`` / ``area_upper_mm2`` (+2 / -2 logits);
     - vmtk's measures of the contour: ``min_size_mm``, ``max_size_mm``, ``shape``;
     - ``equivalent_diameter_mm``, ``min_feret_mm``, ``max_feret_mm``, ``aspect_ratio``;
-    - ``closed``: the contour closes inside the section window. A section that runs into the
+    - ``contour_closed``: the contour closes inside the section window. A section that runs into the
       neighboring branch does not, and neither does a plane whose point lies outside the structure
       (vmtk emits no row for that); their sizes would measure the window, so they are all None."""
     from .vmtk.sections import bifurcation_section_planes, section_shape
@@ -247,18 +247,19 @@ def bifurcation_sections(b: Branching, margin: np.ndarray, geometry, number_of_d
         row = dict(group=pl["group"], bifurcation_group=pl["bifurcation_group"],
                    orientation=ORIENTATION[pl["orientation"]],
                    distance_spheres=int(number_of_distance_spheres),
-                   **{f"point_{a}_mm": float(v) for a, v in zip("xyz", pl["point"])},
+                   **{f"position_{a}_mm": float(v) for a, v in zip("xyz", pl["point"])},
                    **{f"normal_{a}": float(v) for a, v in zip("xyz", n)},
-                   area_mm2=d["area"], area_low_mm2=float(areas[0]), area_high_mm2=float(areas[1]),
+                   area_mm2=d["area"], area_lower_mm2=float(areas[0]), area_upper_mm2=float(areas[1]),
                    min_size_mm=None, max_size_mm=None, shape=None,
                    equivalent_diameter_mm=d["equivalent_diameter"], min_feret_mm=d["min_feret"],
-                   max_feret_mm=d["max_feret"], aspect_ratio=d["aspect_ratio"], closed=bool(d["closed"]))
+                   max_feret_mm=d["max_feret"], aspect_ratio=d["aspect_ratio"],
+                   contour_closed=bool(d["closed"]))
         if d["contour"] is not None and d["closed"]:
             xy = d["contour"][:-1] if np.allclose(d["contour"][0], d["contour"][-1]) else d["contour"]
             poly = pl["point"] + xy[:, :1] * n1 + xy[:, 1:2] * n2
             row["min_size_mm"], row["max_size_mm"], row["shape"] = section_shape(poly, pl["point"])
         else:                                   # runs into a neighbor, or the point is outside: its size
-            for key in ("area_mm2", "area_low_mm2", "area_high_mm2", "equivalent_diameter_mm",  # is the
+            for key in ("area_mm2", "area_lower_mm2", "area_upper_mm2", "equivalent_diameter_mm",  # is the
                         "min_feret_mm", "max_feret_mm", "aspect_ratio"):                     # window's
                 row[key] = None
         rows.append(row)
