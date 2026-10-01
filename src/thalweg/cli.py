@@ -5,7 +5,7 @@
                         [--ridge-passes N] [--prune auto|length|wall] [--[no-]recenter] [--root inlet|deepest]
     thalweg table GRAPH STORE -o BRANCHES.parquet [--stations STATIONS.parquet] [-s NAME] [--step MM]
     thalweg run STORE -o DIR [-s NAME ...]                the batch product: graph, tables, summary, QC
-    thalweg export GRAPH STORE -s NAME [--mesh M.vtp] [--vmtk-centerlines C.vtp] [--swc T.swc]
+    thalweg export GRAPH [STORE] -s NAME [--mesh M.vtp] [--vmtk-centerlines C.vtp] [--swc T.swc]
                    [--markups M.mrk.json] [--wall-maps W.npz]
                    [--bifurcation-sections S.parquet] [--zero-d M.json]   at least one output
     thalweg summary GRAPH                                 structures, counts, lengths
@@ -120,13 +120,13 @@ def structures(store, sdf_inside, labels):
               help="Output graph, .thalweg.json or .thalweg.json.gz.")
 @click.option("--part", type=int, default=None,
               help="Part to read (default: the finest holding the structure).")
-@click.option("--graph", type=click.Choice(["field", "voxel"]), default="field", show_default=True,
-              help="Connectivity: decided by the field, or the 26-connected labelmap (comparison only).")
+@click.option("--connectivity", type=click.Choice(["field", "voxel"]), default="field", show_default=True,
+              help="Decided by the field, or the 26-connected labelmap (comparison only).")
 @click.option("-q", "--quiet", is_flag=True, help="No progress messages.")
 @_method_options
 @_input_options
-def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, recenter, root, sdf_inside,
-                labels):
+def centerlines(store, names, output, part, connectivity, quiet, ridge_passes, prune, recenter, root,
+                sdf_inside, labels):
     """Trace seed-free centerline trees of STORE's structures into one graph file.
 
     Only the largest connected piece of each structure is traced; the others are listed in the
@@ -147,9 +147,9 @@ def centerlines(store, names, output, part, graph, quiet, ridge_passes, prune, r
         graphs = []
         for n in names:
             log(f"{n}: decoding and tracing")
-            graphs.append(centerline_graph(st, n, part=part, graph=graph, ridge_passes=ridge_passes,
-                                           prune=prune, recenter=recenter, root=root,
-                                           log=lambda m, n=n: log(f"{n}: {m}")))
+            graphs.append(centerline_graph(st, n, part=part, connectivity=connectivity,
+                                           ridge_passes=ridge_passes, prune=prune, recenter=recenter,
+                                           root=root, log=lambda m, n=n: log(f"{n}: {m}")))
         g = graphs[0] if len(graphs) == 1 else combine(graphs)
         g.write(output)
     except ThalwegError as e:
@@ -206,7 +206,7 @@ def table(graph, store, output, names, stations, step, sdf_inside, labels):
             check_source(s, geo, ref)
             outer = case.outer(s.name, s.source.part, m)
             mine = branch_table(g, s.name, m, geo, step=step, stations_out=prof, outer=outer)
-            if lobes is not None:
+            if lobes is not None and s.name in edge_lobe:
                 lobe_rows(mine, edge_lobe[s.name])
             rows.extend(mine)
     except ThalwegError as e:
@@ -287,7 +287,7 @@ def _cap_kinds(ctx, param, value):
 
 @main.command()
 @click.argument("graph", type=click.Path(exists=True))
-@click.argument("store", type=click.Path(exists=True))
+@click.argument("store", type=click.Path(exists=True), required=False)
 @click.option("-s", "--structure", "name", required=True, help="The structure to export.")
 @click.option("--mesh", type=click.Path(dir_okay=False), default=None,
               help="Closed surface with a flat, named cap at the ends of --cap-kinds (.vtp, cell data "
@@ -339,7 +339,8 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
            extension_transition, zero_d_out, inflow, outlet_resistance, sections_out, distance_spheres,
            wall_maps_out, wall_map_step, sdf_inside, labels):
     """Export one structure: a capped surface for CFD, vmtk-compatible centerlines, SWC, Slicer
-    markups and/or wall maps (give at least one output)."""
+    markups, wall maps, bifurcation sections and/or a 0-D flow model (give at least one output).
+    STORE (the field) is needed for the mesh, the wall maps and the sections only."""
     from .graph import TubeGraph
     if (extension_ratio is not None or curvature or with_distance) and not mesh:
         raise click.UsageError("--flow-extensions, --curvature and --distance-to-centerlines need --mesh")
@@ -361,6 +362,8 @@ def export(graph, store, name, mesh, cap_kinds, refine, vmtk_out, vmtk_exact, sw
     if not (mesh or vmtk_out or swc or markups or wall_maps_out or sections_out or zero_d_out):
         raise click.UsageError("nothing to export: give --mesh, --vmtk-centerlines, --swc, --markups, "
                                "--bifurcation-sections, --wall-maps and/or --zero-d")
+    if store is None and (mesh or wall_maps_out or sections_out):
+        raise click.UsageError("--mesh, --wall-maps and --bifurcation-sections read the field: give STORE")
     _writable(mesh, vmtk_out, swc, markups, wall_maps_out, sections_out, zero_d_out)
     g = TubeGraph.read(graph)
     s = g.structure(name)

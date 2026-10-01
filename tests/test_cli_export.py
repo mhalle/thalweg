@@ -180,3 +180,11 @@ def test_an_option_without_its_output_is_refused(files):
                         (["--swc", d / "x.swc", "--vmtk-exact"], "--vmtk-centerlines")):
         r = _run("export", graph, store, "-s", "y", *extra)
         assert r.exit_code == 2 and want in r.output, (extra, r.output)
+
+
+def test_outputs_that_do_not_read_the_field_need_no_store(files, tmp_path):
+    graph, store, d = files
+    r = _run("export", graph, "-s", "y", "--swc", d / "y.swc", "--markups", d / "y.mrk.json")
+    assert r.exit_code == 0, r.output
+    r = _run("export", graph, "-s", "y", "--mesh", d / "y.vtp")
+    assert r.exit_code == 2 and "give STORE" in r.output

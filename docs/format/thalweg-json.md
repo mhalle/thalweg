@@ -178,7 +178,8 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
   defined in `src/thalweg/measure.py`. Section medians cover the stations whose contour closes
   (`station_count`); `outside_station_count` and `open_station_count` count the others.
   `thalweg run` adds, where the store allows:
-  - `lobe_name`, `lobe_length_fraction` (a lung store; above);
+  - `lobe_name`, `lobe_length_fraction` (a lung store, for a structure with at least half its
+    length inside the lobes; above);
   - for an airway whose wall the model labels: `wall_area_mm2`, `wall_area_percent`,
     `wall_thickness_mm`, `internal_perimeter_mm` (medians over the edge's stations) and
     `wall_station_count`; the medians are null when fewer than 3 stations have a wall.
@@ -231,7 +232,8 @@ bifurcations correspond: `junction_count_with_no_bifurcation`,
     `paired_branch_count`, `consistent_paired_branch_count`, `bronchus_to_artery_ratio_median`,
     `consistent_bronchus_to_artery_ratio_median`, `share_of_paired_branches_with_ratio_above_1`,
     `reach_mm`, `parallel_cosine`;
-  - `lobes` (a lung store): per lobe name, and `outside_lobes`: `edge_count`, `tip_count`, `length_mm`,
+  - `lobes` (a lung store, for a structure with at least half its length inside the lobes - not
+    an esophagus or a trachea in the same store): per lobe name, and `outside_lobes`: `edge_count`, `tip_count`, `length_mm`,
     and for a lobe `lobe_volume_ml`, `length_mm_per_ml`.
 - **`qc.json`** (`thalweg run`; meanings in `src/thalweg/case.py`):
   - `thalweg_version`, `store` (its path);

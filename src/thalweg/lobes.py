@@ -94,6 +94,9 @@ def point_lobes(graph: TubeGraph, fields: LobeFields) -> np.ndarray:
     return np.where(v.max(0) > 0, best + 1, 0).astype(np.int64)
 
 
+MIN_LUNG_SHARE = 0.5      # a structure is a lung tree, for lobe columns, if this much lies in lobes
+
+
 def edge_lobes(graph: TubeGraph, structure: str, lobe_of_point: np.ndarray) -> dict[int, tuple[int, float]]:
     """Per edge: (the lobe holding most of its length, that share of its length); (0, share) when
     most of it lies outside every lobe."""
@@ -120,12 +123,22 @@ def lobe_volumes(fields: LobeFields) -> dict[int, float]:
 
 def annotate(graph: TubeGraph, fields: LobeFields
              ) -> tuple[TubeGraph, dict[str, dict[int, tuple[int, float]]]]:
-    """The graph with a ``lobe_number`` point column (0-5, :data:`LOBES`), and each structure's edge lobes."""
+    """The graph with a ``lobe_number`` point column (0-5, :data:`LOBES`), and each structure's edge
+    lobes - for the structures with at least :data:`MIN_LUNG_SHARE` of their length inside a lobe
+    (a lung tree; an esophagus or a colon in the same store gets no lobe columns or summary)."""
     pl = point_lobes(graph, fields)
     cols = dict(graph.points.columns)
     cols["lobe_number"] = [int(v) for v in pl]
     g = graph.model_copy(update={"points": graph.points.model_copy(update={"columns": cols})})
-    return g, {s.name: edge_lobes(g, s.name, pl) for s in g.structures}
+    out = {}
+    for s in g.structures:
+        el = edge_lobes(g, s.name, pl)
+        inside = sum(e.length_mm * (f if el[e.id][0] else 1.0 - f)
+                     for e in g.structure_edges(s.name) for f in [el[e.id][1]])
+        total = sum(e.length_mm for e in g.structure_edges(s.name))
+        if total > 0 and inside / total >= MIN_LUNG_SHARE:
+            out[s.name] = el
+    return g, out
 
 
 def lobe_rows(rows: list[dict], edge_lobe: dict[int, tuple[int, float]]) -> None:

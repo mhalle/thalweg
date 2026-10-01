@@ -258,13 +258,13 @@ esophagus, both in `total`), which is the real test of the general data model.
 
 ```
 thalweg structures STORE
-thalweg centerlines STORE -s lung_arteries [-s ...] -o arteries.thalweg.json.gz [--part N] [--graph field|voxel]
+thalweg centerlines STORE -s lung_arteries [-s ...] -o arteries.thalweg.json.gz [--part N] [--connectivity field|voxel]
                     [--ridge-passes N (default 4)] [--prune auto|length|wall] [--[no-]recenter] [--root inlet|deepest]
 thalweg table arteries.thalweg.json.gz STORE -o branches.parquet [--stations stations.parquet] [-s NAME] [--step MM]
 thalweg run STORE -o OUT/ [-s NAME ...] [--step MM] [--no-stations] [--branch-volumes]
             [--ridge-passes N] [--prune ...] [--[no-]recenter] [--root ...]
                                                # graph, branches, stations, summary.json, qc.json
-thalweg export arteries.thalweg.json.gz STORE -s lung_arteries [--mesh M.vtp [--cap-kinds ...] [--refine N] [--curvature] [--distance-to-centerlines] [--flow-extensions RATIO [--extension-transition T]]] [--vmtk-centerlines C.vtp [--vmtk-exact]] [--swc T.swc] [--markups M.mrk.json] [--wall-maps W.npz [--wall-map-step MM]] [--bifurcation-sections S.parquet [--distance-spheres N]] [--zero-d M.json [--inflow Q] [--outlet-resistance R]]
+thalweg export arteries.thalweg.json.gz [STORE] -s lung_arteries [--mesh M.vtp [--cap-kinds ...] [--refine N] [--curvature] [--distance-to-centerlines] [--flow-extensions RATIO [--extension-transition T]]] [--vmtk-centerlines C.vtp [--vmtk-exact]] [--swc T.swc] [--markups M.mrk.json] [--wall-maps W.npz [--wall-map-step MM]] [--bifurcation-sections S.parquet [--distance-spheres N]] [--zero-d M.json [--inflow Q] [--outlet-resistance R]]
 thalweg summary arteries.thalweg.json.gz
 thalweg schema [-o FILE]
 ```
