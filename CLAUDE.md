@@ -96,10 +96,12 @@ need the user's permission.
   field if it is at least half as wide as the widest end, else the end of the widest terminal edge (`centerlines.inlet`, `reroot`); `--root deepest`
   keeps the tracer's deepest point (the research reference, which the vmtk-comparison tests pin).
 - **Tracer defaults (decided 2026-09-30):** `ridge_passes=4` (coarse-to-fine radius refinement:
-  removes a 0.03-0.07 mm radius deficit, matches vmtk, 1.85x trace time), `prune="length"` (the
-  reference; `wall` is an option for flat lumens, and since 2026-09-30 also tests the root's
-  branches), `recenter=False` (sections' area centroids; puts a flat lumen's path on its axis,
-  2x trace time; pair with `prune="wall"`). `ridge_passes=1` is the research reference and what
+  removes a 0.03-0.07 mm radius deficit, matches vmtk, 1.85x trace time). `prune` and
+  `recenter` are chosen per structure (decided 2026-09-30, `centerlines.tube_settings`):
+  `wall` + recentering for `FLAT_TUBES` (esophagus, trachea, colon, small_bowel, duodenum),
+  `length` (the reference) and no recentering for everything else, vessels included; explicit
+  values override. Wall pruning also tests the root's branches; recentering moves points to
+  their sections' area centroids (puts a flat lumen's path on its axis, 2x trace time). `ridge_passes=1` is the research reference and what
   the reproduction tests pin. docs/validation.md §5.
 - **The vmtk port's flag convention:** every public `thalweg.vmtk` function defaults to the
   correct behavior; `vmtk_<name>=True` reproduces a vmtk or VTK defect (`vmtk_float32`,

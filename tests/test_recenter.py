@@ -140,3 +140,39 @@ def test_a_section_reaching_into_another_path_is_claimed():
 
     assert claimed(int(np.argmin(np.abs(s - 2.0))))                 # 2 mm out: still the merged lumen
     assert not claimed(int(np.argmin(np.abs(s - 0.6 * s[-1]))))      # well down the daughter
+
+
+def test_tube_settings_by_structure():
+    from thalweg.centerlines import FLAT_TUBES, tube_settings
+    assert tube_settings("esophagus") == ("wall", True)
+    assert tube_settings("lung_arteries") == ("length", False)
+    assert tube_settings("colon", prune="length") == ("length", True)        # explicit values win
+    assert tube_settings("lung_airways", recenter=True) == ("length", True)
+    assert tube_settings("trachea", "auto", False) == ("wall", False)
+    assert "aorta" not in FLAT_TUBES                                         # round: vessel settings
+
+
+def test_centerline_graph_records_the_settings_it_used(monkeypatch):
+    import pytest
+    from thalweg import centerlines
+    from thalweg.centerlines import centerline_graph
+    from thalweg.errors import ThalwegError
+    monkeypatch.setattr(centerlines, "open_store", lambda s: s)              # a stand-in store
+
+    class Ref:
+        scheme, part, label_value = "test", None, None
+
+    class Store:
+        path = "memory"
+        structures = []
+
+    m, geo, _ = flat()
+    g = centerline_graph(Store(), "esophagus", margin=(m, geo, Ref()))
+    p = g.structures[0].parameters
+    assert (p["prune"], p["recenter"]) == ("wall", True)
+    assert g.structures[0].statistics["recentered_point_count"] > 0
+    g = centerline_graph(Store(), "vessel", margin=(m, geo, Ref()))
+    p = g.structures[0].parameters
+    assert (p["prune"], p["recenter"]) == ("length", False)
+    with pytest.raises(ThalwegError):
+        centerline_graph(Store(), "vessel", margin=(m, geo, Ref()), prune="spurs")

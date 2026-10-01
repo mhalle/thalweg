@@ -39,8 +39,8 @@ Use:
     uv run thalweg structures STORE
     uv run thalweg run STORE -o OUT/                    # graph, branch table, stations, summary, QC
     uv run thalweg centerlines STORE -s lung_arteries -o arteries.thalweg.json.gz
-    uv run thalweg centerlines STORE -s esophagus --prune wall --recenter -o esophagus.thalweg.json.gz
-                                                        # a flattened tube: no side lobes, path on the axis
+    uv run thalweg centerlines STORE -s esophagus -o esophagus.thalweg.json.gz
+                                                        # a flat tube: wall pruning + recentering by default
     uv run thalweg table arteries.thalweg.json.gz STORE -o branches.parquet --stations stations.parquet
     uv run thalweg export arteries.thalweg.json.gz STORE -s lung_arteries --mesh arteries.vtp
 

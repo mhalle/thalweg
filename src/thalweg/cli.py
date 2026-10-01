@@ -2,7 +2,7 @@
 
     thalweg structures STORE                              what a store names
     thalweg centerlines STORE -s NAME [-s NAME ...] -o OUT.thalweg.json[.gz]
-                        [--ridge-passes N] [--prune length|wall] [--recenter] [--root inlet|deepest]
+                        [--ridge-passes N] [--prune auto|length|wall] [--[no-]recenter] [--root inlet|deepest]
     thalweg table GRAPH STORE -o BRANCHES.parquet [--stations STATIONS.parquet] [-s NAME] [--step MM]
     thalweg run STORE -o DIR [-s NAME ...]                the batch product: graph, tables, summary, QC
     thalweg export GRAPH STORE -s NAME [--mesh M.vtp] [--vmtk-centerlines C.vtp] [--swc T.swc]
@@ -41,14 +41,17 @@ def _method_options(f):
     f = click.option("--root", type=click.Choice(["inlet", "deepest"]), default="inlet", show_default=True,
                      help="Root each tree at its inlet (the widest end, or an end running off the field "
                           "if at least half as wide) or at the tracer's deepest point (the reference).")(f)
-    f = click.option("--prune", type=click.Choice(["length", "wall"]), default="length", show_default=True,
+    f = click.option("--prune", type=click.Choice(["auto", "length", "wall"]), default="auto",
+                     show_default=True,
                      help="Spur rule: 'length' (the reference) or 'wall' (also drops terminal branches that "
                           "do not protrude beyond the parent's wall: flat-lumen lobes, and 9-26 % of vessel "
-                          "tips).")(f)
-    f = click.option("--recenter", is_flag=True,
+                          "tips). 'auto': wall for the flat tubes (esophagus, trachea, colon, small_bowel, "
+                          "duodenum), length otherwise.")(f)
+    f = click.option("--recenter/--no-recenter", default=None,
                      help="Move each centerline point to the area centroid of its cross-section (three "
                           "rounds; points near nodes held). Puts the path on the axis of flattened lumens, "
-                          "where the tracer wanders across the width; use with --prune wall.")(f)
+                          "where the tracer wanders across the width; use with --prune wall. Default: on "
+                          "for the flat tubes, off otherwise.")(f)
     return f
 
 

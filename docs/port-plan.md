@@ -259,10 +259,10 @@ esophagus, both in `total`), which is the real test of the general data model.
 ```
 thalweg structures STORE
 thalweg centerlines STORE -s lung_arteries [-s ...] -o arteries.thalweg.json.gz [--part N] [--graph field|voxel]
-                    [--ridge-passes N (default 4)] [--prune length|wall] [--recenter] [--root inlet|deepest]
+                    [--ridge-passes N (default 4)] [--prune auto|length|wall] [--[no-]recenter] [--root inlet|deepest]
 thalweg table arteries.thalweg.json.gz STORE -o branches.parquet [--stations stations.parquet] [-s NAME] [--step MM]
 thalweg run STORE -o OUT/ [-s NAME ...] [--step MM] [--no-stations] [--branch-volumes]
-            [--ridge-passes N] [--prune ...] [--recenter] [--root ...]
+            [--ridge-passes N] [--prune ...] [--[no-]recenter] [--root ...]
                                                # graph, branches, stations, summary.json, qc.json
 thalweg export arteries.thalweg.json.gz STORE -s lung_arteries [--mesh M.vtp [--cap-kinds ...] [--refine N] [--curvature] [--distance-to-centerlines] [--flow-extensions RATIO [--extension-transition T]]] [--vmtk-centerlines C.vtp [--vmtk-exact]] [--swc T.swc] [--markups M.mrk.json] [--wall-maps W.npz [--wall-map-step MM]] [--bifurcation-sections S.parquet [--distance-spheres N]]
 thalweg summary arteries.thalweg.json.gz
@@ -303,6 +303,7 @@ the graph yet.
 4. **Defaults of the tracer's `ridge_passes` and `prune`.** DECIDED 2026-09-30: four ridge passes
    by default (the one-pass research reference stays reproducible with `ridge_passes=1`, which the
    reproduction tests pin); length pruning stays the default (`--prune wall` is an option). The
-   facts behind the choice are in `docs/validation.md` §5. Recentering (`--recenter`, built
-   2026-09-30) is off by default; whether flattened structures (esophagus, colon, trachea) should
-   get `--prune wall --recenter` by default is open (validation §4, §5).
+   facts behind the choice are in `docs/validation.md` §5. DECIDED 2026-09-30 (later): the
+   default is per structure - the flat tubes (esophagus, trachea, colon, small_bowel, duodenum)
+   get wall pruning and recentering, everything else, vessels included, keeps length pruning
+   and no recentering (`--prune auto`, `--[no-]recenter` unset; explicit values override).

@@ -310,7 +310,9 @@ holds in every radius band.
 ## 5. The tracer options, and the defaults chosen
 
 **Decided 2026-09-30:** four ridge passes are the default; length pruning stays the default,
-with `--prune wall` as an option. The research reference is `--ridge-passes 1`. Every number in
+with `--prune wall` as an option. **Later the same day:** the flat tubes (esophagus, trachea,
+colon, small_bowel, duodenum) get `--prune wall --recenter` by default; everything else, vessels
+included, keeps length pruning without recentering (`centerlines.tube_settings`). The research reference is `--ridge-passes 1`. Every number in
 §1–§3 and in §4's first part was taken with one pass (the reference) unless it says otherwise.
 
 Effect on the trees:
@@ -372,7 +374,7 @@ Effect on the trees:
   −1 tip, −3.8 cm); the esophagus becomes one path and the colon loses one lobe (§3); the flat
   phantoms trace as their two ends.
 
-**Recentering (`--recenter`, added 2026-09-30, off by default):**
+**Recentering (`--recenter`, added 2026-09-30, on by default for the flat tubes only):**
 - **What it does:** after pruning, every point moves to the area centroid of the structure's
   section normal to the path (`thalweg.kernel.recenter`), three rounds, the radius re-measured as
   the inscribed ball at the new point. Radius + 1 mm around every node is held, and the shift
@@ -772,9 +774,10 @@ a steady inflow at the root and one resistance per outlet as placeholders.
 - **Flat tubes.** vmtk against thalweg on flattened phantoms is measured (§4, redone with true
   distances, rolled and oblique): the radius agrees; by default (length pruning, no recentering)
   from 2.5:1 thalweg's path wanders up to 2.7 mm (95th percentile) and grows a comb of side
-  branches. With `--prune wall --recenter` it traces the two ends on the axis (§4). Which
-  structures should get those settings by default is open; the junction of a shallow Y in a flat
-  lumen (placed where the section splits) is not built.
+  branches. With `--prune wall --recenter` it traces the two ends on the axis (§4); the flat
+  tubes get those settings by default, chosen by name. A flat lumen under another name (a
+  labelmap's label, a structure not in the list) gets the vessel settings unless asked. The
+  junction of a shallow Y in a flat lumen (placed where the section splits) is not built.
 - **Off the lattice** (§1, `--oblique`): done for every phantom; sections against the true
   diameter read 1–2 % small on round tubes on both grids.
 - **Degraded input** (§5k) is checked on one phantom and one case's own labelmap, not on

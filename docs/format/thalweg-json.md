@@ -39,8 +39,10 @@ migration; 1.0 will be the first stable version.
     segment number for a SEG), and `grid` (`shape`, `directions`, `origin` of the field).
   - `parameters` records the tracer's settings: `connectivity` (`field` or `voxel`),
     `cover_scale`, `cover_constant_mm`, `cost_epsilon_mm`, `ridge_passes` (default 4; 1 is the
-    research reference), `prune` (default `length`), `recenter` (default `false`: points moved to
-    their sections' area centroids) and `root` (`inlet`, the default, or `deepest`).
+    research reference), `prune` (`length` or `wall`) and `recenter` (points moved to their
+    sections' area centroids) as used - by default `wall` and `true` for the flat tubes
+    (esophagus, trachea, colon, small_bowel, duodenum), `length` and `false` otherwise - and
+    `root` (`inlet`, the default, or `deepest`).
   - `statistics` records counts from the tracer and the graph (below).
 - **Nodes** have one of these kinds:
   - `root`: where the tree starts. By default (`parameters.root: "inlet"`) this is the

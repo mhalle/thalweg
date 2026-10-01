@@ -22,6 +22,22 @@ from .errors import ThalwegError
 from .store import FieldStore, open_store
 
 TRUNCATION_VOXELS = 1.5
+# structures whose lumen is often flattened (TotalSegmentator's names): ``prune="auto"`` and
+# ``recenter=None`` give them wall pruning and recentering, everything else the vessel settings
+# (docs/validation.md §3-§5)
+FLAT_TUBES = frozenset({"esophagus", "trachea", "colon", "small_bowel", "duodenum"})
+
+
+def tube_settings(name: str, prune: str = "auto", recenter: bool | None = None) -> tuple[str, bool]:
+    """The tracer's ``(prune, recenter)`` for structure ``name``: an explicit value is kept;
+    ``"auto"`` / None become ``("wall", True)`` for :data:`FLAT_TUBES`, ``("length", False)``
+    otherwise."""
+    flat = name in FLAT_TUBES
+    if prune == "auto":
+        prune = "wall" if flat else "length"
+    if recenter is None:
+        recenter = flat
+    return prune, bool(recenter)
 
 
 def _on_boundary(m: np.ndarray, geometry, point, radius: float) -> bool:
@@ -127,20 +143,25 @@ def graph_from_tree(tree: medial.MedialTree, name: str, m: np.ndarray, geometry,
 
 def centerline_graph(store: FieldStore | str, name: str, *, part: int | None = None, graph: str = "field",
                      scale: float = medial.SCALE, const: float = medial.CONST, eps: float = medial.EPS,
-                     ridge_passes: int = 4, prune: str = "length", recenter: bool = False,
+                     ridge_passes: int = 4, prune: str = "auto", recenter: bool | None = None,
                      root: str = "inlet", margin=None, log=None) -> TubeGraph:
     """Trace structure ``name`` of a ranked store into a one-structure :class:`TubeGraph`.
 
     ``graph``: connectivity, ``"field"`` (decided by the interpolant) or ``"voxel"`` (the argmax
     labelmap, 26-connected; comparison only). ``ridge_passes``, ``prune`` and ``recenter``: see
     :func:`thalweg.kernel.medial.trace` (``ridge_passes=1`` reproduces the research reference; the
-    default is 4). ``root``: ``"inlet"`` (the default) re-roots the traced tree at its inlet
-    (:func:`inlet`); ``"deepest"`` keeps the tracer's root, its deepest point (the research
-    reference). ``margin``: an already decoded ``(margin, geometry, ref)`` from
-    :meth:`FieldStore.margin`, to skip the decode (``thalweg.case.Case`` keeps them). Kernel errors
-    come back as ThalwegError."""
+    default is 4); the defaults ``prune="auto"`` and ``recenter=None`` pick them by structure
+    (:func:`tube_settings`: wall pruning and recentering for the flat tubes, the reference rule
+    and no recentering otherwise), and the graph records what was used. ``root``: ``"inlet"`` (the
+    default) re-roots the traced tree at its inlet (:func:`inlet`); ``"deepest"`` keeps the
+    tracer's root, its deepest point (the research reference). ``margin``: an already decoded
+    ``(margin, geometry, ref)`` from :meth:`FieldStore.margin`, to skip the decode
+    (``thalweg.case.Case`` keeps them). Kernel errors come back as ThalwegError."""
     if root not in ("inlet", "deepest"):
         raise ThalwegError(f"root must be 'inlet' or 'deepest'; got {root!r}")
+    if prune not in ("auto", "length", "wall"):
+        raise ThalwegError(f"prune must be 'auto', 'length' or 'wall'; got {prune!r}")
+    prune, recenter = tube_settings(name, prune, recenter)
     st = open_store(store) if not isinstance(store, FieldStore) else store
     m, geometry, ref = margin if margin is not None else st.margin(name, part)
     mask = st.labelmap_mask(ref) if graph == "voxel" else None
