@@ -2,8 +2,8 @@
 
 Phase 1 established reproduction: the tracer reproduces the research trees exactly, and the vmtk
 ports reproduce vmtk's own output (see `docs/port-plan.md`). This document records how the port
-behaves on inputs it was not tuned on. Numbers are rough (one machine, one session). The scripts
-live in `validation/`.
+behaves on inputs it was not tuned on. Numbers are rough — one machine, one session. Scripts
+are in `validation/`.
 
 ## 1. Analytic phantoms (`validation/phantom_suite.py [--oblique]`, a few seconds each)
 
@@ -40,19 +40,19 @@ passes) on two grids:
     splits one too.
   - The axis is within 0.01 mm (median) on the lattice and 0.04 mm oblique; the radius within
     0.02 mm on both (the thin tube reads 0.09 mm small on the lattice, 0.01 oblique).
-  - **Sections read 1–2 % small against the true diameter** on both grids (0.982–0.991 on round
-    tubes; 0.95–0.96 on the tapered one, whose median station lies where it is thinnest over a
-    3 mm window; 0.76–0.85 on the thin tube, a section 1.6 voxels across).
+  - **Sections read 1–2 % small against the true diameter** on both grids: 0.982–0.991 on round
+    tubes, 0.95–0.96 on the tapered one (whose median station lies where it is thinnest over a
+    3 mm window), and 0.76–0.85 on the thin tube, a section 1.6 voxels across.
   - Deflection angles are within 1° at 60° and 90° on both grids and at 30° on the lattice. The
-    chords start at arc length r_J, outside the junction's ball (the first version started them
-    at the junction point and read wide angles low: 73.6° for a T junction, 59° for 70°).
+    chords start at arc length r_J, outside the junction's ball. Starting them at the junction
+    point itself reads wide angles low (73.6° for a T junction, 59° for 70°).
   - **At 30° the angle depends on where the junction lands.** Oblique, the tracer places the
-    30° Y's junction 5.7 mm upstream of the true branch point (the daughters' tubes overlap for
-    that long), and the deflection measured from there reads 7.4° and 7.7° for 15°. On the
+    30° Y's junction 5.7 mm upstream of the true branch point — the daughters' tubes overlap for
+    that long — and the deflection measured from there reads 7.4° and 7.7° for 15°. On the
     lattice the junction lands 0.8 mm off and the angles read right. For shallow bifurcations
-    of overlapping tubes the junction's position, and so the angle, is not well determined. The
-  table's rotation is the worst of four tried: three others read 15.3–15.9° or no reliable
-  angle (the round-8 review).
+    of overlapping tubes, neither the junction's position nor the angle is well determined. The
+    table's rotation is the worst of four tried: three others read 15.3–15.9° or no reliable
+    angle.
 - **Flattened lumens break the spur rule.**
   - The tracer keeps a terminal branch longer than 2 × (radius at its junction) + 1 mm. In a flat
     lumen that radius is half the *depth*, so side lobes across the *width* survive as branches:
@@ -62,8 +62,8 @@ passes) on two grids:
   - The sections are right (aspect ratio and Feret widths), so the failure is in the tracer's
     pruning, not in the field or the measures.
   - This is the first tube requirement that the vessel tuning does not meet. The fix is a
-    pruning rule relative to the wall (below), applied at the root too (§5), plus recentering:
-    the path itself wanders across a flat width, and `--recenter` moves it onto the axis (§4).
+    pruning rule relative to the wall (§5), applied at the root too, plus recentering: the
+    path itself wanders across a flat width, and `--recenter` moves it onto the axis (§4).
 - **Contact is connectivity.**
   - Two tubes of one class whose walls overlap form one field component, and the tracer builds
     a ladder between them. That is correct for the field (they *are* connected), but a reader of
@@ -79,17 +79,17 @@ passes) on two grids:
 
 ## 2. Second patient and reconstruction ladders
 
-`thalweg run --ridge-passes 1 --root deepest` (the research reference settings, not the defaults:
-§5 gives what the defaults change) was run on both patients' ladders: the same
-scan reconstructed at 0.625 to 5 mm, each run through TotalSegmentator `lung_vessels`. Each case
-took 24–42 s for the three trees (without the station table; the lung additions of §5b–§5e are
-included). One bug surfaced on the way and was fixed: newer stores record one labeling scheme per
-cascade stage, and the graph's `Source` expected a single one. Numbers regenerated 2026-09-30
-with the current code. The deflection column is the median over branches with a defined angle; it
-fell about 2° from the earlier table when angle chords moved outside the junction's ball (§1).
-Every other column reproduced to the digit. Inlet rooting (the default) changes edge directions,
-so Strahler lengths and deflections under the defaults differ from these; lengths, radii, areas
-and the QC columns do not depend on the root.
+`thalweg run --ridge-passes 1 --root deepest` (the research reference settings, not the defaults;
+§5 gives what the defaults change) was run on both patients' reconstruction ladders: the same scan
+reconstructed at 0.625 to 5 mm, each run through TotalSegmentator `lung_vessels`. Each case took
+24–42 s for the three trees (without the station table; the lung additions of §5b–§5e are
+included).
+
+Numbers regenerated 2026-09-30 with the current code. The deflection column is the median over
+branches with a defined angle; it fell about 2° from the earlier table when angle chords moved
+outside the junction's ball (§1). Every other column reproduced to the digit. Inlet rooting (the
+default) changes edge directions, so Strahler lengths and deflections under the defaults differ
+from these; lengths, radii, areas and the QC columns do not depend on the root.
 
 | Run | Tree | Edges | Length (cm) | Radius p50 (mm) | Strahler ≥ 3 (cm) | Strahler ≥ 4 (cm) | Area median (mm²) | Deflection median (°) | Outside field (mm) | Field loops |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -127,7 +127,7 @@ and the QC columns do not depend on the root.
   - the area median moves −6 to +16 %.
 
   Airway statistics are not comparable across reconstructions of one scan.
-- **At 3.75–5 mm, thin vessels are dropped**, as the research found (§12.2 of the design note):
+- **At 3.75–5 mm, thin vessels are dropped** (as the research found, §12.2 of the design note):
   - length falls 34–54 %;
   - every median rises, because only thick vessels remain.
 
@@ -142,12 +142,12 @@ and the QC columns do not depend on the root.
 - **Centerline outside the field** is 0–3.5 mm per tree, out of meters, with one exception: the
   C3N 2 mm airways at 9.0 mm.
 - **The MSB airway root is the trachea, but not a clean inlet.** In all four MSB reconstructions
-  the model's trachea tapers out inside the field instead of running off it (0 truncated ends),
-  and the inlet is one of three prongs at the taper (widths 5.2, 4.1, 3.9 mm), so the tree has a
+  the model's trachea tapers out inside the field instead of running off it (0 truncated ends).
+  The inlet is one of three prongs at the taper (widths 5.2, 4.1, 3.9 mm), so the tree has a
   spurious junction at depth 0 and its `bifurcation_depth` is offset by one against C3N, whose
   root is the truncated tracheal end. The same stores drop a separate component of 16.6 % of the
-  airway lattice, 5 cm lateral of the trachea and touching the grid's top (`qc.json`
-  `dropped_components`): probably mislabeled. Read `dropped_components.lattice_point_share` and the
+  airway lattice, 5 cm lateral of the trachea and touching the grid's top — probably mislabeled
+  (`qc.json` `dropped_components`). Read `dropped_components.lattice_point_share` and the
   airway root's `attributes.end_kind` before comparing airway depths across cases.
 
 ## 3. Tubes that are not vessels
@@ -225,14 +225,11 @@ thalweg trace of this patient reproduces the research JSON exactly (590 segments
 - **Vessels under 2.5 mm radius:** the methods agree as on C3N-00704. vmtk points lie a median
   0.10–0.11 mm from ours, and vmtk's radius is +0.02–0.03 mm larger.
 - **Wide vessels (r ≥ 2.5 mm):** the raw numbers differ by 0.63 mm median, and vmtk's radius
-  reads 0.22 mm smaller. This gap is the comparison's own artifact (found by the round-2
-  review):
-  - `vmtk_prep.py` keeps the surface only within (our radius + 1.5 mm) of our centerline, so
-    where the lumen reaches farther, vmtk sees a cut wall. 9.3 % of MSB's surface vertices lie on
-    that cut.
-  - 70 % of vmtk's inscribed spheres at r ≥ 2.5 mm touch the cut.
-  - The wide-vessel points that do not touch it agree to 0.107 mm and +0.031 mm, as the narrow
-    ones do.
+  reads 0.22 mm smaller. This gap is the comparison's own artifact: `vmtk_prep.py` keeps the
+  surface only within (our radius + 1.5 mm) of our centerline, so where the lumen reaches
+  farther, vmtk sees a cut wall. 9.3 % of MSB's surface vertices lie on that cut, and 70 % of
+  vmtk's inscribed spheres at r ≥ 2.5 mm touch it. The wide-vessel points that do not touch it
+  agree to 0.107 mm and +0.031 mm, as the narrow ones do.
 
 **Who is right: analytic phantoms** (`validation/vmtk_phantom.py prep | vmtk | compare 1 2 3 4`).
 vmtk runs on the field's zero set, seeded at the true ends; thalweg traces the field. Distances
@@ -246,13 +243,13 @@ radius error median, in mm:
 | Y, trunk r 8 mm | 0.001 / −0.004 | 0.102 / −0.102 | 0.026 / −0.025 | 0.007 / −0.010 | 0.002 / −0.007 |
 | Arc, r 5 mm | 0.003 / −0.006 | 0.101 / −0.100 | 0.025 / −0.029 | 0.006 / −0.010 | 0.003 / −0.007 |
 
-**Flattened tubes** (redone 2026-09-30 with true signed distances; `validation/vmtk_phantom.py`).
-Straight 40 mm tubes with an elliptic section, semi-axes a × 1.5 mm, as a true signed distance
-(the phantom suite's `elliptic()` is shallower across the width); "rolled" turns the section 35°
-about the axis, "oblique" puts the tube off the lattice on the anisotropic 0.62 × 0.7 × 0.8 mm
+**Flattened tubes** (`validation/vmtk_phantom.py`; redone 2026-09-30 with true signed distances).
+Straight 40 mm tubes with an elliptic section, semi-axes a × 1.5 mm, as a true signed distance.
+The phantom suite's `elliptic()` is shallower across the width. "Rolled" turns the section 35°
+about the axis; "oblique" puts the tube off the lattice on the anisotropic 0.62 × 0.7 × 0.8 mm
 grid. vmtk computes one line between the seeds; thalweg traces a tree, so its path between the
 same two ends ("main path") is scored apart from all its points. Each cell is the distance from
-the true axis, median / p95 (mm); both methods read the inscribed radius (the minor semi-axis)
+the true axis, median / p95 (mm). Both methods read the inscribed radius (the minor semi-axis)
 within 0.075 mm everywhere.
 
 | Tube | vmtk | thalweg, main path | thalweg, all points | thalweg tips (true 1–2) | `--prune wall --recenter`: all points, ends |
@@ -270,22 +267,20 @@ within 0.075 mm everywhere.
   from three different seedings, its Delaunay tessellation reporting degenerate triangles.
 - **From 2.5:1, thalweg's path wanders and grows a comb.** Its main path stays within 0.23–1.0 mm
   of the axis in the median but reaches 1.2–2.7 mm at the 95th percentile, where vmtk stays within
-  0.47 mm; and it grows 18–28 side branches across the width of a tube with two ends (the same
-  spur-rule failure as §1's elliptic phantom). The earlier version of this comparison scored all
-  of thalweg's points together and reported "a median 1.0 mm and up to 3.8 mm"; most of that tail
-  is the side branches, not the path.
+  0.47 mm. It also grows 18–28 side branches across the width of a tube with two ends — the same
+  spur-rule failure as §1's elliptic phantom.
 - **So the fix is two rules, not one:** a path held to the middle of the width (vmtk's
   Voronoi-based minimal path does this), and a spur rule that does not keep branches running
   across a flat section.
-- **Both are built (2026-09-30), as options:** `--prune wall` (now also at the root, §5) and
-  `--recenter` (`thalweg.kernel.recenter`: each point moved to its section's area centroid, three
-  rounds, nodes held). The last column is both, with four ridge passes
-  (`validation/vmtk_phantom.py compare 4 --tube`): every tube traces as its two ends, and the
-  median point lies on the axis (≤ 0.002 mm), closer than vmtk's 0.1–0.3 mm. The 95th percentile
-  is the flat ends: the tracer's end runs into a corner of the flat cut, up to 3.6 mm off the
-  axis, where vmtk's line ends at its seed. Clear of the ends by 1.5 semi-major axes the axis is
-  within 0.005 mm at the 95th percentile on all six tubes. The radius reads +0.01 to +0.04 mm.
-  On the round arc and Ys, recentering changes nothing measurable (≤ 0.007 mm).
+- **Both are built as options:** `--prune wall` (now also at the root, §5) and `--recenter`
+  (each point moved to its section's area centroid, three rounds, nodes held;
+  `thalweg.kernel.recenter`). The last column shows both together with four ridge passes:
+  every tube traces as its two ends, and the median point lies on the axis (≤ 0.002 mm), closer
+  than vmtk's 0.1–0.3 mm. The 95th percentile is the flat ends, where the tracer's end runs into
+  a corner of the flat cut (up to 3.6 mm off the axis; vmtk's line ends at its seed). Clear of
+  the ends by 1.5 semi-major axes, the axis is within 0.005 mm at the 95th percentile on all six
+  tubes. The radius reads +0.01 to +0.04 mm. On the round arc and Ys, recentering changes
+  nothing measurable (≤ 0.007 mm).
 
 **With one pass, vmtk is more accurate on clean round tubes.** The cause is thalweg's ridge
 refinement:
@@ -297,13 +292,13 @@ The size of the error depends on where the axis falls relative to the grid.
 - These phantoms have axes parallel to a grid axis at a fixed offset, and read ~0.1 mm off.
 - On oblique tubes with axes off the lattice, one pass reads 0.03–0.07 mm small at radii from
   0.75 to 5 mm, on both a 0.7 mm isotropic grid and the store's 1.0 × 0.7 × 0.7 grid. Four
-  passes leave 0.007–0.016 mm (the round-2 review's sweep).
+  passes leave 0.007–0.016 mm.
 
 A coarse-to-fine search fixes this: each further pass searches a grid four times finer around
 the best point so far.
 
 **On the real subtrees, four passes remove the old radius offset against vmtk.** Excluding the
-prep-cut points (round-2 review):
+prep-cut points:
 
 | Subtree | Gap, 1 pass | vmtk − ours radius, 1 pass | Gap, 4 passes | vmtk − ours radius, 4 passes |
 |---|---|---|---|---|
@@ -315,13 +310,12 @@ holds in every radius band.
 
 ## 5. The tracer options, and the defaults chosen
 
-**Decided 2026-09-30:** four ridge passes are the default; length pruning stays the default,
-with `--prune wall` as an option. **Later the same day:** the flat tubes (esophagus, trachea,
-colon, small_bowel, duodenum) get `--prune wall --recenter` by default; everything else, vessels
-included, keeps length pruning without recentering (`centerlines.tube_settings`). The research
-reference is `--ridge-passes 1`. §2, §3's first table and §4's first part were taken with one
-pass (the reference) and the tracer's deepest point as root, unless they say otherwise; §1 uses
-the kernel's defaults (four passes, length pruning, deepest root).
+**Defaults (decided 2026-09-30):** four ridge passes. Flat tubes (esophagus, trachea, colon,
+small_bowel, duodenum) get `--prune wall --recenter` by default; everything else keeps length
+pruning without recentering (`centerlines.tube_settings`). The research reference is
+`--ridge-passes 1`. §2, §3's first table and §4's first part were taken with one pass and the
+tracer's deepest point as root, unless they say otherwise; §1 uses the kernel's defaults (four
+passes, length pruning, deepest root).
 
 Effect on the trees:
 
@@ -370,33 +364,31 @@ Effect on the trees:
     −12 % (C3N arteries), −14 % (C3N veins), −20 % (MSB arteries).
   - Whether the removed tips are real short stubs is unknown: nothing here says either way.
   - On the two-tube contact phantom it deletes one whole tube's axis: 2 of 4 true ends remain,
-    one path of 31.6 mm (of 60 mm) on the lattice, 38.4 mm oblique (with the root rule; it was 3
-    ends and 39.5 mm before). Measured from one tube's axis, the other tube's tip lies inside the
-    merged wall. That matters for the self-contact requirement (colon loops that touch).
-- **At the root (added 2026-09-30).** Branches leaving the root have no parent, so the rule above
-  never tested them, and the root is the deepest point - mid-tube in a flat lumen, where lobes
-  across the width leave it. They are now tested against the root's first (longest) branch at its
-  start, unless the tip lies behind that start by more than both the wall distance and its own
-  offset across the axis: then it continues the axis the other way. The pulmonary trunk is such a
-  branch (C3N arteries: 33.7 mm behind, 4.4 mm across, wall 22.7 mm); a first version that only
-  compared with two radii removed it.
+    one path of 31.6 mm (of 60 mm) on the lattice, 38.4 mm oblique. Measured from one tube's
+    axis, the other tube's tip lies inside the merged wall. This matters for the self-contact
+    requirement (colon loops that touch).
+- **At the root.** Branches leaving the root have no parent, so the rule above never tested them,
+  and the root is the deepest point — mid-tube in a flat lumen, where lobes across the width
+  leave it. They are now tested against the root's first (longest) branch at its start, unless the
+  tip lies behind that start by more than both the wall distance and its own offset across the
+  axis, in which case it continues the axis the other way. The pulmonary trunk is such a branch
+  (C3N arteries: 33.7 mm behind, 4.4 mm across, wall 22.7 mm).
 - **At the root the stations are one-sided**, 3-4 root radii down the first branch. If that
   branch turns there, a ray across the root's axis runs down the turned leg and reads no wall,
-  and a real side branch was pruned (the round-9 review's phantom: a first branch bending 90°
-  20 mm from an 8 mm root ball cost a 30 mm side branch). Stations where the first branch runs
-  more than 30° off its direction at the root (chords over two spacings either way) are now
-  skipped, and with none left the branch stays. Non-root branches keep the two-sided stations
-  unfiltered (filtering them keeps lobes the flat phantoms need pruned).
+  and a real side branch gets pruned. Stations where the first branch runs more than 30° off its
+  direction at the root (chords over two spacings either way) are now skipped, and with none left
+  the branch stays. Non-root branches keep the two-sided stations unfiltered (filtering them
+  keeps lobes the flat phantoms need pruned).
 - **Effect:** the six lung trees, the trachea, aorta and colon are unchanged; the esophagus
   becomes one path (§3); the flat phantoms trace as their two ends.
-- **A parent too short to measure against (2026-10-01).** Stations sit 3-4 of the parent's
-  radii from the junction; a lobe's sub-lobe, whose parent (the lobe) is shorter than that, read
-  no wall, stayed, and kept the lobe too. Such a tip is now measured against the parent's parent
-  where the parent leaves it. Effect: C3N's three trees, the torso's trachea, esophagus, aorta
-  and duodenum unchanged; MSB arteries lose a 7 + 4 mm chain (238 tips, one pass, in the table
-  above), MSB airways a 14 + 10 mm chain of radius 3-4 mm running alongside the trachea, its tip
-  2.6 mm outside the trachea's wall (59 tips); the torso colon loses 6.3 cm of side chain; the
-  NLST DICOM SEG's esophagus goes from 7 terminal branches to 5 and its colon from 14 to 12.
+- **A parent too short to measure against.** Stations sit 3-4 of the parent's radii from the
+  junction. A lobe's sub-lobe, whose parent is shorter than that, read no wall, stayed, and kept
+  the lobe too. Such a tip is now measured against the parent's parent where the parent leaves it.
+  Effect: C3N's three trees, the torso's trachea, esophagus, aorta and duodenum unchanged. MSB
+  arteries lose a 7 + 4 mm chain (238 tips, one pass, in the table above); MSB airways lose a
+  14 + 10 mm chain of radius 3-4 mm running alongside the trachea (59 tips). The torso colon
+  loses 6.3 cm of side chain; the NLST DICOM SEG's esophagus goes from 7 tips to 5 and its colon
+  from 14 to 12.
 
 **Recentering (`--recenter`, added 2026-09-30, on by default for the flat tubes only):**
 - **What it does:** after pruning, every point moves to the area centroid of the structure's
@@ -424,13 +416,13 @@ Effect on the trees:
   - Adjacent points can land on the same rounded centroid: zero-length steps rise slightly (C3N
     arteries: 152 → 160), as the tracer already produces them.
   - **Touching tubes:** on the two-tube contact phantom, wall pruning has already deleted the
-    second tube, so no other branch claims the merged section, and recentering moved the
-    surviving path onto the contact plane, midway between the two axes (1.35 mm off its own).
-    Fixed 2026-10-01: the merged section's centroid is the waist, much nearer the wall than the
-    point was (a convex section's centroid never is), so a move that would leave a point under
-    75 % of its distance to the wall is refused and the point stays. The path now stays on its
-    axis (lattice and oblique); the flat phantoms and the torso tubes move exactly as before. The
-    second tube is still lost to wall pruning (below).
+    second tube, so no other branch claims the merged section. Without a guard, recentering moved
+    the surviving path onto the contact plane, midway between the two axes (1.35 mm off its own).
+    The fix: the merged section's centroid is the waist, much nearer the wall than the point was
+    (a convex section's centroid never is), so a move that would leave a point under 75 % of its
+    distance to the wall is refused and the point stays. The path now stays on its axis (lattice
+    and oblique); the flat phantoms and the torso tubes move exactly as before. The second tube is
+    still lost to wall pruning.
 
 ## 5b. Airway walls
 
@@ -484,8 +476,8 @@ not pair).
 | C3N-00704 0.625 | 84 % | 235 | 0.58 | 4 % | 0.53 / 0.62 / 0.62 | 23 |
 | MSB-02664 0.625 | 66 % | 118 | 0.51 | 7 % | 0.48 / 0.50 / 0.64 | 25 |
 
-**`paired_artery_edge` is the nearest parallel artery, not a verified companion.** Measured by
-the round-3 review on the two cases (C3N / MSB):
+**`paired_artery_edge` is the nearest parallel artery, not a verified companion.** On the two
+cases (C3N / MSB):
 
 - both children of an airway bifurcation paired with one artery edge: 29 % / 33 % of bifurcations;
 - a child airway's artery not downstream of its parent airway's artery: 25 % / 39 %;
@@ -507,7 +499,7 @@ branches alone the ratio is the same: 0.59 against 0.58 over all on C3N, 0.49 ag
 for the artery: the airway lumen class sits at the model's floor beside a wider artery class. As
 with the walls, compare across cases on one model and grid.
 
-**Making the pairing follow the trees makes it worse (tried 2026-09-30, not kept).** Each airway
+**Making the pairing follow the trees makes it worse (not kept).** Each airway
 branch was allowed to pair only with its parent's artery edge or edges downstream of it, walking
 from the trachea. With the parent's majority edge as the anchor, the paired share of samples fell
 from 84 % to 42 % (C3N) and 66 % to 30 % (MSB); siblings sharing one artery edge went from 33 of
@@ -536,11 +528,10 @@ crop stage's `pulmonary_vein` class.
 (The §2 runs. With the names swapped every case fails, by the rule; the test suite checks the
 swap on the two 0.625 mm cases.)
 
-A first version tested the veins' root against the class and failed every correct case: the
-model's veins run on past the vein trunks into the left atrium, so the root lies 27–36 mm beyond
-the class, inside `heart`. The length share separates the trees on all eight, thick slices
-included. Eight reconstructions of two patients is thin evidence for the thresholds (veins ≥ 1 %,
-arteries ≤ 2 %).
+A root-position test fails every correct case: the model's veins run past the vein trunks into
+the left atrium, so the root lies 27–36 mm beyond the class, inside `heart`. The length share
+separates the trees on all eight reconstructions, thick slices included. Eight reconstructions
+of two patients is thin evidence for the thresholds (veins ≥ 1 %, arteries ≤ 2 %).
 
 ## 5e. Tree statistics and the radius interval
 
@@ -565,9 +556,9 @@ root), 0.625 mm reconstructions:
   statistic separates little here. It also rises with the number of segments (evenly spread
   directions read 0.67 at 20 segments, 0.97 at 300), so a small tree reads low for its size alone.
 - **The per-point radius interval** (`radius_lower_mm`, `radius_upper_mm`: margin +2 and −2
-  logits) has a half-width of 0.14–0.21 mm on the C3N arteries, widening slowly with radius: 1.01 mm
-  reads 0.80–1.13, 1.64 reads 1.47–1.74, 3.56 reads 3.30–3.76. On the Y phantom it is 2 / slope, as it
-  should be.
+  logits) has a half-width of 0.14–0.21 mm on the C3N arteries, widening slowly with radius.
+  Examples: 1.01 mm reads 0.80–1.13, 1.64 reads 1.47–1.74, 3.56 reads 3.30–3.76. On the Y
+  phantom it is 2 / slope, as it should be.
 
 The full tier-1 run (three trees, four ridge passes, lobes, walls, pairing, statistics, QC) takes
 about 60 s on C3N-00704 under load and writes 2.4 MB.
@@ -593,8 +584,8 @@ branch-clipper rule without the surface (`thalweg.vmtk.partition`).
   | arteries | 305,946 | 303,418 | 1058 of 1063 | 150.4 ml | 176.2 ml | 18–23 s |
   | airways | 83,974 | 83,652 | 264 of 264 | 41.5 ml | 42.8 ml | 1.4–1.8 s |
 
-  (Edge counts retaken 2026-10-01: re-rooting at the inlet no longer leaves the tracer's deepest
-  point as a node splitting the pulmonary trunk and the trachea in two; one edge fewer each.)
+  (Re-rooting at the inlet no longer splits the pulmonary trunk and the trachea at the tracer's
+  deepest point, so each tree has one edge fewer than earlier counts.)
 
   The labeled points are exactly the tracer's piece (`traced_lattice_point_count`): pieces are
   told apart by the field's own connectivity, as the tracer does it.
@@ -610,10 +601,10 @@ branch-clipper rule without the surface (`thalweg.vmtk.partition`).
 - **vmtk's branch metrics** (`thalweg.vmtk.metrics`), at the 21,221 vertices of the surface vmtk
   mapped on the C3N-00704 subtree: with vmtk's end-point defect switched on, AbscissaMetric
   agrees to 3e-14 mm and AngularMetric to 5e-13 rad. Interpolating along each segment, as vmtk
-  meant to, moves the abscissa by a median 0.11 mm and at most 0.30 mm, one centerline step. The
-  angle moves too, because the normal is interpolated instead of read at the segment's end: not
-  at all in the median, 1.9° at the 99th percentile, more than 5.7° at 44 vertices and up to 159°
-  at a few close to the centerline's end points, where the angle is ill-conditioned.
+  meant to, moves the abscissa by a median 0.11 mm and at most 0.30 mm (one centerline step).
+  The angle moves too, because the normal is interpolated instead of read at the segment's end.
+  The median shift is zero; the 99th percentile is 1.9°. At 44 vertices it exceeds 5.7° and
+  reaches 159° at a few near the centerline's end points, where the angle is ill-conditioned.
 - **Rays** (`thalweg.kernel.rays`): in a phantom tube of radius 2 mm on a 0.7 mm grid, the wall
   is found at 1.97–2.00 mm from the axis, and at the right distances from a point off the axis.
   On a margin that is linear along a ray the crossing is exact for any step. A ray that starts
@@ -651,25 +642,25 @@ The C3N-00704 subtree, opened at the nine cuts vmtk was given (an inlet and eigh
   median 0.03 mm of our surface (90th percentile 0.04 mm, at most 0.2 mm; the surface sampled
   densely, so these are upper bounds).
 - **A ring of any shape.** Each ring vertex goes to the circle point at its own fraction of the
-  ring's length. Sending vertices out radially from the barycenter, as the first version did,
-  folded the tube on rings that are not star-shaped (an L- or C-shaped section: a third to a half
-  of the tube's faces inward, and the manifold check passed it); one of the 436 artery caps was
-  such a ring.
+  ring's length. Sending vertices out radially from the barycenter folds the tube on rings that
+  are not star-shaped (an L- or C-shaped section: a third to a half of the tube's faces inward,
+  and the manifold check passes it). One of the 436 artery caps was such a ring.
 - **No thin triangles along the tubes.** Over the transition the vertices also slide round the
   circle to even spacing (both spacings increase round the ring, so the circle's points stay in
-  order). Before this a ring with a very short edge carried a strip of thin triangles the
-  whole length of its tube: faces under 1e-5 mm², 43 on the C3N-00704 airways and 234 on the
-  arteries, now none. Poorly shaped faces (quality under 0.1) remain only in the first 15 % of
-  a tube, next to the ring whose own edges are that short: 73 of 90,358 new faces on the airways,
-  766 of 544,228 on the arteries; the straight parts are clean (median quality 0.87).
+  order). Without the slide, a ring with a very short edge carries a strip of thin triangles the
+  whole length of its tube. With it: no faces under 1e-5 mm² on C3N-00704's airways or arteries.
+  Poorly shaped faces (quality under 0.1) remain only in the first 15 % of a tube, next to a
+  ring whose own edges are that short: 73 of 90,358 new faces on the airways, 766 of 544,228 on
+  the arteries. The straight parts are clean (median quality 0.87).
 - **Rings the blend would pass through.** Keeping the circle's points in order does not keep
-  every intermediate layer a simple polygon: for a ring whose barycenter lies outside it (a thin C,
-  a hook) some layers cross themselves - 27 and 38 of 100 blend steps on the round-7 review's
-  test rings - with every triangle still facing out, so the manifold check does not see it.
-  Testing the layers alone was not enough: the round-8 review found C rings (outer radius 3 mm,
-  gaps 30–120°) whose layers were each simple while the triangle strips between them crossed
-  (12–58 crossing face pairs), and a short transition can morph the whole ring inside the first
-  strip. Now a cap is extruded unchanged (a straight prism of its own section,
+  every intermediate layer a simple polygon. For a ring whose barycenter lies outside it (a thin
+  C, a hook), some layers cross themselves — 27 and 38 of 100 blend steps on test rings — with
+  every triangle still facing out, so the manifold check does not see it. The layers can also be
+  individually simple while the triangle strips between them cross: C rings (outer radius 3 mm,
+  gaps 30–120°) produce 12–58 crossing face pairs, and a short transition can morph the whole
+  ring inside the first strip.
+
+  The fallback: a cap is extruded unchanged (a straight prism of its own section,
   `extension_end_shape` `ring`) when its ring does not contain its barycenter, or when a layer or
   a section through the strips between layers (7 per strip) is not simple. A plus-shaped ring (not
   convex, barycenter inside) still morphs, and its strips sampled 60 times each stay simple. None
@@ -693,8 +684,8 @@ The C3N-00704 subtree, opened at the nine cuts vmtk was given (an inlet and eigh
 
 `branching.bifurcation_sections` places vmtk's bifurcation sections (`thalweg.vmtk.sections`) and
 cuts them from the field. The oracle (`tests/oracle/vmtk_centerline_oracle.py sections`) runs
-vmtkBranchClipper and vmtkBifurcationSections on the phantom tree, on a surface marching-cubed
-from a field that thalweg's test rebuilds exactly (a union of spheres along the centerlines).
+vmtkBranchClipper and vmtkBifurcationSections on a phantom tree, on a surface marching-cubed
+from a field that the test rebuilds exactly (a union of spheres along the centerlines).
 
 - **Placement.** With vmtk's defects on (`vmtk_interp`, `vmtk_steps`), the ten section points and
   normals at one and at two distance spheres are vmtk's to 1e-10 mm; the default moves the points
@@ -739,13 +730,13 @@ from a field that thalweg's test rebuilds exactly (a union of spheres along the 
 extra) and gives each structure a field like the model's margin: the mask's signed distance in
 mm (the wall half a voxel out), times 10 logits/mm, clipped at ±8. Every verb runs on it.
 
-- **Geometry**: on an oblique, anisotropic grid every voxel's world point equals SimpleITK's (the
-  round-8 review: NIfTI, NRRD and MHA, both handednesses, spacing 0.7 × 1.3 × 2.9 mm, one-slice
-  images and signed label types, all to 1e-14 mm).
+- **Geometry**: on an oblique, anisotropic grid every voxel's world point equals SimpleITK's.
+  Tested on NIfTI, NRRD and MHA, both handednesses, spacing 0.7 × 1.3 × 2.9 mm, one-slice
+  images and signed label types, all to 1e-14 mm.
 - **Distance to the staircase**, exact across any grid axis: each voxel center's distance to the
-  box of the nearest voxel of the other kind. The first version subtracted half the finest
-  spacing everywhere, which put centers across a 2 mm axis of a 2 × 0.5 × 0.5 mm grid 0.75 mm too
-  far from the wall (the zero set was right; the wall slope and the ±2 logit levels were not).
+  box of the nearest voxel of the other kind. A uniform half-voxel offset (an earlier approach)
+  puts centers across a 2 mm axis of a 2 × 0.5 × 0.5 mm grid 0.75 mm too far from the wall. The
+  zero set was right; the wall slope and the ±2 logit levels were not.
 - **The Y phantom as a labelmap**: three branches, radii below the true 1.8, 2.2 and 3.0 mm by
   0.11–0.13 mm at 0.35 mm voxels and 0.13–0.27 mm at 0.7 mm - up to half a voxel, the inscribed
   ball of a staircase touching its inner corners, not an offset. The field of the same phantom
@@ -773,15 +764,16 @@ mm (the wall half a voxel out), times 10 logits/mm, clipped at ±8. Every verb r
   - left is left: the spleen and the left lung lobes lie at +x (LPS), the liver and the right
     lobes at −x.
 
-  The round-8 review found the SEG lattice lands on whole CT voxels (no fractional offset; the
-  SEG's rows run opposite to the CT's, which the geometry carries), and found the synthetic edge
-  cases exact: an empty segment or middle slice, missing source slices, sparse frames,
-  fractional values up to 100, a label-map SEG, reversed source order.
+  The SEG lattice lands on whole CT voxels (no fractional offset; the SEG's rows run opposite to
+  the CT's, which the geometry carries). Synthetic edge cases are exact: an empty segment or
+  middle slice, missing source slices, sparse frames, fractional values up to 100, a label-map
+  SEG, reversed source order.
 
   `thalweg centerlines` traces the aorta (one tube, 39.5 cm), the pulmonary artery (8 tips) and
   the trachea (12 tips) from the SEG in 14 s. The distance transform runs on each mask's
-  bounding box only (the field is flat beyond 0.8 mm of the wall), which took a segment of this
-  512 × 512 × 249 grid from 12 s to under 1 s with an identical result.
+  bounding box only, since the field is flat beyond 0.8 mm of the wall. On this
+  512 × 512 × 249 grid, the bounding-box optimization takes a segment from 12 s to under 1 s
+  with an identical result.
 - **What degraded mode cannot give**: the model's interval. The ±2 logit levels become ±0.2 mm
   offsets of the wall - a convention, not an uncertainty. The graph's
   `source.labeling_scheme` says `degraded:labelmap`, `degraded:sdf` or `degraded:dicom-seg`.
@@ -799,8 +791,7 @@ a steady inflow at the root and one resistance per outlet as placeholders.
 - Solving the network for steady flow (`solver.steady_pressures`, resistances only): flows add up
   at every junction and at the outlets (50 mL/s in, 50.000 out on the C3N-00704 arteries: 1,064
   vessels, 528 junctions, 536 outlets), and every vessel's pressure drop is its flow times its
-  resistance. The round-8 review matched it against an independent nodal solve to 1.5e-13 on
-  20 random trees.
+  resistance. An independent nodal solve agrees to 1.5e-13 on 20 random trees.
 - **Not run through svZeroDSolver itself**: it is not installed here. The file follows its
   documented schema (`simulation_parameters`, `boundary_conditions`, `junctions`, `vessels`) and
   carries a `thalweg` block the solver ignores.
