@@ -12,6 +12,13 @@ No research centerline JSON is read. What the library does not provide (`DATA`, 
 - `rendering/render_straight.py` - straightened 3D rendering of a vessel path directly from the
   field (per-sample display-to-world warp, no resampled volume), with an illustration style
   (`STYLE=npr`). Design note §12.5. Whether rendering belongs here or in sdfview is open.
+- `dissection/` - aortic dissection from a dual-lumen field: intimal flap as a tie sheet,
+  entry tears as topology, branch feed (true / false / both) as a lumen-side query.
+  `dissection.py` runs a synthetic arch phantom with known tears and branch stubs (2/2
+  tears and 4/4 feeds matched on 2026-09-25); `_dissect.py` holds the phantom;
+  `dissection_figure.py` draws the arch, flap line profiles, areas and contacts. See
+  `DISSECTION.md`. The real target is TotalSegmentator `aortic_dissection` (Dataset 716)
+  on a CTA; no patient has been segmented yet.
 - `catchments/` - vascular catchments (territories) as a rankfield. `catchments.py` ranks every
   lung voxel by distance to the arterial branch groups (Strahler >= 3), builds a real
   `rankfield.RankField` from the top-4 rankings, runs haversack's distance and junction layers on
