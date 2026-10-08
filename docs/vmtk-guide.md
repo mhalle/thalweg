@@ -12,8 +12,8 @@ the defects found on the way. A maintainer can read only those boxes and the dev
 
 Numbers quoted here come from `docs/validation.md`, which holds the measurements, scripts and
 data behind each one, except where a number is marked as the research prototype's (one ridge
-pass; `docs/vmtk-vs-field-method.md` and `docs/vmtk-successor.md`). vmtk comparisons were made against vmtk 1.5.2; vmtk option names are
-taken from the current vmtk source.
+pass; see `docs/vmtk-vs-field-method.md` and `docs/vmtk-successor.md`). vmtk comparisons were
+made against vmtk 1.5.2. Option names follow the current vmtk source.
 
 ---
 
@@ -56,7 +56,7 @@ Nothing in thalweg's analysis is a surface. Connectivity, centerlines, radii, se
 branch partition, wall maps and curvature are all read from the field. A surface is made only
 when you export one, for a mesher or a viewer.
 
-Five consequences run through the rest of the guide:
+Most of the differences follow from this:
 
 | | vmtk | thalweg |
 |---|---|---|
@@ -68,11 +68,13 @@ Five consequences run through the rest of the guide:
 
 > **For vmtk developers.** The field is the per-class margin `m_c = l_c − max_{k≠c} l_k` of the
 > model's logits, decoded from a rankfield store (`thalweg.store.FieldStore.margin`). Its
-> trilinear interpolant is the object every algorithm reads. On TotalSegmentator models the
-> margin's slope at the wall is about 10 logits/mm, and stores clip it at ±8 logits, so the field
-> is a signed-distance-like function within about 0.8 mm of the wall and flat beyond. Algorithms
-> that need distance farther in (the inscribed radius, the tracer's cost) use the distance to the
-> field's sub-voxel zero crossings instead (`kernel.field.crossings`), which has unlimited range.
+> trilinear interpolant is the object every algorithm reads.
+>
+> On TotalSegmentator models the margin's slope at the wall is about 10 logits/mm. Stores clip
+> at ±8 logits, so the field behaves like a signed distance within about 0.8 mm of the wall
+> and is flat beyond that. Algorithms that need distance farther in — the inscribed radius,
+> the tracer's cost — use the distance to the field's sub-voxel zero crossings instead
+> (`kernel.field.crossings`), which has unlimited range.
 
 ---
 
@@ -115,7 +117,7 @@ thalweg export arteries.thalweg.json.gz case.duckn.zip -s lung_arteries \
   --mesh arteries.vtp --flow-extensions 10 --vmtk-centerlines arteries_vmtk.vtp
 ```
 
-Three things a vmtk user will miss, on purpose:
+What a vmtk user will not find, by design:
 
 - **No seeds.** The tracer finds every branch. There is no `-seedselector`.
 - **No pipe.** Each verb reads files and writes files. The graph file is the hand-off between
@@ -152,10 +154,10 @@ graph.write("arteries.thalweg.json.gz")
 | **DICOM SEG** (a file, or a folder holding one, as IDC delivers them) | `VolumeStore` (highdicom; the `dicom` extra) | Each segment's mask, as for a labelmap; segments may overlap |
 
 `thalweg structures FILE` lists what a file names. A store names its classes after the model
-(`lung_arteries`, `aorta`); a labelmap names them from a Slicer `.seg.nrrd` header or as
-`label_<value>`, and `--label 3=lung_arteries` names them yourself. A DICOM SEG uses its segment
-labels; TotalSegmentator's display names ("Esophagus", "Small Intestine") are matched to the
-model's names ("esophagus", "small_bowel") wherever a name is looked up.
+(`lung_arteries`, `aorta`). A labelmap names them from a Slicer `.seg.nrrd` header or as
+`label_<value>`; `--label 3=lung_arteries` lets you name them yourself. A DICOM SEG uses its
+segment labels. TotalSegmentator's display names ("Esophagus", "Small Intestine") are matched to
+the model's names ("esophagus", "small_bowel") wherever a name is looked up.
 
 ### 3.2 Coming from a vmtk surface
 
@@ -168,10 +170,10 @@ thalweg centerlines lumen_sdf.mha -s lumen_sdf -o lumen.thalweg.json.gz
 ```
 
 The sign of `vmtksurfacemodeller`'s output depends on the surface: it comes from
-`vtkSurfaceReconstructionFilter`, whose sign follows its normal propagation (`-negativeinside` only
-flips it; on vmtk 1.5.2 a sphere read positive inside and a tube negative). thalweg reads negative
-inside by default, refuses a distance image read with the wrong sign (the "inside" would cover
-most of the image's border) and tells you to pass `--sdf-inside positive`.
+`vtkSurfaceReconstructionFilter`, whose sign follows its normal propagation. `-negativeinside`
+only flips it; on vmtk 1.5.2 a sphere reads positive inside and a tube negative. thalweg reads
+negative inside by default. It refuses a distance image with the wrong sign — the "inside" would
+cover most of the image's border — and tells you to pass `--sdf-inside positive`.
 
 The structure is named after the file (`lumen_sdf`), so it gets the vessel settings. For a
 flattened lumen pass `--prune wall --recenter` (§5.4).
@@ -203,11 +205,11 @@ differences, both recorded in the graph (`source.labeling_scheme` is `degraded:l
 
 - **Millimeters, LPS** (DICOM patient space) everywhere: the graph, tables, meshes, sidecars,
   SWC, markups.
-- **Grids carry direction cosines.** A store's or image's grid is `origin + index @ directions`
-  (one direction row per array axis, its length the spacing). Oblique and anisotropic
-  acquisitions are traced in place; nothing is resampled to an axis-aligned isotropic grid.
-  (vmtk's `vtkImageData` carries origin and spacing; before VTK 9 it has no orientation, so
-  oblique data is usually resampled or reoriented first.)
+- **Grids carry direction cosines.** A store's or image's grid is `origin + index @ directions`,
+  where each direction row has one row per array axis and its length is the spacing. Oblique and
+  anisotropic acquisitions are traced in place; nothing is resampled to an axis-aligned isotropic
+  grid. By contrast, vmtk's `vtkImageData` carries origin and spacing but, before VTK 9, has no
+  orientation, so oblique data is usually resampled or reoriented first.
 
 > [!WARNING]
 > The `.vtp` files thalweg writes hold LPS millimeters but no coordinate-system tag. A surface you
@@ -237,9 +239,9 @@ differences, both recorded in the graph (`source.labeling_scheme` is `degraded:l
 2. **Paths.** Dijkstra from the **deepest point** (largest distance) over the lattice, with the
    cost above. Two lattice neighbors are joined only if the field's trilinear interpolant joins
    them - not by a 6/18/26-connectivity rule.
-3. **Branches without seeds.** Take the uncovered point farthest from the root along the tree,
-   walk its minimal path back to the tree, cover everything within 1.5 × d + 1 mm of the new
-   path, repeat until nothing is uncovered.
+3. **Branches without seeds.** Take the uncovered point farthest from the root along the tree
+   and walk its minimal path back to the tree. Cover everything within 1.5 × d + 1 mm of the
+   new path. Repeat until nothing is uncovered.
 4. **Spurs.** Drop terminal branches shorter than 2 × (radius at their junction) + 1 mm
    ("length" pruning). Flat tubes use a different rule (§5.4).
 5. **Radius.** Move each path point to the largest inscribed ball within ±0.5 mm and take its
@@ -247,18 +249,18 @@ differences, both recorded in the graph (`source.labeling_scheme` is `degraded:l
 6. **Split** the tree into edges between nodes (root, junctions, tips), as vmtk's branch splitting
    would.
 
-Then the tree is **re-rooted at its inlet** (`--root inlet`, the default): the widest end running
-off the field (a trachea, a trunk leaving the crop) if it is at least half as wide as the widest
-end of all; otherwise the widest end itself, measured over its terminal edge (the pulmonary
-trunk). `--root deepest` keeps the tracer's own start.
+Then the tree is **re-rooted at its inlet** (`--root inlet`, the default). The inlet is the widest
+end running off the field — a trachea, a trunk leaving the crop — if it is at least half as wide
+as the widest end of all. Otherwise it is the widest end itself, measured over its terminal edge.
+`--root deepest` keeps the tracer's own start.
 
 **What maps to what:**
 
 | vmtk option | thalweg |
 |---|---|
-| `-seedselector`, `-sourceids`, `-targetids`, `-sourcepoints`, `-targetpoints` | None: seed-free. One path from the root to a node: `straighten.path_to(graph, structure, node)`; every path below a node or a point: `thalweg.adapters.to_vmtk(graph, structure, source=...)` |
-| `-endpoints` (append the open-profile barycenters) | None: tips end where the field's inside ends; a structure running off the field ends at a `truncated` node |
-| `-resampling`, `-resamplingstep` | The graph keeps the tracer's samples (about one per voxel). Resample on export (`to_vmtk(..., step=)`) or in vmtk's own convention (`thalweg.vmtk.resample_centerlines`) |
+| `-seedselector`, `-sourceids`, `-targetids`, `-sourcepoints`, `-targetpoints` | None: seed-free. One path from the root to a node: `straighten.path_to(graph, structure, node)`. Every path below a node or a point: `thalweg.adapters.to_vmtk(graph, structure, source=...)` |
+| `-endpoints` (append the open-profile barycenters) | None: tips end where the field's inside ends. A structure running off the field ends at a `truncated` node |
+| `-resampling`, `-resamplingstep` | The graph keeps the tracer's samples, about one per voxel. Resample on export (`to_vmtk(..., step=)`) or in vmtk's own convention (`thalweg.vmtk.resample_centerlines`) |
 | `-costfunction` | Not exposed; the tracer's integrand is 1/(d + ε)² |
 | `-delaunaytolerance`, `-simplifyvoronoi`, `-usetetgen` | None: no tessellation |
 | `-radiusarray` | Always `points.radius` in the graph; `MaximumInscribedSphereRadius` in vmtk-compatible export |
@@ -268,16 +270,15 @@ trunk). `--root deepest` keeps the tracer's own start.
 
 vmtk decides connectivity implicitly, by what the surface connects. thalweg decides it explicitly
 from the field (`--connectivity field`, the default): two lattice neighbors are connected only if
-the field's trilinear interpolant is positive along the way (across faces, face saddles and cell
-interiors, with the marching-cubes asymptotic decider). `--connectivity voxel` uses the
+the field's trilinear interpolant is positive along the way — across faces, face saddles and cell
+interiors, resolved by the marching-cubes asymptotic decider. `--connectivity voxel` uses the
 26-connected labelmap instead, for comparison only.
 
-Two practical effects:
+In practice:
 
 - **Artery and vein stay apart.** They are different classes, so where they touch they are not
-  merged. On one surface of "the vessels", every artery-vein contact becomes a loop: 73-95 per
-  tree pair on the cases measured, counted with the field's own connectivity, and 105-132
-  counting corner-only contacts (research prototype).
+  merged. On a single surface of "the vessels", every artery-vein contact becomes a loop — 73-95
+  per tree pair on the cases measured, and more if corner-only contacts are counted.
 - **Only the largest connected piece is traced.** The others are listed in the structure's
   statistics (`component_lattice_point_counts`), and `thalweg run` warns when more than 10 % of a
   structure lies outside the traced piece.
@@ -294,16 +295,15 @@ Both radii are the radius of the largest inscribed ball, so they mean the same t
 - thalweg: the distance from the path point to the field's zero crossings, at the point moved
   onto the ridge.
 
-On the same field, vmtk's radius reads 0.006 mm smaller than thalweg's in the median (four ridge
-passes; validation §4). Every
-radius in thalweg also has an interval: `radius_lower_mm` and `radius_upper_mm` are the same
-measurement at the model's +2 and −2 logit levels (written by `thalweg run`).
+On the same field, vmtk's radius reads 0.006 mm smaller than thalweg's in the median with four
+ridge passes (validation §4). Every radius in thalweg also has an interval: `radius_lower_mm` and
+`radius_upper_mm` are the same measurement at the model's +2 and −2 logit levels.
 
 > **For vmtk developers.** With a single ridge pass (the research prototype's setting) thalweg's
-> point is quantized to a 0.25 mm grid near the ridge, and a point off the axis by d reads a
-> radius smaller by about d: vmtk then reads +0.03 mm larger. Four passes remove that. The
-> remaining difference is the surface itself: vmtk's Voronoi balls touch a triangulated surface,
-> thalweg's touch the field's sub-voxel crossings.
+> point is quantized to a 0.25 mm grid near the ridge. A point off the axis by d reads a
+> radius smaller by about d, so vmtk reads +0.03 mm larger. Four passes remove that
+> quantization. The remaining difference is the surface: vmtk's Voronoi balls touch a
+> triangulated surface; thalweg's touch the field's sub-voxel crossings.
 
 ### 5.4 Flat tubes: esophagus, trachea, colon, bowel
 
@@ -312,10 +312,10 @@ radius is half the *depth*, so side lobes across the *width* look like branches,
 wanders from side to side, because every ball across the width is about as large.
 
 thalweg has two rules for this, applied by default to structures named `esophagus`, `trachea`,
-`colon`, `small_bowel` or `duodenum` (or a DICOM SEG's "Esophagus", "Small Intestine", ...), and
-overridable with `--prune` and `--recenter`. The choice is by name: a labelmap's `label_<n>` or a
-distance image named after its file gets the vessel settings unless you pass
-`--prune wall --recenter`, or name it (`--label 1=esophagus`).
+`colon`, `small_bowel` or `duodenum`, and overridable with `--prune` and `--recenter`. DICOM SEG
+display names ("Esophagus", "Small Intestine", ...) are matched. The choice is by name: a
+labelmap's `label_<n>` or a distance image named after its file gets the vessel settings unless
+you pass `--prune wall --recenter` or name it with `--label 1=esophagus`.
 
 - `--prune wall`: a terminal branch is kept only if its tip reaches beyond the parent's wall by
   more than its own (median) radius, and at least 1 mm - the wall found by rays cast through the
@@ -323,9 +323,9 @@ distance image named after its file gets the vessel settings unless you pass
 - `--recenter`: every point is moved to the area centroid of its cross-section, three rounds, with
   the nodes held.
 
-On elliptic phantoms of 2:1 to 3:1 this gives two ends and a path within 0.002 mm (median) of the
-axis, against 0.1-0.3 mm for vmtk and 0.26-1.14 mm for the plain tracer (validation §4). vmtk
-fails outright on the 2:1 tube (a 2-point line).
+On elliptic phantoms of 2:1 to 3:1 this gives two ends and a path within 0.002 mm of the axis
+(median), against 0.1-0.3 mm for vmtk and 0.26-1.14 mm for the plain tracer. vmtk
+fails outright on the 2:1 tube. Details in validation §4.
 
 ### 5.5 Smoothing and resampling
 
@@ -333,7 +333,7 @@ fails outright on the 2:1 tube (a 2-point line).
 |---|---|
 | `vmtkcenterlineresampling -length L` | `thalweg.vmtk.resample_centerlines` (the same vtkCleanPolyData + vtkSplineFilter, ported) |
 | `vmtkcenterlinesmoothing -iterations -factor` | `thalweg.vmtk.smooth_centerlines` (the same Laplacian relaxation, ported) |
-| (implicit in `vmtkcenterlinegeometry -smoothing`) | thalweg's own measures fit a **smoothing spline whose budget is tied to the radius**: each point may move about 15 % of its local radius (`kernel.geometry.SmoothPath`), so a 19 mm trunk and a 1 mm twig are smoothed in proportion. Recentered structures use 2 % |
+| (implicit in `vmtkcenterlinegeometry -smoothing`) | thalweg's own measures fit a **smoothing spline whose budget is tied to the radius**: each point may move about 15 % of its local radius, so a 19 mm trunk and a 1 mm twig are smoothed in proportion. Recentered structures use 2 %. See `kernel.geometry.SmoothPath` |
 
 The graph itself is never smoothed: it holds what the tracer found.
 
@@ -343,8 +343,8 @@ The graph itself is never smoothed: it holds what the tracer found.
 
 ### 6.1 What vmtk gives you, and what thalweg gives you
 
-vmtk's centerlines are a `vtkPolyData`: one polyline cell per source-to-target path, shared
-stretches duplicated, and named point/cell arrays added by each script. After
+vmtk's centerlines are a `vtkPolyData`: one polyline cell per source-to-target path, with shared
+stretches duplicated. Each script adds named point and cell arrays. After
 `vmtkbranchextractor`, the cells are split into pieces labeled by group, centerline and tract.
 
 thalweg's centerlines are a **graph** (`.thalweg.json`, optionally gzipped; schema in
@@ -371,7 +371,7 @@ root. A file can hold several structures (arteries, veins and airways of one cas
 | `CenterlineIds` (cell) | Not needed: a path from the root to a tip is the chain of edges between them (`TubeGraph.tree()`) |
 | `TractIds` (cell) | An edge *is* a tract between two nodes |
 | `GroupIds`, `Blanking` (cell) | Point columns `branch_group` and `bifurcation_region`, from running vmtk's grouping on the graph (`thalweg.branching.annotate`; §7) |
-| `Length`, `Curvature`, `Torsion`, `Tortuosity`, `Frenet*` | Per branch in the branch table (`length_mm`, `curvature_mean_per_mm`, `torsion_mean_absolute_per_mm`, `distance_metric`, ...); note `distance_metric` is length / chord, and vmtk's `Tortuosity` is that minus 1. vmtk's own per point via `thalweg.vmtk.centerline_geometry` |
+| `Length`, `Curvature`, `Torsion`, `Tortuosity`, `Frenet*` | Per branch in the branch table (`length_mm`, `curvature_mean_per_mm`, `torsion_mean_absolute_per_mm`, `distance_metric`, ...). Note: `distance_metric` is length / chord; vmtk's `Tortuosity` is that minus 1. For vmtk's own per-point values: `thalweg.vmtk.centerline_geometry` |
 | Bifurcation reference systems (`Normal`, `UpNormal`) | On junction nodes: `attributes["bifurcation_frames"]` (from `branching.annotate`) |
 | Bifurcation vectors and angles | On edges: `attributes["bifurcation_vector"]`; thalweg's own `deflection_deg`, `sibling_angle_deg` in the branch table |
 
@@ -393,19 +393,18 @@ the tracer does not bridge yet).
 ### 6.4 Getting vmtk's convention back
 
 `thalweg export GRAPH STORE -s NAME --vmtk-centerlines C.vtp` writes the graph in vmtk's own
-convention: the source-to-tip paths, resampled and split into vmtk's tracts and groups (the
-branch extractor's output), with `MaximumInscribedSphereRadius`,
-`Abscissas`, `ParallelTransportNormals`, and vmtk's `GroupIds`, `CenterlineIds`, `TractIds` and
-`Blanking` from the ported branch extractor. vmtk and Slicer's VMTK extension read it like any
-`vmtkcenterlines` + `vmtkbranchextractor` output, so the rest of a vmtk pipeline can run on
-thalweg's centerlines.
+convention: source-to-tip paths, resampled and split into tracts and groups by the ported branch
+extractor. The output carries `MaximumInscribedSphereRadius`, `Abscissas`,
+`ParallelTransportNormals`, `GroupIds`, `CenterlineIds`, `TractIds` and `Blanking`. vmtk and
+Slicer's VMTK extension read it like any `vmtkcenterlines` + `vmtkbranchextractor` output, so the
+rest of a vmtk pipeline can run on thalweg's centerlines.
 
-> **For vmtk developers.** `adapters.to_vmtk` builds the paths: every edge densified to 0.1 mm,
-> the edges of each path concatenated, the whole path resampled to `step` from the source so
-> shared stretches share their samples exactly, and each sample given the radius of the nearest
-> densified point (`step` defaults to 0.3 mm). That is the input `vtkvmtkCenterlineBranchExtractor` expects (coincident
-> samples along shared stretches). The source can be a node or a point a given distance into an
-> edge.
+> **For vmtk developers.** `adapters.to_vmtk` builds the paths: every edge is densified to
+> 0.1 mm, the edges of each path are concatenated, and the whole path is resampled to `step`
+> from the source so that shared stretches share their samples exactly. Each sample gets the
+> radius of the nearest densified point. `step` defaults to 0.3 mm. This is the input
+> `vtkvmtkCenterlineBranchExtractor` expects: coincident samples along shared stretches. The
+> source can be a node or a point a given distance into an edge.
 
 ---
 
@@ -432,8 +431,8 @@ graph = annotate(graph, "lung_arteries", b)          # writes groups, frames and
 
 `annotate` adds the point columns `branch_group` and `bifurcation_region`, the bifurcation frames
 on junction nodes, and the bifurcation vectors on edges. Where the tracer's single junction
-corresponds to two of vmtk's close bifurcations (or none, where vmtk merged it into a neighbor's
-region), `statistics.vmtk_bifurcations` counts the cases.
+corresponds to two of vmtk's close bifurcations — or none, where vmtk merged it into a
+neighbor's region — `statistics.vmtk_bifurcations` counts the cases.
 
 | vmtk | thalweg |
 |---|---|
@@ -454,11 +453,10 @@ branch table:
   through the junction (0 = straight on);
 - `sibling_angle_deg`: the angle to the nearest sibling.
 
-Directions are chords starting one junction radius from the junction - outside the junction's
-ball, where every branch still points into it - over max(2 × radius, 3 mm). `angle_reliable` is
-False when a chord could not reach that length. At shallow angles (about 30° and below) between
-overlapping tubes the junction's position, and so the angle, is not well determined by either
-method.
+Directions are chords starting one junction radius from the junction — outside the junction's
+ball, where every branch still points into it — over max(2 × radius, 3 mm). `angle_reliable` is
+False when a chord could not reach that length. At shallow angles, about 30° and below, between
+overlapping tubes, neither method determines the junction's position or the angle well.
 
 ### 7.3 Bifurcation sections
 
@@ -470,12 +468,12 @@ and normals to 1e-10 mm on the phantom oracle - and cuts the **field**:
 thalweg export graph.thalweg.json.gz store.zip -s lung_arteries --bifurcation-sections s.parquet
 ```
 
-Each row carries vmtk's measures - `area_mm2`, `min_size_mm`, `max_size_mm`, `shape` (vmtk's
-`BifurcationSectionArea`, `...MinSize`, `...MaxSize`, `...Shape`: the two calipers through the
-center and their ratio) - plus thalweg's (Feret widths, aspect ratio, the areas at ±2 logits),
-`contour_closed` (vmtk's `BifurcationSectionClosed`), the plane (`position_*_mm`, `normal_*`),
-the group, bifurcation group and orientation. Areas agree with vmtk's surface sections of the same field
-within 0.3 %. A single tube has no bifurcation; the export skips the table with a notice.
+Each row carries vmtk's measures — `area_mm2`, `min_size_mm`, `max_size_mm`, `shape` (the two
+calipers through the center and their ratio, vmtk's `BifurcationSectionArea/MinSize/MaxSize/Shape`)
+— plus thalweg's own (Feret widths, aspect ratio, the areas at ±2 logits). It also includes
+`contour_closed`, the plane, the group, bifurcation group and orientation. Areas agree with
+vmtk's surface sections of the same field within 0.3 %. A single tube has no bifurcation; the
+export skips the table with a notice.
 
 ---
 
@@ -490,17 +488,17 @@ within 0.3 %. A single tube has no bifurcation; the export skips the table with 
 
 thalweg's branch table reports, per edge: `length_mm`, `chord_mm`, `distance_metric` (length /
 chord), `sum_of_angles_rad_per_mm`, `inflection_count_metric`, `curvature_mean_per_mm`,
-`curvature_max_per_mm` and `torsion_mean_absolute_per_mm`. They come from the radius-tied spline
-(§5.5), measured over the edge's **interior**: one radius clear of each end, where every traced
+`curvature_max_per_mm` and `torsion_mean_absolute_per_mm`. These come from the radius-tied spline
+(§5.5), measured over the edge's **interior** — one radius clear of each end, where every traced
 path hooks into the junction's ball or the tube's rounded end. On a branch shorter than
-max(4 × its radius, 3 mm) they are not reported (`shape_reliable` False): a spline over a few
-samples measures its own wiggle.
+max(4 × its radius, 3 mm) they are not reported (`shape_reliable` False), because a spline over a
+few samples measures its own wiggle.
 
-> **For vmtk developers.** `vtkvmtkCenterlineGeometry` differentiates the (optionally
-> Laplacian-smoothed) polyline by finite differences; curvature on a lattice-quantized path is
-> dominated by the quantization. thalweg's spline (`scipy.interpolate.splprep`, per-point weights
+> **For vmtk developers.** `vtkvmtkCenterlineGeometry` differentiates the polyline (optionally
+> Laplacian-smoothed) by finite differences. On a lattice-quantized path, curvature is dominated
+> by the quantization. thalweg's spline (`scipy.interpolate.splprep`, per-point weights
 > 1 / (0.15 r + 0.05)) gives analytic derivatives with a deviation budget proportional to the
-> local radius. Torsion is reported only where curvature exceeds a floor, where the binormal is
+> local radius. Torsion is reported only where curvature exceeds a floor and the binormal is
 > defined.
 
 ### 8.2 Cross-sections
@@ -514,9 +512,9 @@ centerline. thalweg samples the **field** on those planes (`kernel.sections`), e
 | Area | Polygon of the surface cut | Area inside the field's contour at level 0 |
 | Interval | — | `area_lower_mm2` / `area_upper_mm2`: the contours at +2 and −2 logits |
 | Sizes | `CenterlineSectionMinSize`, `...MaxSize` (calipers through the center), `...Shape`; `vmtkbranchsections` writes the same as `BranchSection*` | Equivalent diameter, minimum and maximum Feret widths, aspect ratio (second moments of area; 1 = round) |
-| Non-round lumens | Shape index | Aspect ratio, Feret widths, `centroid_offset_mm` (how far the section's centroid lies from the path) |
-| Closed? | `CenterlineSectionClosed` | `contour_closed`; an open section's window is widened twice, and a section still open is listed but left out of the medians |
-| Near junctions | Cut anyway | Stations within the junction radius + 1 mm are left out: the plane cuts the neighbors too |
+| Non-round lumens | Shape index | Aspect ratio, Feret widths, `centroid_offset_mm` (distance from the section's centroid to the path) |
+| Closed? | `CenterlineSectionClosed` | `contour_closed`. An open section's window is widened twice; a section still open is listed but left out of the medians |
+| Near junctions | Cut anyway | Stations within the junction radius + 1 mm are left out, because the plane cuts the neighbors too |
 
 The branch table gives medians over each branch's stations; `stations.parquet` gives every one.
 
@@ -529,12 +527,12 @@ the model labels a lumen and its wall (TotalSegmentator's `lung_airways` and
 ### 8.4 Surface curvature
 
 `vmtksurfacecurvature -type mean` computes mesh curvature (vtkCurvatures). thalweg computes the
-mean curvature of the field's zero level set by a weighted quadric fit to the unclipped field
-samples within 2.8 mm (or three voxels on coarser grids) of each point (`kernel.curvature`), and
-writes it on an exported mesh (`--curvature`, point data `MeanCurvature`, vtkCurvatures' sign).
-It reads 1.02-1.04 × the truth on oblique tube and sphere phantoms and is about six times as
-repeatable as mesh curvature across reconstructions of one scan. Like any fit, it averages over
-its window at saddles and crotches.
+mean curvature of the field's zero level set by a weighted quadric fit to unclipped field samples
+within 2.8 mm of each point, or three voxels on coarser grids (`kernel.curvature`). It writes
+the result on an exported mesh (`--curvature`, point data `MeanCurvature`, vtkCurvatures' sign
+convention). On oblique tube and sphere phantoms it reads 1.02-1.04 × the truth, and is about
+six times as repeatable as mesh curvature across reconstructions of one scan. Like any fit, it
+averages over its window at saddles and crotches.
 
 ### 8.5 Straightened views
 
@@ -551,19 +549,18 @@ the root to a node).
 
 `vmtkbranchclipper` cuts the **surface** into branches: each point goes to the group whose tube
 function (|x − c|² − r² over the group's centerline balls) is lowest. thalweg evaluates the same
-rule at **any points** (`thalweg.partition.label_points`) - mesh vertices, or every lattice point
+rule at **any points** (`thalweg.partition.label_points`) — mesh vertices, or every lattice point
 inside the structure:
 
 - `partition.label_field`: the partition as a label volume on the field's grid;
 - `thalweg run --branch-volumes`: a `volume_mm3` per branch in the table (the volumes sum to the
   traced piece's volume: the structure without the pieces the tracer dropped).
 
-Two sets of tubes can drive it: the graph's edges (thalweg's partition: every edge takes part, so
-the junction volume is shared among the edges meeting there), or vmtk's groups with the blanked
-bifurcation regions left out (`partition.group_tubes`: what `vmtkbranchclipper` does). With vmtk's
-groups it reproduces vmtk's label at every one of the 21,221 vertices of the clipper's input
-surface. The search is exact and fast: a spatial index finds, per point, the only segments that
-can have the lowest value.
+Two sets of tubes can drive it. In thalweg's partition, every edge takes part and the junction
+volume is shared among the edges meeting there. In vmtk's, the blanked bifurcation regions are
+left out (`partition.group_tubes`). With vmtk's groups it reproduces vmtk's label at every one of
+the 21,221 vertices of the clipper's input surface. The search is exact: a spatial index finds,
+per point, the only segments that can have the lowest value.
 
 Not ported: cutting the surface itself along the partition (`-groupids`, `-insideout`). The
 export caps at graph ends instead (§10).
@@ -572,9 +569,9 @@ export caps at graph ends instead (§10).
 
 | vmtk | thalweg |
 |---|---|
-| `vmtkbranchmetrics` (`AbscissaMetric`, `AngularMetric`) | `thalweg.vmtk.branch_metrics`, at any labeled points: vmtk's values to 3e-14 mm and 5e-13 rad on the case's surface vertices (with vmtk's interpolation defect reproduced) |
-| `vmtkbranchmapping` (harmonic and stretched mapping on the surface) | **Wall maps** r(s, θ) by ray casting in the field (`thalweg.wallmap`, `thalweg export --wall-maps W.npz`): from every station of a branch, rays at every angle to the first zero crossing. Per graph edge in thalweg's frame, or per vmtk group in vmtk's coordinates, where they lie a median 0.025 mm from vmtk's `DistanceToCenterlines`. vmtk's `StretchedMapping` is not ported |
-| `vmtkbranchpatching` | The wall map is already the raster: `radius_mm[station, angle]`. Any wall quantity maps by sampling it at `WallMap.wall_points()` |
+| `vmtkbranchmetrics` (`AbscissaMetric`, `AngularMetric`) | `thalweg.vmtk.branch_metrics`, at any labeled points. Reproduces vmtk's values to 3e-14 mm and 5e-13 rad on the case's surface vertices, with vmtk's interpolation defect reproduced |
+| `vmtkbranchmapping` (harmonic and stretched mapping) | **Wall maps** r(s, θ) by ray casting in the field (`thalweg.wallmap`, `thalweg export --wall-maps W.npz`): from every station of a branch, rays at every angle to the first zero crossing. Available per graph edge or per vmtk group (in vmtk's coordinates, a median 0.025 mm from vmtk's `DistanceToCenterlines`). vmtk's `StretchedMapping` is not ported |
+| `vmtkbranchpatching` | The wall map is already the raster: `radius_mm[station, angle]`. Sample any wall quantity at `WallMap.wall_points()` |
 
 Ostia show in a wall map as rays that find no wall, or one far beyond the branch's own
 (`wallmap.ostium`).
@@ -591,10 +588,9 @@ Ostia show in a wall map as rays that find no wall, or one far beyond the branch
 
 > **For vmtk developers.** `vmtk.partition.distance_to_centerlines` reproduces
 > `vtkvmtkPolyDataDistanceToCenterlines` within 1e-9 mm (1e-14 in practice) at 5,690 of the
-> 28,449 mapped surface points. The
-> pipeline version adds a radius-class spatial index: a segment's value at x is at least
-> dist(x, segment)² − R², and the value at the nearest segment midpoint bounds the minimum from
-> above, so only segments within √(U + R²) can win.
+> 28,449 mapped surface points. The pipeline version adds a radius-class spatial index: a
+> segment's value at x is at least dist(x, segment)² − R², and the nearest segment midpoint
+> bounds the minimum from above, so only segments within √(U + R²) need checking.
 
 ---
 
@@ -607,7 +603,7 @@ thalweg makes a surface only for export: `thalweg export GRAPH STORE -s NAME --m
 | `vmtkmarchingcubes` | The field's zero set, marching cubes on its trilinear interpolant (`--refine N` meshes it N times finer) |
 | `vmtksurfacesmoothing`, `vmtksurfacekiteremoval` | Not needed: the zero set has no staircase to remove, and is not shrunk |
 | `vmtksurfaceremeshing`, `vmtksurfacedecimation` | Not built (planned: remeshing by projection onto the zero set, sized by the radius). Remesh the export with vmtk if a mesher needs it |
-| `vmtksurfaceclipper`, `vmtksurfaceendclipper` + `vmtksurfacecapper` | A flat, named cap cut at every end of the requested kinds (`--cap-kinds`, default `tip,truncated`), only the cut branch's triangles clipped |
+| `vmtksurfaceclipper`, `vmtksurfaceendclipper` + `vmtksurfacecapper` | A flat, named cap at every end of the requested kinds (`--cap-kinds`, default `tip,truncated`). Only the cut branch's triangles are clipped |
 | `vmtkboundaryreferencesystems`, `vmtkboundarylabeler` | Every cap's name, center, normal, area, ring barycenter and ring mean radius in the sidecar `M.vtp.boundaries.json` |
 | `vmtkflowextensions` | `--flow-extensions RATIO [--extension-transition T]` |
 | `vmtkmeshgenerator`, `vmtktetgen`, `vmtkboundarylayer` | Not in thalweg: feed the exported surface and its named caps to vmtk, TetGen or gmsh |
@@ -623,9 +619,9 @@ cut's center and outward normal, the centerline's inscribed radius there, the ca
 centroid, and vmtk's boundary reference system (`ring_barycenter`, `ring_mean_radius_mm`). Add 1 to
 `BoundaryId` if a downstream tool expects vmtk's numbering.
 
-Ends that cannot be capped cleanly are listed under `skipped` with the reason (the edge is too
-short for the cut, the cut's center falls outside the structure, the far side stays attached, or
-the radius is below the minimum), never left open: the surface is closed, consistently wound and
+Ends that cannot be capped cleanly are listed under `skipped` with the reason — the edge is too
+short, the cut center falls outside the structure, the far side stays attached, or the radius is
+below the minimum. They are never left open: the surface is closed, consistently wound and
 manifold, or it is not written.
 
 ### 10.2 Flow extensions
@@ -638,20 +634,21 @@ manifold, or it is not written.
 | `-adaptiveradius 1` (vmtk's default) | Always: the ring morphs to a circle of its own mean radius |
 | `-extensionlength`, `-extensionradius`, `-preserveshape`, `-interpolationmode` | Not exposed |
 
-Each extension is a straight tube that ends in a flat cap keeping the original cap's id and name.
+Each extension is a straight tube that ends in a flat cap, keeping the original cap's id and name.
 Its vertices lie on vmtk's cylinders to a median 0.02 mm. A ring that is not star-shaped about
-its barycenter, or would fold, falls back to a straight prism of its own shape. The export prints
-how many extensions run back into the structure (`extension_vertices_inside_structure` in the
-sidecar): a straight extension from a curved vessel can.
+its barycenter, or that would fold, falls back to a straight prism of its own shape. The export
+reports how many extensions run back into the structure (`extension_vertices_inside_structure` in
+the sidecar) — a straight extension from a curved vessel can.
 
 > **For vmtk developers.** thalweg maps ring vertices to the target circle by their fraction of
-> the ring's arc length (with the circle turned to lie closest to the ring), not radially from the
-> barycenter: radial mapping folds rings that are not star-shaped. Over the transition the
-> vertices also slide to even spacing, so a ring with a very short edge does not drag a strip of
-> thin triangles down the tube. The boundary reference system averages the ring **along its
-> length**; vmtk averages its vertices, which biases the barycenter toward dense stretches of the
-> mesh (0.05-0.26 mm on the case's rings). `boundary_reference_system(..., vmtk_vertex_mean=True)`
-> reproduces vmtk's.
+> the ring's arc length, not radially from the barycenter. The circle is turned to lie closest to
+> the ring. Radial mapping folds rings that are not star-shaped. Over the transition the vertices
+> also slide to even spacing, so a ring with a very short edge does not drag a strip of thin
+> triangles down the tube.
+>
+> The boundary reference system averages the ring **along its length**. vmtk averages its
+> vertices, which biases the barycenter toward dense stretches of the mesh (0.05-0.26 mm on the
+> case's rings). `boundary_reference_system(..., vmtk_vertex_mean=True)` reproduces vmtk's.
 
 ### 10.3 A 0-D flow model
 
@@ -670,12 +667,12 @@ resistance at every other end (placeholders to replace with the study's own; `--
 - **Names.** Every structure is a model class. Lung branches carry their lobe; airway branches
   their wall measures and their paired artery (bronchus-to-artery ratio).
 - **Intervals.** Radius and area come with the model's own ±2-logit interval.
-- **Topology from the field.** Connectivity decided by the interpolant; loops counted by the
-  genus of the zero surface; artery and vein never merged.
-- **Whole trees, no seeds, every tip.** With `truncated` ends where the field's crop cuts a
+- **Topology from the field.** Connectivity decided by the interpolant. Loops counted by the
+  genus of the zero surface. Artery and vein never merged.
+- **Whole trees, no seeds, every tip.** `truncated` ends where the field's crop cuts a
   structure, so a cropped trunk is not mistaken for a tip.
-- **Per-edge provenance**, and QC: pieces not traced, length outside the field, field loops.
-- **Whole-tree statistics.** Strahler order, Horton's ratios, small-vessel volume fraction,
+- **Per-edge provenance** and QC: pieces not traced, length outside the field, field loops.
+- **Whole-tree statistics:** Strahler order, Horton's ratios, small-vessel volume fraction,
   orientation entropy.
 - **Flat tubes** (§5.4) and degraded inputs (§3.3).
 
@@ -708,14 +705,14 @@ on the same field:
 | Flat tubes (2:1 to 3:1) | thalweg 0.002 mm from the axis (median), vmtk 0.1-0.3 mm; vmtk fails on 2:1 |
 
 **Where thalweg ports vmtk's filter** (`thalweg.vmtk`; §13), on vmtk's own input, with vmtk's
-defects reproduced: integers exact, floats within 1e-9 of vmtk's output. Examples: the branch
-extractor gives vmtk's 95 groups and 44 bifurcations; `branch_metrics` vmtk's values to 3e-14 mm;
-`distance_to_centerlines` to 1e-14 mm; the partition vmtk's label at all 21,221 clipper input
-vertices.
+defects reproduced: integers are exact, floats are within 1e-9 of vmtk's output. The branch
+extractor gives vmtk's 95 groups and 44 bifurcations. `branch_metrics` matches to 3e-14 mm,
+`distance_to_centerlines` to 1e-14 mm, and the partition reproduces vmtk's label at all 21,221
+clipper input vertices.
 
-Robustness on a whole tree (research prototype): vmtk failed 1-2 of 51 targets ("degenerate
-descent"); thalweg traces the whole tree, and 12 of about 3,000 segments briefly leave the vessel
-(6.7 mm in 32 m).
+Robustness on a whole tree (research prototype): vmtk failed 1-2 of 51 targets with "degenerate
+descent." thalweg traces the whole tree; 12 of about 3,000 segments briefly leave the vessel,
+totaling 6.7 mm in 32 m.
 
 ---
 
@@ -764,13 +761,14 @@ array names. Each module follows one vtkVmtk class line for line:
 
 ### 13.3 The flag convention, and the defects found
 
-Every public function in `thalweg.vmtk` defaults to the **correct** behavior. Where vmtk, or the
-VTK it runs on, has a defect or loses precision, a keyword `vmtk_<name>=True` reproduces it.
+Every public function in `thalweg.vmtk` defaults to the **correct** behavior. Where vmtk or the
+VTK it runs on has a defect or loses precision, a keyword `vmtk_<name>=True` reproduces it.
 `VMTK_FLAGS` maps each of the eleven main ported functions to its flags, so
-`**{f: True for f in VMTK_FLAGS[name]}` asks for vmtk's numbers exactly; the sections' and
-sphere-distance functions and `export.boundary_reference_system` take their flags directly. The
-oracle tests pass every flag of their stage. The switches that turn several on at once cover
-their own chain only:
+`**{f: True for f in VMTK_FLAGS[name]}` asks for vmtk's numbers exactly. The sections and
+sphere-distance functions, and `export.boundary_reference_system`, take their flags directly. The
+oracle tests pass every flag of their stage.
+
+The switches that turn several flags on at once cover their own chain only:
 
 - `branching.vmtk_branching(..., vmtk_compatible=True)`: attributes, branch extractor, frames,
   offset, vectors and branch geometry;
@@ -780,19 +778,19 @@ their own chain only:
 
 | Flag | Where | vmtk's behavior | Effect |
 |---|---|---|---|
-| `vmtk_float32` | branches, merge, smoothing, geometry, frames, vectors, branch geometry | Points stored in a default `vtkPoints` (VTK_FLOAT), so coordinates are float32-rounded | Branch extractor: points move by up to 2e-6 mm (phantom) / 8e-6 mm (case), grouping unchanged. Smoothing: up to 1e-4 / 2e-4 mm. Centerline geometry: torsion differs by up to 0.36 /mm on the phantom, where vmtk's torsion is dominated by the rounding |
-| `vmtk_interp` | offset, metrics, vectors, sections | `vtkvmtkCenterlineUtilities::InterpolateTuple` calls `GetTuple` twice; both return the same internal buffer, so every "interpolated" radius, abscissa or normal is the segment's **end** value | Radius-weighted averages and abscissas use end values instead of interpolated ones |
-| `vmtk_steps` | branches, sphere distance, branch geometry, vectors, sections | The tube-exit and touching-sphere searches count steps from the **squared** segment length (`Distance2BetweenPoints`) while sizing them as a fraction of the radius | Search resolution off by a factor of the segment length; split points move up to 0.09 mm; curvature/torsion of subsampled groups shift slightly |
-| `vmtk_merge` | branches | `MergeTracts` emits the run reaching a centerline's last tract as a second cell of the same group | One extra cell (5 vs 4 on the `hairpin` fixture); never on the oracles |
-| `vmtk_last_tract` | branches | In `PointInTubeGroupTracts` the running minimum is declared inside the loop, so the **last** passing tract wins, not the one with the smallest tube value | 25 relabel decisions on the case oracle have several candidates, and none changes a group (the last candidate is also the deepest); it decides the `hairpin` fixture |
-| `vmtk_two_point_cells` | attributes | A two-point centerline is a `vtkLine`, which `vtkPolyLine::SafeDownCast` rejects, so it gets no abscissas or normals | Two-point centerlines keep zeros |
-| `vmtk_cell_data` | resampling, merge | `vtkSplineFilter` copies the cell data of the input line by its index among the lines, but vertex cells come first in the cell numbering | Shifted cell data whenever cleaning turned a degenerate line into a vertex |
-| `vmtk_fallback` | vectors | With no touching point on an adjacent cell, vmtk takes the cell's last point, which for an upstream branch is the end point itself: a zero vector with full weight | Meaningless angles (π/2, 0) for short parents |
-| `vmtk_discard_smoothing` | branch geometry | With line smoothing and sphere subsampling, the smoothed points are overwritten by a subsampling of the raw cell, so `LineSmoothing` has no effect | Corrected group curvature is 0.93 (phantom) / 0.56 (case) of vmtk's, median |
-| `vmtk_vertex_mean` | export (boundary reference system) | The ring barycenter is the mean of its vertices, biased toward dense stretches of the mesh | 0.05-0.26 mm on the case's rings |
+| `vmtk_float32` | branches, merge, smoothing, geometry, frames, vectors, branch geometry | Points stored in a default `vtkPoints` (VTK_FLOAT), so coordinates are float32-rounded | Points move up to 2e-6 mm (phantom) / 8e-6 mm (case), grouping unchanged. Smoothing: up to 1e-4 / 2e-4 mm. Torsion: up to 0.36 /mm on the phantom, dominated by the rounding |
+| `vmtk_interp` | offset, metrics, vectors, sections | `InterpolateTuple` calls `GetTuple` twice; both return the same VTK buffer, so every "interpolated" value is the segment's **end** value | Radius-weighted averages and abscissas use end values instead of interpolated ones |
+| `vmtk_steps` | branches, sphere distance, branch geometry, vectors, sections | Tube-exit and touching-sphere searches count steps from **squared** segment length while sizing them as a radius fraction | Search resolution off by a factor of the segment length. Split points move up to 0.09 mm |
+| `vmtk_merge` | branches | `MergeTracts` emits the run reaching a centerline's last tract as a second cell of the same group | One extra cell (5 vs 4 on `hairpin`); never on the oracles |
+| `vmtk_last_tract` | branches | `PointInTubeGroupTracts` declares its running minimum inside the loop, so the **last** passing tract wins, not the deepest | 25 relabel decisions on the case oracle have several candidates; none changes a group. Decides the `hairpin` fixture |
+| `vmtk_two_point_cells` | attributes | A two-point centerline is a `vtkLine`, which `vtkPolyLine::SafeDownCast` rejects | Two-point centerlines keep zeros |
+| `vmtk_cell_data` | resampling, merge | `vtkSplineFilter` copies cell data by the line's index, but vertex cells come first in the numbering | Shifted cell data when cleaning turned a degenerate line into a vertex |
+| `vmtk_fallback` | vectors | With no touching point on an adjacent cell, vmtk takes the cell's last point — for an upstream branch, the end point itself: a zero vector | Meaningless angles (π/2, 0) for short parents |
+| `vmtk_discard_smoothing` | branch geometry | With line smoothing and sphere subsampling, smoothed points are overwritten by a subsampling of the raw cell, so `LineSmoothing` has no effect | Corrected curvature is 0.93 (phantom) / 0.56 (case) of vmtk's |
+| `vmtk_vertex_mean` | export (boundary ref. system) | The ring barycenter is the mean of its vertices, biased toward dense mesh stretches | 0.05-0.26 mm on the case's rings |
 
-Each flag is documented in its module's docstring: what vmtk does, why it is wrong, and how big
-the effect is on the phantom and case oracles. Several are reportable upstream as defects.
+Each flag is documented in its module's docstring with what vmtk does, why it is wrong, and
+how large the effect is on the phantom and case oracles. Several are reportable upstream.
 
 ### 13.4 Algorithms that are not ports
 
