@@ -1,15 +1,32 @@
 # What one batch run should produce
 
 *2026-09-24, a proposal written at the close of the incubation thread; the formats and the cut
-between tiers are the user's to decide. Update 2026-09-30: tier 1 is partly built (`thalweg run`:
-graph, branch table, stations, summary, QC), with trees rooted at their inlet, lobes per
-branch, airway wall thickness (with Pi10), the bronchoarterial ratio and an artery/vein
-plausibility check, the radius interval per point, and tree statistics (Horton ratios,
-small-vessel volume fraction, orientation entropy). Still missing from the tier-1 list below:
-Strahler order and generation stored in the graph (they are in the branch table), 0.3 mm
-polylines, curvature and torsion summaries, tips per lobe and bridged gaps in QC (tips per lobe
-are in the summary; the tracer does not bridge), artery–vein ratios, model and store versions in
-QC, contrast along branches (needs the CT), and the preview image.*
+between tiers are the user's to decide.*
+
+> **Status (2026-10-08).** `thalweg run` builds most of tier 1; tiers 2 and 3 exist as `thalweg
+> export` options and library calls rather than as stored layers.
+>
+> - **Tier 1, built:**
+>   - the graph, with radius and its interval per point, lobe per point and provenance per edge;
+>   - the branch table: length, radius, area with its interval, tortuosity, curvature and torsion,
+>     bifurcation angles, lobe, Strahler order and depth, airway walls, bronchoarterial pairing;
+>   - the case summary: counts and lengths per lobe with lobe volumes and length densities,
+>     Horton ratios, small-vessel fraction, orientation entropy, Pi10;
+>   - QC: dropped pieces (with a warning when they are large), field loops, the coarse-slice
+>     flag, artery/vein plausibility, the thalweg version and store.
+> - **Tier 1, missing:**
+>   - polylines resampled to 0.3 mm (the graph keeps the tracer's samples, about one per voxel);
+>   - the area ratio at a branch's origin, and artery-vein ratios;
+>   - the model version in QC, and a preview image;
+>   - contrast along branches (needs the CT);
+>   - bridged gaps (the tracer does not bridge);
+>   - the haversack serve artifact.
+> - **Tier 2:**
+>   - branch volumes: built (`run --branch-volumes`); the partition is not yet written back into
+>     the store as a label layer;
+>   - surfaces and wall maps: available on demand (`export --mesh`, `--wall-maps`), not stored.
+> - **Tier 3:** built as on-demand calls: sections, straightened views, wall curvature, a capped
+>   CFD domain with flow extensions and a 0-D model. Meshing a chosen subtree is not built.
 
 ## The principle
 

@@ -4,12 +4,12 @@ Centerlines, branches and wall geometry of tubular structures read from a segmen
 model's continuous field (rankfield margins), never from a triangulated surface except at
 export. A successor to vmtk. Private, Apache-2.0. Incubated in medseg (2026-09-23/24).
 
-**Status (2026-09-30):** the first version of the library is on `main` (checked out in the
-worktree `.worktrees/port`, excluded locally; the main folder is another session's branch). `docs/port-plan.md` has the per-module status and the phase
-order, `docs/validation.md` the behavior beyond the build case, `docs/format/thalweg-json.md`
-the graph format. The research evidence is in `docs/vmtk-successor.md` §12–13 (read §6 for the
-package design). `research/vessels/` stays the frozen reference: kernel ports reproduce it
-exactly (tests marked `data`).
+**Status (2026-10-08):** a working library and CLI on `main`, checked out in this folder (the
+`.worktrees/port` worktree used until 2026-10-08 is gone). vmtk parity is done (`docs/port-plan.md`),
+validation in `docs/validation.md`, the graph format in `docs/format/thalweg-json.md`, the system
+explained for vmtk users in `docs/vmtk-guide.md`; `docs/README.md` indexes every document and
+says which are kept current and which are dated records. `research/vessels/` stays the frozen
+reference: kernel ports reproduce it exactly (tests marked `data`).
 
 ## Layout
 
@@ -19,13 +19,18 @@ exactly (tests marked `data`).
   them in place. Their docstrings still say `bench/vessels/...`; the depth is the same, so the
   relative paths still work from `research/vessels/`.
 - `explorations/` — kept here but off the main line (not ported, no API promise): vascular
-  catchments and named lung segments (`explorations/catchments/`), straightened 3D rendering
+  catchments and named lung segments (`explorations/catchments/`), aortic dissection
+  (`explorations/dissection/`, merged 2026-10-08), straightened 3D rendering
   (`explorations/rendering/render_straight.py`). They get stores, fields and centerlines from the
   library through `explorations/_thalweg.py` (centerlines with `ridge_passes=1`, the research
   reference; outputs verified identical to the research-script versions, 2026-09-30) and still take
   `DATA`, `LADDERS` and the CT reader from `research/vessels/`. Run them with haversack's venv.
-- `docs/` — the design note, the vmtk comparison, the SlicerHeart write-up, and
-  `deliverables.md` (proposed batch product: a 2–5 MB core package per case, opt-in extras, on-demand queries).
+- `docs/` — indexed by `docs/README.md`. Kept current: `vmtk-guide.md`, `format/`,
+  `validation.md`, `port-plan.md`. Dated records with a status note at the top:
+  `vmtk-successor.md` (the incubation design note), `vmtk-vs-field-method.md`,
+  `slicerheart-opportunities.md`. Proposal: `deliverables.md` (the batch product; tier 1 largely
+  built). Parked draft: `aorta.md`. When behavior changes, update the current docs and add to the
+  records' status notes rather than rewriting the records.
 - `src/thalweg/` — `kernel/` (numpy/scipy, no files or names), `vmtk/` (vmtk ports, numpy
   only), and the pipeline modules (store, centerlines, graph, adapters, branching, measure, lobes,
   pairing, partition, wallmap, straighten, volume, solver, plausibility, statistics, case, export, cli). `tests/test_layering.py` enforces the split.
@@ -73,11 +78,13 @@ need the user's permission.
 - **Field connectivity** on the native grid (`_topo.py`): face neighbors both > 0; face diagonals
   by the asymptotic decider fa·fb > fc·fd; body diagonals by cell closure + a 9³ trilinear sample;
   loops = genus of the Lewiner marching-cubes surface. Verified 1:1 against surface components.
-  One mode (the field) everywhere; the voxel mode is kept only for comparison (`GRAPH=voxel`).
+  One mode (the field) everywhere; the voxel mode is kept only for comparison
+  (`--connectivity voxel`; `GRAPH=voxel` in the research scripts).
 - Field radius is ~2× as repeatable as voxel EDT across reconstructions (r ≥ 1.25 mm). Use mean
   |Δ| / RMS, never MAD (EDT is quantized).
-- vs vmtk (same subtree): centerlines 0.086 mm, radius +0.029 mm, 50/51 routes (with 1 ridge pass;
-  4 passes give 0.060 mm and -0.006 mm - the +0.029 was the refinement's quantization, docs/validation.md §4); branch clipper
+- vs vmtk (same subtree): centerlines 0.060 mm and radius -0.006 mm with the default 4 ridge
+  passes (0.085 mm and +0.03 mm with 1 pass, the research prototype: the +0.03 was the refinement's
+  quantization, docs/validation.md §4), 50/51 routes; branch clipper
   reproduced at 100 % of original vertices (2 s vs 185–228 s); wall coordinates bit-exact;
   wall maps 0.02–0.03 mm; curvature 6× more repeatable; flow extensions 0.02–0.03 mm. Whole
   subtree analysis ~5.5 s vs ~240 s (95 % of vmtk's is the clipper).
@@ -109,7 +116,9 @@ need the user's permission.
   `vmtk_discard_smoothing`, `vmtk_two_point_cells`), each documented with its measured effect in
   its module docstring. Small vmtk fixtures (`tests/fixtures/vmtk_oracle/<name>/`, ~0.4 MB,
   `vmtk_centerline_oracle.py small`) protect the grouping rules without case data. `thalweg.vmtk.VMTK_FLAGS`
-  lists them; `branching.vmtk_branching(vmtk_compatible=True)` turns them all on. Oracle tests
+  lists the eleven main functions' flags; `branching.vmtk_branching(vmtk_compatible=True)` turns on
+  those of its own chain (attributes, branches, frames, offset, vectors, branch geometry), and
+  `export.boundary_reference_system` has its own `vmtk_vertex_mean`. Oracle tests
   pass every flag of their stage. The residual 1e-14 differences are FMA contraction in vmtk's
   arm64 build (replayed bit for bit with `fma`).
 - The research mapping run of 09-24 (`vmtk_mapping.py`) passed the first cell's group (a
@@ -133,35 +142,30 @@ need the user's permission.
 
 - American English, in files and in chat.
 - The user decides names, defaults, scope and direction: give a recommendation and wait at
-  decision points. Commit only when asked; branch off `main` first. Never push without asking.
+  decision points. Commit periodically on `main` (the user's instruction, 2026-09-30). Never
+  push without asking.
 - Keep an old algorithm for comparison when replacing it. Warn before long benchmarks; rough
   numbers are fine (don't rerun vmtk rounds for precision).
 - Defect reports upstream state the component's wrong behavior, project-neutral.
 
-## Next (agreed 2026-09-24; progress in docs/port-plan.md)
+## Next
 
-Done on `main` (2026-09-30): (1) as a library (`thalweg.vmtk`, `branching`; no CLI verb runs the
-grouping yet), (2) (`kernel.geometry`, `kernel.sections`, `measure`), (3) and (4) as first versions
-(`case`, `export`); (5) started (`docs/validation.md`). Tier 1 of the lung batch is built: trees
-rooted at their inlet, lobes per branch (`lobes`), airway walls and Pi10 (`measure`),
-bronchoarterial pairing (`pairing`), artery/vein plausibility (`plausibility`), the per-point
-radius interval, and Horton ratios / small-vessel fraction / orientation entropy (`statistics`).
-Of the "nice" list below, those tree statistics are therefore done.
+The 2026-09-24 must-list (native centerline processing, geometry and sections, the whole-tree
+pipeline, export, validation) is done, and so is most of the lung batch's tier 1
+(`docs/deliverables.md` lists what is missing). Open directions, none started (the user decides):
 
-Must: (1) native centerline processing (arc length + parallel-transport frames, branch grouping,
-bifurcation frames), checked bit for bit against saved vmtk outputs; (2) centerline geometry
-(curvature, torsion, tortuosity), bifurcation angles, sections along branches with intervals;
-(3) one decode-once pipeline with a spatial index so every stage scales to the whole tree;
-(4) export: graph JSON + mesh with named caps; (5) validation beyond one subtree (phantoms, a
-second tree/patient, thin-caliber ground truth). Nice: tree statistics (OSMnx-style panel +
-Strahler/Horton, Murray, small-vessel fraction, orientation entropy, territories, persistence
-barcode; test stability on the reconstruction ladder), harmonic mapping, CFD meshing, manual
-correction, Slicer integration.
-
-Product target (proposal, `docs/deliverables.md`): the `lung_vessels` store already holds the
-fine layer (arteries, veins, AIRWAYS + airway wall, 0.7 mm) and the crop stage's `total_fast`
-(117 classes at 3 mm; misnamed in stores emitted before haversack 0.13.0). Batch = graph + branch
-table + case summary + QC for three trees; the rest on demand.
+- **Structure-specific measurements** (`docs/port-plan.md`): the aorta was drafted and parked as a
+  research topic (`docs/aorta.md`, 2026-10-01: vertebral levels are unreliable landmarks because
+  TotalSegmentator forces a 7/12/5 template).
+- **A tracer built for single tubes:** the main path between the farthest ends, then only
+  protruding branches; it would fix touching loops (wall pruning keeps one tube) and flat-lumen
+  junctions, and open the GI-tract measurements.
+- **Validation gaps:** thin-caliber ground truth, flat tubes on more patients, labelmaps from
+  other tools.
+- **Tree additions:** Murray's exponent, fractal dimension, airway tapering, anatomical segment
+  names (from `explorations/catchments`).
+- **Integration:** a Slicer client (the haversack Slicer design), a haversack serve artifact for
+  the batch product, a CLI verb for vmtk's grouping (`branching.annotate` is library-only).
 
 ## Related
 

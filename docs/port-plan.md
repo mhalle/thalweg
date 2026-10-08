@@ -1,8 +1,13 @@
 # The port: which vmtk features thalweg carries, and in what order
 
 Consolidated 2026-09-30 from `vmtk-successor.md` (§1.1 inventory, §5 mapping, §12.6–12.7
-results), `deliverables.md` and CLAUDE.md "Next". This file is the working list for
-`src/thalweg/`; the design notes stay the reasoning behind it.
+results), `deliverables.md` and CLAUDE.md "Next"; status brought up to date 2026-10-08. This file
+is the working list for `src/thalweg/`; the design notes stay the reasoning behind it.
+
+**Where it stands (2026-10-08):** phases 0-5 are done, and every vmtk stage in the tables below is
+ported, done, replaced or out, except `vmtksurfaceremeshing` (optional) and vmtk's
+`StretchedMapping`. What remains is the structure-specific tier and the open items in the tube
+requirements below.
 
 ## Status words
 
@@ -156,7 +161,25 @@ them after the vessel code exists would be a rewrite.
    always decided by the field. Never fall back to 26-connectivity, whose corner links join
    what the field keeps apart.
 
+**Status (2026-10-08):**
+1. Built: every section records area with its interval, perimeter, equivalent diameter, Feret
+   widths, aspect ratio and centroid offset (`kernel.sections`, `measure`).
+2. Format and single tubes built: the format allows cycles and empty roots, a single tube is
+   one edge, and `truncated` ends are flagged and kept out of Strahler order. The tracer still
+   builds trees, so a loop in the field is cut (QC counts it).
+3. Partly built: the airway lumen and its wall share one axis for thickness, WA% and Pi10. The
+   format has no general link between layers yet.
+4. Not built: the `bridged` provenance exists in the format, but the tracer never bridges.
+5. Built for connectivity: the field decides it everywhere. Flat tubes get wall pruning and
+   recentering (validation §5). Open: wall pruning keeps one of two touching tubes (§5), and
+   recentering no longer pulls the path onto their contact (2026-10-01).
+
 ## Structure-specific analyses (a tier after phase 2)
+
+**Status (2026-10-08):** the airway items marked done below are built. The aorta's landmark
+measurements are drafted in `docs/aorta.md` and parked as a research topic (2026-10-01). Nothing
+else in this tier is built; the GI tract and dissection have explorations
+(`explorations/dissection/`; the GI work is in medseg).
 
 These are built on phase 2's sections and geometry. Suggested order: airways (same store as the
 vessels; walls and pairing are built: `measure`, `pairing`), then the aorta (the most-used clinical measurement), then the GI
@@ -207,6 +230,9 @@ tract (the hardest lumen).
 - Named surfaces for printing and device sizing.
 
 ## Port order
+
+Every phase below is done (2026-09-30), and the "Then" list's T2/T3 stages are built; the
+structure-specific tier is what remains.
 
 **Phase 0: scaffolding.**
 - Layout: a kernel layer (numpy, torch optional, no tasks or files) and a pipeline layer

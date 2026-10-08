@@ -1,5 +1,21 @@
 # vmtk and the field-based method, compared
 
+> **Status (2026-10-08): a record of the comparison at the end of incubation, kept as written.**
+> For the system as built, read [`vmtk-guide.md`](vmtk-guide.md); for current numbers,
+> [`validation.md`](validation.md). What has changed since this page was written:
+>
+> - **Radius:** with four ridge passes (the default since 2026-09-30) vmtk's radius reads
+>   0.006 mm *smaller* than thalweg's in the median, not 0.029 mm larger; the +0.029 mm was the
+>   prototype's one-pass quantization (validation §4). Centerline distance: 0.060 mm (was 0.085).
+> - **Branch splitting and frames** no longer run vmtk's code: vmtk's centerline-only filters are
+>   ported to numpy (`thalweg.vmtk`) and reproduce vmtk exactly, defects switchable.
+> - **Flow extensions** are built on the exported mesh (`thalweg export --flow-extensions`), not
+>   as implicit geometry; the implicit version stays in `research/`.
+> - **Maturity:** a library and CLI with about 630 tests, phantom and second-patient validation,
+>   flat tubes (esophagus, colon, trachea), labelmap and DICOM SEG input.
+> - **Speed** (Apple M2, rough): three lung trees traced in about 20 s, a full `thalweg run` with
+>   measurements in about a minute.
+
 *2026-09-24. A summary of the evidence in [`vmtk-successor.md`](vmtk-successor.md) §12–13. The
 test data are two thin-slice CT angiograms from the NCI Imaging Data Commons (cptac_luad
 C3N-00704, cmb_brca MSB-02664; CC BY 4.0) and the idc-torso1 demo, segmented with

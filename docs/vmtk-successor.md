@@ -1,6 +1,16 @@
 # A successor to vmtk: vascular modeling on fields instead of surfaces
 
-Status: **design exploration, 2026-09-23. Nothing is built or decided.** Measurements on the
+> **Status (2026-10-08): a record.** This is the design note written while the method was
+> incubated in medseg (2026-09-23/24), kept as written. Since then thalweg was built as a library
+> and CLI, and every decision in §11 was taken: a **new sibling library** (`thalweg`, not a
+> haversack layer); **vmtk as the test oracle and mesh back end only**, never a dependency; a
+> **standalone graph format** (`.thalweg.json`), not a duckn extension; **lung vessels first**,
+> with flat tubes (esophagus, trachea, bowel) added after. The data model of §6 became the graph
+> format (`docs/format/thalweg-json.md`); the sequence of §10 became `docs/port-plan.md`. The
+> numbers in §12-13 are the research prototype's (one ridge pass, root at the deepest point);
+> current ones are in `docs/validation.md`, and `docs/vmtk-guide.md` describes the system as built.
+
+Original status: **design exploration, 2026-09-23. Nothing is built or decided.** Measurements on the
 lung-vessel demo, two thin-slice CTAs, same-patient thickness ladders, an image-only PSF, a
 centerline kernel checked against vmtk, the field-only pipeline, straightened 3D renders and vmtk's branch partition
 without a surface are in §12–12.6; §13 compares the method with vmtk; §14 maps it onto SlicerHeart. They

@@ -5,6 +5,14 @@
 in [`vmtk-successor.md`](vmtk-successor.md) and summarized against vmtk in
 [`vmtk-vs-field-method.md`](vmtk-vs-field-method.md). Nothing here is built.*
 
+> **Status (2026-10-08): a record; the integration is still not built.** Some of the pieces it
+> assumes now exist in thalweg: Slicer markups export (`thalweg export --markups`: one curve per
+> branch, LPS; radius and connectivity are not carried yet, so the "per-point radius as curve
+> measurement arrays" below is still to do), closed surfaces with named caps for SimVascular and
+> svFSI (`--mesh`, `--flow-extensions`, the `.boundaries.json` sidecar), an svZeroDSolver model
+> (`--zero-d`), and seed-free centerlines, sections with intervals and straightened views as a
+> library. The numbers below are the incubation prototype's; current ones are in `validation.md`.
+
 ## SlicerHeart in brief
 
 SlicerHeart (Lasso et al., *Front. Cardiovasc. Med.* 2022) is a 3D Slicer extension for cardiac
