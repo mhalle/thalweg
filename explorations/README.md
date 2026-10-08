@@ -12,6 +12,12 @@ No research centerline JSON is read. What the library does not provide (`DATA`, 
 - `rendering/render_straight.py` - straightened 3D rendering of a vessel path directly from the
   field (per-sample display-to-world warp, no resampled volume), with an illustration style
   (`STYLE=npr`). Design note §12.5. Whether rendering belongs here or in sdfview is open.
+- `bridging/bridge_gaps.py` - can a level-set front reconnect what the model leaves apart? An
+  experiment, not a method: for each fragment the tracer drops, the bottleneck level of the best
+  path to the tree (the minimax path) through the structure's own margin and through the CT,
+  with the other vessel class's tree as a leak control; `natural` scores real fragments against
+  another reconstruction of the same scan, `synthetic` cuts 2, 4 or 8 mm gaps into a traced
+  segment. Written 2026-09-30 in another session and committed as found; no results recorded.
 - `dissection/` - aortic dissection from a dual-lumen field: intimal flap as a tie sheet,
   entry tears as topology, branch feed (true / false / both) as a lumen-side query.
   `dissection.py` runs a synthetic arch phantom with known tears and branch stubs (2/2
